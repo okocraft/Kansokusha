@@ -1,6 +1,5 @@
 # ADR-0001: v1 のイベント契約と公開 API 境界
 
-- 状態: 提案中
 - 日付: 2026-09-20
 - 関連 Issue: #5, #12
 
@@ -35,29 +34,27 @@ Kansokusha v1 は、Paper / Folia / Velocity 上の組み込み処理と外部�
 
 実際の Java API は、登録結果と送信結果を戻り値で返す。外部プラグインへ runtime registry、永続 registry、キュー、writer、database connection を公開しない。
 
-プラットフォーム上で API を取得する方法は公開 API 本体から分離する。
+API の取得には、common モジュールの公開 entry point である `Kansokusha.api()` を使用する。Paper / Folia と Velocity の各 bootstrap は、起動時にそのプロセスの API 実装を `Kansokusha` へ設定し、shutdown 時に closed 実装へ置き換える。外部プラグインが platform ごとに異なる discovery mechanism を扱う必要はなく、plugin main class や内部 runtime も公開しない。
 
-- Paper / Folia では Bukkit `ServicesManager` に共通 API を登録し、disable 時に解除する。
-- Velocity では `kansokusha` の `PluginContainer` から公開 provider を取得し、その provider から共通 API を取得する。plugin main class や内部 runtime を API として公開しない。
-- どちらのプラットフォームでも shutdown 開始後に保持済み API へ行われた呼び出しは、後述する closed outcome を返す。
+shutdown と同時に発生した呼び出しに対して、active 実装と closed 実装のどちらが取得されるかを厳密には保証しない。この lifecycle race を許容する代わりに取得方法を単純化する。取得した API が shutdown を認識した後の操作は、後述する closed outcome を返す。
 
-これにより、Paper の `NamespacedKey` との変換など、プラットフォーム固有の利便機能は adapter 側へ置く。
+Paper の `NamespacedKey` との変換など、プラットフォーム固有の利便機能は adapter 側へ置く。
 
-### 2. event type の公開識別子は専用の値型とする
+### 2. event type の公開識別子には Adventure `Key` を使用する
 
-event type の公開識別子には、`EventTypeKey(namespace, value)` に相当する不変な値型を使用する。文字列表現は `namespace:value` とする。
+event type の公開識別子には `net.kyori.adventure.key.Key` を使用する。永続化に用いる正規の文字列表現は `Key#asString()` が返す `namespace:value` とする。
 
-構文は Minecraft の resource location および Paper の `NamespacedKey` と損失なく相互変換できる範囲へ揃える。
+構文と検証は Adventure `Key` の契約に従う。
 
 - `namespace`: `[a-z0-9._-]+`
 - `value`: `[a-z0-9/._-]+`
-- 空文字、区切り文字 `:` の欠落・重複、大文字、上記以外の文字は不正とする。
-- 大文字小文字の変換などの暗黙の正規化は行わず、不正な入力を拒否する。
-- 等価性と hash code は `namespace` と `value` の完全一致で決める。
+- 空文字、大文字、上記以外の文字は不正とする。
+- Kansokusha は大文字小文字の変換などの追加の正規化を行わない。
+- 同一性は `Key` の `namespace` と `value` で決める。
 
-Paper の `NamespacedKey` は Paper adapter で `EventTypeKey` へ変換する。common API は `NamespacedKey` に依存しない。
+Paper の `NamespacedKey` を受け取る利便 API が必要な場合は、Paper adapter で同じ namespace と value を持つ `Key` へ変換する。common API は `NamespacedKey` に依存しない。
 
-永続化層は保存効率のために整数 ID を割り当ててよいが、その ID は公開 API に出さず、event type の同一性にも使用しない。永続的な同一性は常に `EventTypeKey` で決める。
+永続化層は保存効率のために整数 ID を割り当ててよいが、その ID は公開 API に出さず、event type の同一性にも使用しない。永続的な同一性は常に `Key` の namespace と value で決める。
 
 ### 3. payload format generation は event type ごとの正整数とする
 
@@ -65,7 +62,7 @@ payload format generation は、正の 32-bit 整数を保持する不変な値�
 
 - 最初の generation は `1` とする。
 - `0` と負数は不正とする。
-- generation の意味域は `EventTypeKey` ごとに独立する。
+- generation の意味域は event type の `Key` ごとに独立する。
 - provider が payload の互換性を失う形式変更を行う場合は generation を増やす。
 - 過去の generation は永続データ上で区別して保持し、新しい generation の登録によって上書きしない。
 
@@ -148,7 +145,11 @@ runtime registry は内部の compact storage ID を保持または公開しな�
 
 #### 生の `String`
 
-依存が少なく単純だが、API の各所で構文検証が必要になり、不正な値が runtime registry や storage 境界まで到達しやすい。専用の値型を採用する。
+依存が少なく単純だが、API の各所で構文検証が必要になり、不正な値が runtime registry や storage 境界まで到達しやすい。検証済みの Adventure `Key` を採用する。
+
+#### 独自の `EventTypeKey`
+
+event type 専用の型を作れるが、Adventure `Key` と同じ構文、検証、等価性を重複実装することになる。Paper / Folia と Velocity の双方が利用する Adventure の既存契約を再利用するため採用しない。
 
 #### Paper `NamespacedKey`
 
@@ -188,18 +189,18 @@ storage 上の区別は可能だが、同じ event type の identity が generat
 
 呼び出し側が完了待ちを行う誘因となり、未完了 future の保持も増える。v1 の durability 要件は直近の未永続化ログの消失を許容するため、即時の受理 outcome のみを返す。
 
-#### platform ごとの static singleton
+#### platform ごとの discovery mechanism
 
-plugin lifecycle と class loader の境界が曖昧になり、disable 後も古い参照を使いやすいため採用しない。platform の discovery mechanism から lifecycle-aware な共通 API を取得する。
+Bukkit `ServicesManager` と Velocity `PluginContainer` を個別に利用すると、外部プラグイン側の取得処理と lifecycle 処理が platform ごとに分かれる。common の `Kansokusha.api()` へ統一し、shutdown との race は許容する。
 
 ## 結果
 
 - 外部 provider は Paper、Velocity、DuckDB の型に依存せず、同じ event contract を利用できる。
-- `EventTypeKey` と payload generation の組により、provider が不在でも過去データの形式を識別できる。
+- Adventure `Key` と payload generation の組により、provider が不在でも過去データの形式を識別できる。
 - opaque payload の意味と互換性管理は provider の責任になる。Kansokusha は共通 metadata の検証と byte sequence の保持だけを担う。
 - runtime registration の削除や provider の不在は、永続 identity の削除を意味しない。
 - event submission の `ACCEPTED` と永続化完了は明確に異なる。後続の非同期 pipeline はこの契約を破らずに batching、saturation、failure reporting を決定できる。
-- 専用値型と adapter が増えるが、platform と storage の依存が公開 API へ漏れることを防げる。
+- Adventure `Key` への依存は増えるが、独自 key 型を実装せず、platform と storage の依存が公開 API へ漏れることを防げる。
 
 ## 本 ADR で決定しない事項
 
