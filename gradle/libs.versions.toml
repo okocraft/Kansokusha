@@ -4,8 +4,8 @@ annotations = "26.1.0"
 configurate = "4.2.0"
 
 # platform api
-paper = "26.2.build.123-stable"
-velocity = "4.1.1"
+paper = "26.2.build.125-stable"
+velocity = "4.2.0"
 
 # testing tool
 junit = "6.1.3"
