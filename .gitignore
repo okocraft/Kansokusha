@@ -75,7 +75,7 @@ gradle-app.setting
 
 staging
 
-# Box run-server
+# Run servers
 
-/bundle/run/
-/data-generator/run/
+/paper/run/
+/velocity/run/
