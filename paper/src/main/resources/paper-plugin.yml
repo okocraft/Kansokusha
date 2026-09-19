@@ -1,0 +1,6 @@
+name: Kansokusha
+version: '${projectVersion}'
+description: Kansokusha is a plugin for Minecraft that logs player actions.
+main: net.okocraft.kansokusha.paper.plugin.KansokushaPaperPlugin
+api-version: '1.21'
+folia-supported: true

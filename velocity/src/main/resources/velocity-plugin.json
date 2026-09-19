@@ -1,0 +1,7 @@
+{
+  "id": "kansokusha",
+  "name": "Kansokusha",
+  "version": "${projectVersion}",
+  "description": "Kansokusha is a plugin for Minecraft that logs player actions.",
+  "main": "net.okocraft.kansokusha.velocity.plugin.KansokushaVelocityPlugin"
+}
