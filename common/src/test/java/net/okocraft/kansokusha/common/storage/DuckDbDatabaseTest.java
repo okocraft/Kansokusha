@@ -1,12 +1,17 @@
 package net.okocraft.kansokusha.common.storage;
 
+import org.jetbrains.annotations.NotNullByDefault;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.DriverManager;
 
 class DuckDbDatabaseTest {
 
@@ -47,5 +52,37 @@ class DuckDbDatabaseTest {
         Assertions.assertTrue(connection.isClosed());
         Files.delete(filepath);
         Assertions.assertFalse(Files.exists(filepath));
+    }
+
+    @Test
+    void testOpenFromIsolatedClassLoaderAfterDriverManagerInitialization(@TempDir Path dir) throws Exception {
+        DriverManager.getDrivers().asIterator().forEachRemaining(ignored -> {
+        });
+
+        var commonClasses = DuckDbDatabase.class.getProtectionDomain().getCodeSource().getLocation();
+        var annotations = NotNullByDefault.class.getProtectionDomain().getCodeSource().getLocation();
+        var duckDbJdbc = jarContaining("org/duckdb/DuckDBDriver.class");
+
+        try (var classLoader = new URLClassLoader(
+            new URL[]{commonClasses, annotations, duckDbJdbc},
+            ClassLoader.getPlatformClassLoader()
+        )) {
+            var databaseClass = Class.forName(DuckDbDatabase.class.getName(), true, classLoader);
+            var open = databaseClass.getMethod("open", Path.class);
+            var database = (AutoCloseable) open.invoke(null, dir.resolve("isolated.duckdb"));
+
+            try (database) {
+                Assertions.assertTrue(Files.exists(dir.resolve("isolated.duckdb")));
+            }
+        }
+    }
+
+    private static URL jarContaining(String resourceName) throws Exception {
+        var resource = ClassLoader.getSystemResource(resourceName);
+        Assertions.assertNotNull(resource, resourceName + " must be on the test runtime classpath");
+
+        var connection = resource.openConnection();
+        Assertions.assertInstanceOf(JarURLConnection.class, connection);
+        return ((JarURLConnection) connection).getJarFileURL();
     }
 }
