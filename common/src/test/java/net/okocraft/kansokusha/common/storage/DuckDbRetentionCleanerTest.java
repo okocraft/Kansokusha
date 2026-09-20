@@ -36,7 +36,7 @@ class DuckDbRetentionCleanerTest {
             var cutoff = Instant.parse("2026-01-02T00:00:00.000999999Z");
 
             Assertions.assertEquals(2, cleaner.deleteExpired(cutoff, 10));
-            Assertions.assertEquals(List.of(3), payloads(database.connection()));
+            Assertions.assertEquals(List.of("03"), payloads(database.connection()));
         }
     }
 
@@ -60,7 +60,7 @@ class DuckDbRetentionCleanerTest {
             Assertions.assertEquals(1, cleaner.deleteExpired(cutoff, 2));
             Assertions.assertEquals(1, count(database.connection(), "events"));
             Assertions.assertEquals(0, cleaner.deleteExpired(cutoff, 2));
-            Assertions.assertEquals(List.of(6), payloads(database.connection()));
+            Assertions.assertEquals(List.of("06"), payloads(database.connection()));
         }
     }
 
@@ -83,7 +83,7 @@ class DuckDbRetentionCleanerTest {
                 () -> cleaner.deleteExpired(Instant.parse("2026-01-02T00:00:00Z"), 10)
             );
             Assertions.assertEquals("injected deletion failure", failure.getMessage());
-            Assertions.assertEquals(List.of(1, 2), payloads(database.connection()));
+            Assertions.assertEquals(List.of("01", "02"), payloads(database.connection()));
         }
     }
 
@@ -121,14 +121,14 @@ class DuckDbRetentionCleanerTest {
         );
     }
 
-    private static List<Integer> payloads(Connection connection) throws SQLException {
-        var payloads = new ArrayList<Integer>();
+    private static List<String> payloads(Connection connection) throws SQLException {
+        var payloads = new ArrayList<String>();
         try (var statement = connection.createStatement();
              var rows = statement.executeQuery(
-                 "SELECT get_byte(payload, 0) payload FROM events ORDER BY payload"
+                 "SELECT hex(payload) payload_hex FROM events ORDER BY occurred_at"
              )) {
             while (rows.next()) {
-                payloads.add(rows.getInt("payload"));
+                payloads.add(rows.getString("payload_hex"));
             }
         }
         return payloads;
