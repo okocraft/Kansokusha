@@ -229,7 +229,7 @@ class DuckDbMigrationRunnerTest {
             () -> DuckDbMigration.of(
                 1,
                 "dollar_quoted_transaction_words",
-                "SELECT $COMMIT ABORT$, $tag$ROLLBACK; BEGIN TRANSACTION$tag$"
+                "SELECT " + "$" + "$" + "COMMIT ABORT" + "$" + "$" + ", $tag$ROLLBACK; BEGIN TRANSACTION$tag$"
             )
         );
     }
