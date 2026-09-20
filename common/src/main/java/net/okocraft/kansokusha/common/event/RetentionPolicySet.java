@@ -15,6 +15,9 @@ import java.util.Objects;
 @NotNullByDefault
 public final class RetentionPolicySet {
 
+    private static final long MIN_FINITE_TIMESTAMP_MILLIS = -Long.MAX_VALUE + 1;
+    private static final long MAX_FINITE_TIMESTAMP_MILLIS = Long.MAX_VALUE - 1;
+
     private final Map<Key, RetentionPolicy> exactMappings;
     private final RetentionPolicy fallback;
 
@@ -84,17 +87,33 @@ public final class RetentionPolicySet {
             expiresAtMillis = Math.addExact(occurredAtMillis, policy.duration().toMillis());
         } catch (ArithmeticException e) {
             throw new RetentionResolutionException(
-                "Retention expiry is outside the supported millisecond timestamp range for event type "
+                "Retention timestamp is outside the supported millisecond range for event type "
                     + submission.eventType().asString(),
                 e
             );
         }
+
+        requireFiniteDuckDbTimestamp(occurredAtMillis, "occurredAt", submission.eventType());
+        requireFiniteDuckDbTimestamp(expiresAtMillis, "expiresAt", submission.eventType());
 
         return new AcceptedEvent(
             submission,
             policy.key(),
             Instant.ofEpochMilli(expiresAtMillis)
         );
+    }
+
+    private static void requireFiniteDuckDbTimestamp(
+        long epochMillis,
+        String field,
+        Key eventType
+    ) throws RetentionResolutionException {
+        if (epochMillis < MIN_FINITE_TIMESTAMP_MILLIS || epochMillis > MAX_FINITE_TIMESTAMP_MILLIS) {
+            throw new RetentionResolutionException(
+                field + " resolves to a DuckDB TIMESTAMP_MS infinity sentinel or out-of-range value for event type "
+                    + eventType.asString()
+            );
+        }
     }
 
     private static void validateDuration(Key key, Duration duration) {
