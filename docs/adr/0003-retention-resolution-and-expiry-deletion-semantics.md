@@ -134,8 +134,8 @@ ADR-0002 の方針どおり、v1 では `expires_at` に manual ART index を追
 
 automatic cleanup は次の2値を operator configuration から受け取る。
 
-- positive cleanup interval
-- positive `maxRowsPerPass`
+- positive / whole-millisecond ISO-8601 `Duration` の cleanup interval
+- positive integer の `maxRowsPerPass`
 
 本 ADR は具体値を決めない。
 
@@ -182,11 +182,11 @@ backlog size によって1 invocation の duration と I/O が無制限に伸び
 ## 結果
 
 - #19 は `events.expires_at TIMESTAMP_MS NOT NULL` を initial schema に含め、cleanup 専用 durable event ID / index は追加しない。
-- #28 は policy definitions、event mappings、明示 fallback policy、duration / cleanup settings の validation を実装する。
+- #28 は policy definitions、event mappings、明示 fallback policy、policy duration の validation を実装する。
 - #29 は occurrence time と resolved policy duration から millisecond-precision `expiresAt` を一度だけ計算し、storage-facing event data に渡す。
 - #21 は `retention_policy_id` と `expires_at` をそのまま transactionally persist し、retention decision を再計算しない。
 - #30 は same-transaction `rowid` targeting と configured `maxRowsPerPass` により bounded deletion を実装する。
-- #31 は fixed-delay cleanup lifecycle、caller-thread separation、failure reporting / retry semantics を実装する。
+- #31 は cleanup interval / `maxRowsPerPass` の configuration、fixed-delay lifecycle、caller-thread separation、failure reporting / retry semantics を実装する。
 
 ## 参照
 
