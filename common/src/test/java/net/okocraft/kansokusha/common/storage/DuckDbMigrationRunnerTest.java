@@ -179,8 +179,13 @@ class DuckDbMigrationRunnerTest {
             "ROLLBACK",
             "ABORT",
             "BEGIN TRANSACTION",
+            "START",
+            "START WORK",
             "START TRANSACTION",
-            "CREATE TABLE escaped_transaction (value INTEGER); COMMIT; SELECT 1"
+            "END",
+            "END TRANSACTION",
+            "CREATE TABLE escaped_transaction (value INTEGER); COMMIT; SELECT 1",
+            "CREATE TABLE escaped_end (value INTEGER); /* leading comment */ END TRANSACTION"
         )) {
             var exception = Assertions.assertThrows(
                 IllegalArgumentException.class,
@@ -193,23 +198,36 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
-    void testAbortIsRejectedBeforeSchemaOrHistoryMutation(@TempDir Path dir) throws Exception {
-        try (var database = DuckDbDatabase.open(dir.resolve("abort.duckdb"))) {
+    void testTransactionControlIsRejectedBeforeSchemaOrHistoryMutation(@TempDir Path dir) throws Exception {
+        try (var database = DuckDbDatabase.open(dir.resolve("transaction-control.duckdb"))) {
             new DuckDbMigrationRunner(List.of()).migrate(database.connection());
 
-            Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> DuckDbMigration.of(
-                    1,
-                    "abort_transaction",
-                    "CREATE TABLE must_not_exist (value INTEGER)",
-                    "ABORT"
-                )
-            );
+            for (var transactionControl : List.of("ABORT", "END")) {
+                Assertions.assertThrows(
+                    IllegalArgumentException.class,
+                    () -> DuckDbMigration.of(
+                        1,
+                        "invalid_transaction_control",
+                        "CREATE TABLE must_not_exist (value INTEGER)",
+                        transactionControl
+                    )
+                );
 
-            Assertions.assertFalse(tableExists(database.connection(), "must_not_exist"));
-            Assertions.assertEquals(0, migrationCount(database.connection()));
+                Assertions.assertFalse(tableExists(database.connection(), "must_not_exist"));
+                Assertions.assertEquals(0, migrationCount(database.connection()));
+            }
         }
+    }
+
+    @Test
+    void testCaseEndIsNotTransactionControl() {
+        Assertions.assertDoesNotThrow(
+            () -> DuckDbMigration.of(
+                1,
+                "case_expression",
+                "SELECT CASE WHEN 1 = 1 THEN 'COMMIT' ELSE 'ROLLBACK' END"
+            )
+        );
     }
 
     @Test

@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -61,51 +60,15 @@ public record DuckDbMigration(int version, String name, List<String> statements)
     }
 
     private static void rejectTransactionControl(String sql) {
-        var tokens = sqlTokens(sql);
-
-        for (int index = 0; index < tokens.size(); index++) {
-            var token = tokens.get(index);
-
-            if ("BEGIN".equals(token)
-                || "COMMIT".equals(token)
-                || "ROLLBACK".equals(token)
-                || "ABORT".equals(token)) {
-                throw transactionControlNotAllowed(token);
-            }
-
-            if ("START".equals(token)
-                && index + 1 < tokens.size()
-                && "TRANSACTION".equals(tokens.get(index + 1))) {
-                throw transactionControlNotAllowed("START TRANSACTION");
-            }
-        }
-    }
-
-    private static List<String> sqlTokens(String sql) {
-        var tokens = new ArrayList<String>();
+        var firstToken = true;
         var index = 0;
 
         while (index < sql.length()) {
             var current = sql.charAt(index);
 
-            if ((current == 'e' || current == 'E')
-                && index + 1 < sql.length()
-                && sql.charAt(index + 1) == '\'') {
-                index = skipQuoted(sql, index + 1, '\'', true);
+            if (Character.isWhitespace(current)) {
+                index++;
                 continue;
-            }
-
-            if (current == '\'' || current == '"') {
-                index = skipQuoted(sql, index, current, false);
-                continue;
-            }
-
-            if (current == '$') {
-                var afterDollarQuoted = skipDollarQuoted(sql, index);
-                if (afterDollarQuoted != index) {
-                    index = afterDollarQuoted;
-                    continue;
-                }
             }
 
             if (current == '-' && index + 1 < sql.length() && sql.charAt(index + 1) == '-') {
@@ -118,6 +81,35 @@ public record DuckDbMigration(int version, String name, List<String> statements)
                 continue;
             }
 
+            if (current == ';') {
+                firstToken = true;
+                index++;
+                continue;
+            }
+
+            if ((current == 'e' || current == 'E')
+                && index + 1 < sql.length()
+                && sql.charAt(index + 1) == '\'') {
+                firstToken = false;
+                index = skipQuoted(sql, index + 1, '\'', true);
+                continue;
+            }
+
+            if (current == '\'' || current == '"') {
+                firstToken = false;
+                index = skipQuoted(sql, index, current, false);
+                continue;
+            }
+
+            if (current == '$') {
+                var afterDollarQuoted = skipDollarQuoted(sql, index);
+                if (afterDollarQuoted != index) {
+                    firstToken = false;
+                    index = afterDollarQuoted;
+                    continue;
+                }
+            }
+
             if (Character.isLetter(current) || current == '_') {
                 var start = index++;
                 while (index < sql.length()) {
@@ -128,14 +120,29 @@ public record DuckDbMigration(int version, String name, List<String> statements)
                     index++;
                 }
 
-                tokens.add(sql.substring(start, index).toUpperCase(Locale.ROOT));
+                if (firstToken) {
+                    rejectTransactionStatement(sql.substring(start, index).toUpperCase(Locale.ROOT));
+                    firstToken = false;
+                }
                 continue;
             }
 
+            firstToken = false;
             index++;
         }
+    }
 
-        return tokens;
+    private static void rejectTransactionStatement(String firstToken) {
+        if ("BEGIN".equals(firstToken)
+            || "START".equals(firstToken)
+            || "COMMIT".equals(firstToken)
+            || "END".equals(firstToken)
+            || "ROLLBACK".equals(firstToken)
+            || "ABORT".equals(firstToken)) {
+            throw new IllegalArgumentException(
+                "Migration SQL must not control transactions; statement starts with " + firstToken
+            );
+        }
     }
 
     private static int skipQuoted(String sql, int index, char quote, boolean backslashEscapes) {
@@ -204,11 +211,5 @@ public record DuckDbMigration(int version, String name, List<String> statements)
             index++;
         }
         return sql.length();
-    }
-
-    private static IllegalArgumentException transactionControlNotAllowed(String keyword) {
-        return new IllegalArgumentException(
-            "Migration SQL must not control transactions; found " + keyword
-        );
     }
 }
