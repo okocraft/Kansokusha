@@ -173,6 +173,36 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
+    void testRejectsTransactionControlSql() {
+        for (var sql : List.of(
+            "COMMIT",
+            "ROLLBACK",
+            "BEGIN TRANSACTION",
+            "START TRANSACTION",
+            "CREATE TABLE escaped_transaction (value INTEGER); COMMIT; SELECT 1"
+        )) {
+            var exception = Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> DuckDbMigration.of(1, "invalid_transaction_control", sql),
+                sql
+            );
+
+            Assertions.assertTrue(exception.getMessage().contains("must not control transactions"));
+        }
+    }
+
+    @Test
+    void testTransactionKeywordsInCommentsAndStringsAreAllowed() {
+        Assertions.assertDoesNotThrow(
+            () -> DuckDbMigration.of(
+                1,
+                "transaction_words_as_data",
+                "SELECT 'COMMIT', \"ROLLBACK\" -- BEGIN TRANSACTION\n/* START TRANSACTION */"
+            )
+        );
+    }
+
+    @Test
     void testRejectsNonConsecutiveApplicationDefinitions() {
         var versionTwo = DuckDbMigration.of(2, "version_two", "SELECT 1");
 
