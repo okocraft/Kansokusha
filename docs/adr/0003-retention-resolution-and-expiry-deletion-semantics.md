@@ -63,6 +63,21 @@ fallback は Kansokusha 内部の hard-coded default ではない。operator が
 
 invalid configuration を部分的に適用しない。reload を実装する場合は、完全に validation 済みの immutable retention policy set を atomic に差し替え、失敗時は直前の valid snapshot を維持する。
 
+#### 初回起動 / empty configuration
+
+config file が存在しない、または空である場合、configuration layer が operator 編集用の初期 file / skeleton を生成すること自体は許可する。ただし、その file を生成したことを valid retention configuration の読み込み成功とは扱わない。
+
+retention-aware runtime を開始するには、少なくとも次が operator により明示され、validation を通過していなければならない。
+
+- 1件以上の policy definition
+- その policy definition のいずれかを参照する fallback policy
+
+これらがない初回起動は意図的な configuration failure とする。Kansokusha は implicit policy / duration を生成せず、event ingestion、storage writer、cleanup scheduler を active にしない。platform integration はこの状態を administrator-visible error として報告する。
+
+したがって、現在の `ConfigLoader` が empty file に initial object を保存して返す bootstrap behavior と、retention configuration が runtime-ready であることは別の状態である。#28 は initial object の生成後にも retention validation を行い、未設定なら actionable error として runtime initialization を失敗させる。
+
+reload 時は上記のとおり、invalid replacement を active snapshot にしない。既に valid runtime が動作している場合は直前の valid retention policy set を維持する。
+
 これにより runtime に登録される未知の custom event type も、implicit default を使わず operator-selected fallback policy に解決できる。
 
 ### 3. expiry は occurrence time から一度だけ解決し、absolute `TIMESTAMP_MS` として event row に保存する
@@ -126,7 +141,11 @@ LIMIT ?;
 
 選択した `rowid` はその transaction 内だけで deletion targeting に使用し、commit 後に保存・公開・再利用しない。DuckDB の `rowid` を persistent event identifier として扱わない。
 
-selection に `ORDER BY` は要求しない。earliest-expiry ordering のために全 expired set を sort するより、任意の expired row を bounded count で処理する。各 successful pass が最大 N 件を削除し、repeated pass により現在 expired な row を最終的に除去する。
+selection に `ORDER BY` は要求しない。earliest-expiry ordering のために全 expired set を sort するより、任意の expired row を bounded count で処理する。
+
+この strategy が保証する eventual deletion は、ある時点で expired である row の集合が有限で、その集合へ新しい expired row が追加され続けない区間に対するものとする。各 successful pass がその有限集合から最大 N 件を削除するため、十分な repeated pass により集合は空になる。
+
+継続的に新しい row が expiry する負荷下では、unordered `LIMIT` selection に per-row fairness や特定 row の finite-time deletion latency を保証しない。その保証が必要になった場合は、ordering / cursor strategy とその write/query cost を別途設計する。
 
 ADR-0002 の方針どおり、v1 では `expires_at` に manual ART index を追加しない。cleanup scan の cost が実運用上問題になる場合は、write/memory cost と合わせて別の ADR / migration で再評価する。
 
@@ -139,7 +158,11 @@ automatic cleanup は次の2値を operator configuration から受け取る。
 
 本 ADR は具体値を決めない。
 
-scheduler は fixed-delay semantics とし、1 pass の完了後から configured interval を置いて次の pass を実行する。1回の invocation で「expired row がなくなるまで」loop しないため、database size に応じて1 invocation の retained row-id set が増え続けることはない。
+scheduler は runtime startup 後、storage-owned deletion operation を安全に呼び出せる状態になり次第、background execution context で initial cleanup pass を delay なしに1回実行する。startup thread / recording caller thread 上でその I/O を同期実行しない。
+
+以後は fixed-delay semantics とし、各 pass の完了後から configured interval を置いて次の pass を実行する。initial pass が失敗した場合も、failure reporting 後に configured interval を置いて次回 pass を試行する。
+
+1回の invocation で「expired row がなくなるまで」loop しないため、database size に応じて1 invocation の retained row-id set が増え続けることはない。
 
 expired row が `maxRowsPerPass` を超える場合は後続 pass に残す。cleanup の追いつき方は configured interval / bound の operational tuning で調整する。
 
@@ -179,14 +202,22 @@ cleanup scan は速くなり得るが、append-heavy event write に index maint
 
 backlog size によって1 invocation の duration と I/O が無制限に伸び、bounded cleanup requirement と合わないため採用しない。
 
+### built-in fallback policy / duration を bootstrap default として生成する
+
+初回起動は簡単になるが、具体的な policy 名 / duration を configuration / catalog work に委ねる要件と衝突し、operator が選択していない retention decision を暗黙に作るため採用しない。
+
+### retention 未設定のまま runtime を起動し、event を一時的に受理する
+
+`expires_at NOT NULL` と「全 accepted event に resolved retention を与える」contract を破るか、後から expiry を補完する別 semantics が必要になるため採用しない。retention configuration が valid になるまで runtime activation を失敗させる。
+
 ## 結果
 
 - #19 は `events.expires_at TIMESTAMP_MS NOT NULL` を initial schema に含め、cleanup 専用 durable event ID / index は追加しない。
-- #28 は policy definitions、event mappings、明示 fallback policy、policy duration の validation を実装する。
+- #28 は policy definitions、event mappings、明示 fallback policy、policy duration の validation を実装し、empty / bootstrap-only configuration を runtime-ready と扱わない。
 - #29 は occurrence time と resolved policy duration から millisecond-precision `expiresAt` を一度だけ計算し、storage-facing event data に渡す。
 - #21 は `retention_policy_id` と `expires_at` をそのまま transactionally persist し、retention decision を再計算しない。
 - #30 は same-transaction `rowid` targeting と configured `maxRowsPerPass` により bounded deletion を実装する。
-- #31 は cleanup interval / `maxRowsPerPass` の configuration、fixed-delay lifecycle、caller-thread separation、failure reporting / retry semantics を実装する。
+- #31 は cleanup interval / `maxRowsPerPass` の configuration、startup 後 delay なしの initial background pass、以後の fixed-delay lifecycle、caller-thread separation、failure reporting / retry semantics を実装する。
 
 ## 参照
 
