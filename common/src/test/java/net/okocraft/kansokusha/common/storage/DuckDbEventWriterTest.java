@@ -140,14 +140,20 @@ class DuckDbEventWriterTest {
             try (var statement = database.connection().createStatement();
                  var rows = statement.executeQuery(
                      """
-                         SELECT epoch_ms(occurred_at) occurred_ms, epoch_ms(expires_at) expires_ms
+                         SELECT occurred_at, expires_at
                          FROM events
                          ORDER BY payload_generation_id
                          """
                  )) {
                 var persisted = new java.util.HashSet<String>();
                 while (rows.next()) {
-                    persisted.add(rows.getLong("occurred_ms") + ":" + rows.getLong("expires_ms"));
+                    var occurredAt = rows.getObject("occurred_at", java.time.LocalDateTime.class)
+                        .toInstant(java.time.ZoneOffset.UTC)
+                        .toEpochMilli();
+                    var expiresAt = rows.getObject("expires_at", java.time.LocalDateTime.class)
+                        .toInstant(java.time.ZoneOffset.UTC)
+                        .toEpochMilli();
+                    persisted.add(occurredAt + ":" + expiresAt);
                 }
                 Assertions.assertEquals(
                     java.util.Set.of(
