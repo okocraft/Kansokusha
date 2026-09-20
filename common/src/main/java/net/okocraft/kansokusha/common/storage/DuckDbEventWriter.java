@@ -10,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -99,10 +98,10 @@ public final class DuckDbEventWriter {
                 );
 
                 bind(statement, event, payloadId, serverId, worldId, retentionId);
-                statement.addBatch();
+                if (statement.executeUpdate() != 1) {
+                    throw new SQLException("DuckDB did not insert exactly one event row");
+                }
             }
-
-            validateBatchResult(statement.executeBatch(), events.size());
         }
 
         this.afterBatchInsert.accept(connection, events.size());
@@ -221,17 +220,6 @@ public final class DuckDbEventWriter {
             throw new SQLException(field + " resolves to a DuckDB TIMESTAMP_MS infinity sentinel");
         }
         return millis;
-    }
-
-    private static void validateBatchResult(int[] counts, int expected) throws SQLException {
-        if (counts.length != expected) {
-            throw new SQLException("DuckDB returned " + counts.length + " results for " + expected + " events");
-        }
-        for (var count : counts) {
-            if (count == Statement.EXECUTE_FAILED) {
-                throw new SQLException("DuckDB reported a failed event batch entry");
-            }
-        }
     }
 
     private static <K> int cached(Map<K, Integer> cache, K key, SqlIntSupplier supplier)
