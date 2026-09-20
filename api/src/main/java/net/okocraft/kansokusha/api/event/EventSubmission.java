@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.api.event;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 

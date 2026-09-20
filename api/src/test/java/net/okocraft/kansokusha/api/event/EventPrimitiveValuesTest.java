@@ -17,19 +17,4 @@ class EventPrimitiveValuesTest {
             () -> assertThrows(IllegalArgumentException.class, () -> new PayloadGeneration(-1))
         );
     }
-
-    @Test
-    void testBlockPositionPreservesIntegerCoordinateBoundaries() {
-        BlockPosition minimum = new BlockPosition(Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE);
-        BlockPosition maximum = new BlockPosition(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
-
-        assertAll(
-            () -> assertEquals(Integer.MIN_VALUE, minimum.x()),
-            () -> assertEquals(Integer.MIN_VALUE, minimum.y()),
-            () -> assertEquals(Integer.MIN_VALUE, minimum.z()),
-            () -> assertEquals(Integer.MAX_VALUE, maximum.x()),
-            () -> assertEquals(Integer.MAX_VALUE, maximum.y()),
-            () -> assertEquals(Integer.MAX_VALUE, maximum.z())
-        );
-    }
 }

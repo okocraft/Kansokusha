@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.api.event;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
