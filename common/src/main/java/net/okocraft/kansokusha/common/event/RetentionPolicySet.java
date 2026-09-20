@@ -80,20 +80,27 @@ public final class RetentionPolicySet {
         var occurredAt = submission.occurredAt().truncatedTo(ChronoUnit.MILLIS);
 
         final long occurredAtMillis;
-        final long expiresAtMillis;
-
         try {
             occurredAtMillis = occurredAt.toEpochMilli();
-            expiresAtMillis = Math.addExact(occurredAtMillis, policy.duration().toMillis());
         } catch (ArithmeticException e) {
             throw new RetentionResolutionException(
-                "Retention timestamp is outside the supported millisecond range for event type "
+                "occurredAt is outside the supported millisecond range for event type "
                     + submission.eventType().asString(),
                 e
             );
         }
-
         requireFiniteDuckDbTimestamp(occurredAtMillis, "occurredAt", submission.eventType());
+
+        final long expiresAtMillis;
+        try {
+            expiresAtMillis = Math.addExact(occurredAtMillis, policy.duration().toMillis());
+        } catch (ArithmeticException e) {
+            throw new RetentionResolutionException(
+                "expiresAt is outside the supported millisecond range for event type "
+                    + submission.eventType().asString(),
+                e
+            );
+        }
         requireFiniteDuckDbTimestamp(expiresAtMillis, "expiresAt", submission.eventType());
 
         return new AcceptedEvent(
