@@ -108,6 +108,79 @@ class DuckDbMigrationsTest {
     }
 
     @Test
+    void testMetadataConstraintsRejectInvalidRows(@TempDir Path dir) throws Exception {
+        try (var database = DuckDbDatabase.open(dir.resolve("metadata-constraints.duckdb"))) {
+            var connection = database.connection();
+            DuckDbMigrations.migrate(connection);
+
+            execute(connection, "INSERT INTO event_types (event_type_key) VALUES ('example:event')");
+            var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");
+            execute(connection, "INSERT INTO servers (server_key) VALUES ('example:server')");
+            var serverId = idForKey(connection, "servers", "server_key", "example:server");
+            execute(
+                connection,
+                "INSERT INTO retention_policies (retention_policy_key) VALUES ('example:audit')"
+            );
+
+            assertInsertFails(
+                connection,
+                "INSERT INTO event_types (event_type_key) VALUES ('example:event')"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO servers (server_key) VALUES ('example:server')"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO retention_policies (retention_policy_key) VALUES ('example:audit')"
+            );
+
+            assertInsertFails(
+                connection,
+                "INSERT INTO event_types (id, event_type_key) VALUES (0, 'example:zero')"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO servers (id, server_key) VALUES (0, 'example:zero')"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO retention_policies (id, retention_policy_key) VALUES (0, 'example:zero')"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO payload_generations (id, event_type_id, generation) VALUES (0, "
+                    + eventTypeId + ", 1)"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO worlds (id, server_id, world_key) VALUES (0, "
+                    + serverId + ", 'example:zero')"
+            );
+
+            execute(
+                connection,
+                "INSERT INTO payload_generations (event_type_id, generation) VALUES (" + eventTypeId + ", 1)"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO payload_generations (event_type_id, generation) VALUES ("
+                    + eventTypeId + ", 1)"
+            );
+            assertInsertFails(
+                connection,
+                "INSERT INTO payload_generations (event_type_id, generation) VALUES ("
+                    + eventTypeId + ", 0)"
+            );
+
+            assertInsertFails(
+                connection,
+                "INSERT INTO worlds (server_id, world_key) VALUES (999999, 'minecraft:overworld')"
+            );
+        }
+    }
+
+    @Test
     void testEventOptionalFieldsAndLocationConstraint(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("events.duckdb"))) {
             var connection = database.connection();
@@ -301,6 +374,10 @@ class DuckDbMigrationsTest {
             Assertions.assertTrue(result.next());
             return result.getObject(1);
         }
+    }
+
+    private static void assertInsertFails(Connection connection, String sql) {
+        Assertions.assertThrows(SQLException.class, () -> execute(connection, sql), sql);
     }
 
     private static void execute(Connection connection, String sql) throws SQLException {
