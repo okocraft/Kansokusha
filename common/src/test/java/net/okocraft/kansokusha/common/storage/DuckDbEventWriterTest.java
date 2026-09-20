@@ -54,7 +54,7 @@ class DuckDbEventWriterTest {
                              s.server_key, w.world_key, e.block_x, e.block_y, e.block_z,
                              CAST(e.subject_player_uuid AS VARCHAR) player_uuid,
                              rp.retention_policy_key, epoch_ms(e.expires_at) expires_ms, e.payload,
-                             e.payload_generation_id, e.server_id, e.world_id, e.retention_policy_id
+                             e.payload_generation_id, e.server_id, e.world_id, e.retention_policy_id, hex(e.payload) payload_hex
                          FROM events e
                          JOIN payload_generations pg ON pg.id = e.payload_generation_id
                          JOIN event_types et ON et.id = pg.event_type_id
@@ -77,7 +77,7 @@ class DuckDbEventWriterTest {
                 Assertions.assertNull(rows.getString("player_uuid"));
                 Assertions.assertEquals(SHORT.asString(), rows.getString("retention_policy_key"));
                 Assertions.assertEquals(first.expiresAt().toEpochMilli(), rows.getLong("expires_ms"));
-                Assertions.assertArrayEquals(new byte[]{1}, rows.getBytes("payload"));
+                Assertions.assertEquals("01", rows.getString("payload_hex"));
                 assertPositiveIds(rows);
 
                 Assertions.assertTrue(rows.next());
@@ -95,7 +95,7 @@ class DuckDbEventWriterTest {
                 Assertions.assertEquals(PLAYER.toString(), rows.getString("player_uuid"));
                 Assertions.assertEquals(AUDIT.asString(), rows.getString("retention_policy_key"));
                 Assertions.assertEquals(second.expiresAt().toEpochMilli(), rows.getLong("expires_ms"));
-                Assertions.assertArrayEquals(new byte[]{2}, rows.getBytes("payload"));
+                Assertions.assertEquals("02", rows.getString("payload_hex"));
                 assertPositiveIds(rows);
                 Assertions.assertFalse(rows.next());
             }
@@ -142,7 +142,7 @@ class DuckDbEventWriterTest {
             try (var statement = database.connection().createStatement();
                  var rows = statement.executeQuery(
                      """
-                         SELECT et.event_type_key, e.payload
+                         SELECT et.event_type_key, hex(e.payload) payload_hex
                          FROM events e
                          JOIN payload_generations pg ON pg.id = e.payload_generation_id
                          JOIN event_types et ON et.id = pg.event_type_id
@@ -150,7 +150,7 @@ class DuckDbEventWriterTest {
                  )) {
                 Assertions.assertTrue(rows.next());
                 Assertions.assertEquals(EVENT_A.asString(), rows.getString("event_type_key"));
-                Assertions.assertArrayEquals(new byte[]{1}, rows.getBytes("payload"));
+                Assertions.assertEquals("01", rows.getString("payload_hex"));
                 Assertions.assertFalse(rows.next());
             }
         }
