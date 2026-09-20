@@ -5,6 +5,10 @@ import org.jetbrains.annotations.NotNullByDefault;
 @NotNullByDefault
 public final class RetentionResolutionException extends Exception {
 
+    public RetentionResolutionException(String message) {
+        super(message);
+    }
+
     public RetentionResolutionException(String message, Throwable cause) {
         super(message, cause);
     }
