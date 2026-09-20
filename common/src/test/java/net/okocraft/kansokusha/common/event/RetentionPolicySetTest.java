@@ -163,6 +163,57 @@ class RetentionPolicySetTest {
     }
 
     @Test
+    void testDuckDbInfinitySentinelsAreRejected() throws Exception {
+        var oneMillisecond = RetentionPolicySet.from(
+            new KansokushaConfig.RetentionSettings(
+                Map.of(SHORT_POLICY, Duration.ofMillis(1)),
+                Map.of(),
+                SHORT_POLICY
+            )
+        );
+
+        var positiveExpirySentinel = Assertions.assertThrows(
+            RetentionResolutionException.class,
+            () -> oneMillisecond.resolve(
+                submission(OTHER_EVENT, Instant.ofEpochMilli(Long.MAX_VALUE - 1))
+            )
+        );
+        Assertions.assertTrue(positiveExpirySentinel.getMessage().contains("expiresAt"));
+
+        var positiveOccurrenceSentinel = Assertions.assertThrows(
+            RetentionResolutionException.class,
+            () -> oneMillisecond.resolve(
+                submission(OTHER_EVENT, Instant.ofEpochMilli(Long.MAX_VALUE))
+            )
+        );
+        Assertions.assertTrue(positiveOccurrenceSentinel.getMessage().contains("occurredAt"));
+
+        var negativeOccurrenceSentinel = Assertions.assertThrows(
+            RetentionResolutionException.class,
+            () -> oneMillisecond.resolve(
+                submission(OTHER_EVENT, Instant.ofEpochMilli(-Long.MAX_VALUE))
+            )
+        );
+        Assertions.assertTrue(negativeOccurrenceSentinel.getMessage().contains("occurredAt"));
+
+        var upperFinite = oneMillisecond.resolve(
+            submission(OTHER_EVENT, Instant.ofEpochMilli(Long.MAX_VALUE - 2))
+        );
+        Assertions.assertEquals(
+            Instant.ofEpochMilli(Long.MAX_VALUE - 1),
+            upperFinite.expiresAt()
+        );
+
+        var lowerFinite = oneMillisecond.resolve(
+            submission(OTHER_EVENT, Instant.ofEpochMilli(-Long.MAX_VALUE + 1))
+        );
+        Assertions.assertEquals(
+            Instant.ofEpochMilli(-Long.MAX_VALUE + 2),
+            lowerFinite.expiresAt()
+        );
+    }
+
+    @Test
     void testOccurrenceOutsideEpochMillisecondRangeFails() {
         var policySet = RetentionPolicySet.from(
             new KansokushaConfig.RetentionSettings(
