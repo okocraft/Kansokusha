@@ -19,23 +19,17 @@ class EventPrimitiveValuesTest {
     }
 
     @Test
-    void testEventPositionPreservesFiniteCoordinates() {
-        EventPosition position = new EventPosition(-12.5, 0.0, Double.MAX_VALUE);
+    void testBlockPositionPreservesIntegerCoordinateBoundaries() {
+        BlockPosition minimum = new BlockPosition(Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE);
+        BlockPosition maximum = new BlockPosition(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
 
-        assertEquals(-12.5, position.x());
-        assertEquals(0.0, position.y());
-        assertEquals(Double.MAX_VALUE, position.z());
-    }
-
-    @Test
-    void testEventPositionRejectsNonFiniteCoordinates() {
         assertAll(
-            () -> assertThrows(IllegalArgumentException.class,
-                () -> new EventPosition(Double.NaN, 0.0, 0.0)),
-            () -> assertThrows(IllegalArgumentException.class,
-                () -> new EventPosition(0.0, Double.POSITIVE_INFINITY, 0.0)),
-            () -> assertThrows(IllegalArgumentException.class,
-                () -> new EventPosition(0.0, 0.0, Double.NEGATIVE_INFINITY))
+            () -> assertEquals(Integer.MIN_VALUE, minimum.x()),
+            () -> assertEquals(Integer.MIN_VALUE, minimum.y()),
+            () -> assertEquals(Integer.MIN_VALUE, minimum.z()),
+            () -> assertEquals(Integer.MAX_VALUE, maximum.x()),
+            () -> assertEquals(Integer.MAX_VALUE, maximum.y()),
+            () -> assertEquals(Integer.MAX_VALUE, maximum.z())
         );
     }
 }

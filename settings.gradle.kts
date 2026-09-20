@@ -13,6 +13,7 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "kansokusha"
 
+addProject("api")
 addProject("common")
 addProject("paper")
 addProject("velocity")

@@ -6,10 +6,10 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.util.Objects;
 
 @NotNullByDefault
-public record EventEnvelope(EventSubmission submission, Key retentionReference) {
+public record AcceptedEvent(EventSubmission submission, Key retentionPolicyKey) {
 
-    public EventEnvelope {
+    public AcceptedEvent {
         Objects.requireNonNull(submission, "submission");
-        Objects.requireNonNull(retentionReference, "retentionReference");
+        Objects.requireNonNull(retentionPolicyKey, "retentionPolicyKey");
     }
 }

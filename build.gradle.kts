@@ -10,11 +10,9 @@ jcommon {
     setupMockito(libs.mockito)
 
     commonDependencies {
-        compileOnlyApi(libs.adventure.key)
         compileOnlyApi(libs.annotations)
         compileOnlyApi(libs.configurate.yaml)
 
-        testImplementation(libs.adventure.key)
         testImplementation(libs.junit.jupiter)
         testImplementation(libs.configurate.yaml)
     }

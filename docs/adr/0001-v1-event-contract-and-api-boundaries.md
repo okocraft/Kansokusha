@@ -40,9 +40,9 @@ provider が互換性のない payload format へ変更するときは generatio
 
 generation は schema や serializer 自体を表さない。payload の encoding、schema、serialization、および各 generation の解釈は provider の責任とする。
 
-### 4. submission と受理後の envelope を分離する
+### 4. submission と受理後の event を分離する
 
-外部 API が受け取る `EventSubmission` と、Kansokusha が受理後に扱う `EventEnvelope` を分ける。
+外部 API が受け取る `EventSubmission` と、Kansokusha が受理後に扱う `AcceptedEvent` を分ける。
 
 `EventSubmission` の必須フィールドは次のとおりとする。
 
@@ -58,11 +58,13 @@ generation は schema や serializer 自体を表さない。payload の encodin
 - position
 - subject reference
 
-server、world、position、subject はプラットフォーム API のオブジェクトではなく、common の値として表現する。subject reference はプレイヤーだけに限定しない。
+server と world の識別子には Adventure `Key` を使用する。position はブロック座標を表す3つの整数とする。subject はプラットフォーム API のオブジェクトではなく文字列の参照として表現し、プレイヤーだけに限定しない。
+
+Paper integration はローカル server key を API から取得可能にする。複数の backend server を扱う Velocity integration では、送信側が対象 server key を指定する。
 
 payload は byte sequence とし、Kansokusha は内容を解釈しない。
 
-`EventEnvelope` は、検証済み submission に Kansokusha が解決した retention reference を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、対応付け、expiry 情報は retention ADR で決定する。
+`AcceptedEvent` は、検証済み submission に Kansokusha が解決した retention policy key を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、対応付け、expiry 情報は retention ADR で決定する。
 
 ### 5. runtime registration と persistent identity を分離する
 

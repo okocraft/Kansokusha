@@ -6,16 +6,16 @@ import java.util.Arrays;
 import java.util.Objects;
 
 @NotNullByDefault
-public final class OpaquePayload {
+public final class EventPayload {
 
     private final byte[] bytes;
 
-    private OpaquePayload(byte[] bytes) {
+    private EventPayload(byte[] bytes) {
         this.bytes = bytes;
     }
 
-    public static OpaquePayload copyOf(byte[] bytes) {
-        return new OpaquePayload(Objects.requireNonNull(bytes, "bytes").clone());
+    public static EventPayload copyOf(byte[] bytes) {
+        return new EventPayload(Objects.requireNonNull(bytes, "bytes").clone());
     }
 
     public int size() {
@@ -28,7 +28,7 @@ public final class OpaquePayload {
 
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof OpaquePayload payload && Arrays.equals(this.bytes, payload.bytes);
+        return this == other || other instanceof EventPayload payload && Arrays.equals(this.bytes, payload.bytes);
     }
 
     @Override
@@ -38,6 +38,6 @@ public final class OpaquePayload {
 
     @Override
     public String toString() {
-        return "OpaquePayload[size=" + this.bytes.length + ']';
+        return "EventPayload[size=" + this.bytes.length + ']';
     }
 }

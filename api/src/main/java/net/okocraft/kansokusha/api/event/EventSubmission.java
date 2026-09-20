@@ -12,36 +12,29 @@ public record EventSubmission(
     Key eventType,
     PayloadGeneration payloadGeneration,
     Instant occurredAt,
-    String serverIdentifier,
-    @Nullable String worldIdentifier,
-    @Nullable EventPosition position,
+    Key serverKey,
+    @Nullable Key worldKey,
+    @Nullable BlockPosition position,
     @Nullable String subjectReference,
-    OpaquePayload payload
+    EventPayload payload
 ) {
 
     public EventSubmission {
         Objects.requireNonNull(eventType, "eventType");
         Objects.requireNonNull(payloadGeneration, "payloadGeneration");
         Objects.requireNonNull(occurredAt, "occurredAt");
-        requireNonBlank(serverIdentifier, "serverIdentifier");
-        requireNullableNonBlank(worldIdentifier, "worldIdentifier");
+        Objects.requireNonNull(serverKey, "serverKey");
         requireNullableNonBlank(subjectReference, "subjectReference");
         Objects.requireNonNull(payload, "payload");
 
-        if (position != null && worldIdentifier == null) {
-            throw new IllegalArgumentException("worldIdentifier is required when position is present");
-        }
-    }
-
-    private static void requireNonBlank(String value, String name) {
-        if (value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
+        if (position != null && worldKey == null) {
+            throw new IllegalArgumentException("worldKey is required when position is present");
         }
     }
 
     private static void requireNullableNonBlank(@Nullable String value, String name) {
-        if (value != null) {
-            requireNonBlank(value, name);
+        if (value != null && value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
         }
     }
 }
