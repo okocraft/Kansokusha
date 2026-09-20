@@ -20,8 +20,8 @@ retention policy の具体的な名前・duration・event type への割り当�
 | --- | --- |
 | §7 | public event type key を immutable な persistent metadata として保存し、provider の active / inactive と独立した compact internal ID へ対応付ける。 |
 | §8 | common field と opaque payload を lossless に event record へ保持し、payload generation は event type ごとに履歴を残す。retention に必要な persisted expiry fact は #27 で決定し initial schema に含める。 |
-| §10 | 1 instance ごとの local DuckDB file に正規化した metadata と append-oriented event record を保存する。 |
-| §13 | persistent registry update と event batch write の transaction boundary を明示し、失敗した batch を部分成功として扱わない。high-volume event table の index maintenance cost も schema decision に含める。 |
+| §10 | 本 ADR は 1 instance ごとの local DuckDB file に正規化した metadata と append-oriented event record を保存する schema boundary を担当する。DuckDB JDBC の runtime packaging / shading と local connection lifecycle は #17 が担当する。 |
+| §13 | 本 ADR は persistent registry update と event batch write の transaction boundary、および high-volume event table の index maintenance cost を担当する。bounded asynchronous ingestion、writer failure visibility、normal shutdown drain / flush は #22 以降の E3 tasks が担当する。 |
 | §15 | integer version の forward-only migration を順序通りに適用し、失敗時は rollback して既存の valid data を保持する。未知の新しい schema は拒否する。 |
 
 ## 決定
@@ -34,19 +34,23 @@ storage open 時に migration runner が `schema_migrations` を bootstrap す�
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY CHECK (version > 0),
     name VARCHAR NOT NULL,
+    checksum VARCHAR NOT NULL,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp
 );
 ```
 
-migration は `1, 2, 3, ...` の連続した正整数で識別する。database に記録済みの version は、実行中の application が知る migration list の連続した prefix でなければならない。
+migration は `1, 2, 3, ...` の連続した正整数で識別する。各 application-side migration definition は immutable な `version`、`name`、`checksum` を持つ。SQL migration の checksum は exact UTF-8 migration resource bytes の SHA-256 とし、将来 non-SQL migration を導入する場合も、その immutable migration artifact から決定的に計算できる checksum を定義しなければならない。
+
+database に記録済みの rows は、実行中の application が知る migration definitions の連続した prefix と `(version, name, checksum)` が完全一致しなければならない。
 
 - database の latest version が application の latest known version より新しい場合は storage open を失敗させる。
 - version に gap、duplicate、または application が知らない適用済み version がある場合は schema state を不正として失敗させる。
+- 同じ version でも `name` または `checksum` が application definition と異なる場合は、適用済み migration の改変または別系統の schema history とみなし storage open を失敗させる。
 - up-to-date database では migration を再実行しない。
 - downgrade は実装しない。
-- 適用済み migration の内容は immutable とし、schema 変更は必ず新しい version を追加する。
+- 適用済み migration の `name` と内容は immutable とし、schema 変更は必ず新しい version を追加する。
 
-`schema_migrations` 自体の bootstrap は concrete v1 table migration から分離する。これにより migration runner は v1 schema の内容を知らずに実装できる。
+`schema_migrations` 自体の bootstrap は concrete v1 table migration から分離する。これにより migration runner は v1 schema の内容を知らずに実装できる一方、同じ version 番号だけを見て異なる migration history を valid と誤判定しない。
 
 ### 2. v1 の persistent event type identity は compact ID と canonical key を分離する
 
@@ -115,7 +119,7 @@ CREATE TABLE events (
 
 `payload_generation_id` の referential integrity は storage implementation が保証する。writer は同じ transaction 内で persistent registry から generation ID を解決した後にだけ event row を insert する。Kansokusha 自身が不正な ID を書かないことを integration test で検証する。
 
-この判断は、database を手作業で編集した場合まで孤立 row を防ぐ強い constraint より、通常運用で継続的に増加する event rows の write / memory cost を優先する trade-off である。将来、measurement により FK enforcement の利益がコストを上回ると分かった場合は migration で追加できる。
+この判断は、database を手作業で編集した場合まで孤立 row を防ぐ強い constraint より、通常運用で継続的に増加する event rows の write / memory cost を優先する trade-off である。将来、measurement により FK enforcement の利益がコストを上回ると分かった場合は migration で導入できる。ただし DuckDB は現在 `ALTER TABLE ... ADD CONSTRAINT` をサポートしないため、単純な in-place constraint 追加を前提にしない。必要なら constrained replacement table の作成、data copy / validation、table replacement を同一 migration の安全な手順として設計する。
 
 ### 4. `Instant` は epoch second と nano adjustment に分けて lossless に保存する
 
@@ -156,9 +160,11 @@ E2-T1 は retention policy identity を event row に保持する boundary を�
 3. #19 が #16 と #27 の両方に従って initial v1 schema を作成する。
 4. #28 / #29 が policy configuration と resolved expiry metadata を domain model に実装する。
 5. #21 が #29 の resolved metadata を recompute せず batch transaction 内で保存する。
-6. #30 が同じ persisted representation を用いて bounded deletion を実装する。
+6. #30 が #27 で選択した deletion targeting strategy と同じ persisted representation を用いて bounded deletion を実装する。
 
-したがって、v1 の fresh database が #19 を適用した時点で retention deletion に必要な storage shape は存在する。expiry metadata を追加するためだけの follow-up migration は不要とする。
+#27 は bounded deletion のために durable row identity が必要かも明示的に決める。必要なら #19 が initial schema にその identity を含める。不要なら DuckDB の transaction-local `rowid` 等を deletion implementation detail として利用してよいが、`rowid` を persistent event identity として保存・公開・transaction 間で保持してはならない。
+
+したがって、v1 の fresh database が #19 を適用した時点で retention deletion に必要な storage shape は存在する。expiry metadata や deletion identity を追加するためだけの担当不在 follow-up migration は不要とする。
 
 ### 7. persistent registry update は append-only な find-or-create とする
 
@@ -188,7 +194,7 @@ constraint violation、binding failure、I/O failure などで batch 内のい�
 
 runner は未適用 migration を version 順に 1 件ずつ処理する。
 
-各 migration について `BEGIN` し、schema / data transformation を実行し、最後に同じ transaction 内で `schema_migrations` row を insert して `COMMIT` する。migration が失敗した場合は `ROLLBACK` し、その version を適用済みとして記録しない。
+各 migration について `BEGIN` し、schema / data transformation を実行し、最後に同じ transaction 内で application definition の `version`、`name`、`checksum` を `schema_migrations` row として insert して `COMMIT` する。migration が失敗した場合は `ROLLBACK` し、その version を適用済みとして記録しない。
 
 既存 data の変換が必要な migration は、同一 transaction 内で add / copy / validate / replace する。失敗時の fallback として database file、table、または valid rows を無条件に削除して再作成してはならない。
 
@@ -220,7 +226,11 @@ runtime availability と stored identity を結合し、re-registration や過�
 
 ### `events.event_id UUID PRIMARY KEY` を設ける
 
-v1 requirement に public / storage event ID を使う point lookup、update、deduplication はない。UUID PK は高頻度 insert のたびに ART maintenance を追加する一方、現在の機能では利用先がないため採用しない。row identity が必要な具体的要件が生じた場合は、その用途に適した identity と index を migration で追加する。
+v1 requirement に public / storage event ID を使う point lookup、update、deduplication はない。また、bounded retention deletion だけを理由に durable event identity が必要とは現時点で判断しない。#27 は deletion semantics を決める際に、initial schema に durable identity が必要か、transaction-local row selection で足りるかを確定する。
+
+DuckDB の `rowid` は physical storage に基づく pseudocolumn で transaction 内では stable だが、persistent identifier としての利用は推奨されない。そのため #27 が `rowid` を採用する場合も、同一 deletion transaction 内の対象選択に限定する。
+
+UUID PK は高頻度 insert のたびに ART maintenance を追加する一方、現在の確定済み機能では利用先がないため採用しない。#27 が durable deletion identity を要求した場合は #19 の initial schema にその用途に適した column を追加する。v1 release 後に別用途の row identity が必要になった場合は、その用途と DuckDB の ALTER 制約を踏まえた table replacement を含む migration を設計する。
 
 ### `events.payload_generation_id` に FOREIGN KEY を張る
 
@@ -244,13 +254,16 @@ current requirement に stable surrogate identity がなく、schema と registr
 - current common model の `Instant` を含む event data と opaque payload を storage 固有の timestamp range で欠損させず復元できる。
 - high-volume `events` table は v1 では implicit / manual ART index を持たず、metadata table に必要な integrity index を限定する。
 - #27 の retention decision は initial schema より前に行われ、#29 の resolved expiry metadata は #21 が保存するため、担当不在の follow-up schema migration を生まない。
+- bounded deletion の row targeting は #27 が initial schema 前に決定し、transaction-local `rowid` を使う場合も persistent identity として扱わない。
 - batch failure は partial success として commit されない。
-- schema evolution は既存 valid data を保持したまま forward migration でき、unknown / failed migration は visible initialization failure になる。
+- schema evolution は既存 valid data を保持したまま forward migration でき、unknown / failed migration に加えて適用済み migration の name / checksum mismatch も visible initialization failure になる。
 
 ## 参照
 
 - DuckDB Transaction Management: https://duckdb.org/docs/stable/sql/statements/transactions
 - DuckDB Constraints: https://duckdb.org/docs/stable/sql/constraints
+- DuckDB ALTER TABLE: https://duckdb.org/docs/current/sql/statements/alter_table
+- DuckDB SELECT / rowid: https://duckdb.org/docs/current/sql/statements/select
 - DuckDB Indexing Performance Guide: https://duckdb.org/docs/current/guides/performance/indexing
 - DuckDB Indexes: https://duckdb.org/docs/stable/sql/indexes
 - DuckDB Timestamp Functions: https://duckdb.org/docs/stable/sql/functions/timestamp
