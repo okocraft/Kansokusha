@@ -58,7 +58,9 @@ generation は schema や serializer 自体を表さない。payload の encodin
 - position
 - subject reference
 
-server、world、subject の識別子には Adventure `Key` を使用する。position はブロック座標を表す3つの整数とする。subject はプラットフォーム API のオブジェクトではなく namespace 付きの参照として表現し、プレイヤーだけに限定しない。
+server と world の識別子には Adventure `Key` を使用し、position はブロック座標を表す3つの整数とする。
+
+subject は sealed interface による platform-neutral な値として表現する。v1 は UUID を保持する player subject のみを定義し、他の主体は具体的な要件が生じた時点で追加する。
 
 Paper integration はローカル server key を API から取得可能にする。複数の backend server を扱う Velocity integration では、送信側が対象 server key を指定する。
 

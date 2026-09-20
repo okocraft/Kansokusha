@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.api.event;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.api.subject.EventSubject;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
@@ -16,7 +17,7 @@ public record EventSubmission(
     Key serverKey,
     @Nullable Key worldKey,
     @Nullable BlockPosition position,
-    @Nullable Key subjectKey,
+    @Nullable EventSubject subject,
     EventPayload payload
 ) {
 
@@ -31,5 +32,4 @@ public record EventSubmission(
             throw new IllegalArgumentException("worldKey is required when position is present");
         }
     }
-
 }
