@@ -3,13 +3,13 @@ package net.okocraft.kansokusha.common.api;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.KansokushaApiProvider;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.api.spi.KansokushaApiProvider;
 import net.okocraft.kansokusha.common.event.registry.InMemoryRuntimeEventTypeRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +18,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultKansokushaApiTest {
@@ -35,8 +38,18 @@ class DefaultKansokushaApiTest {
     @AfterEach
     void tearDownPublishedApi() {
         if (this.publishedApi != null) {
-            KansokushaApiProvider.unpublish(this.publishedApi);
+            CommonKansokushaApiProvider.unpublish(this.publishedApi);
         }
+    }
+
+    @Test
+    void testServiceLoaderDiscoversCommonApiProvider() {
+        List<KansokushaApiProvider> providers = ServiceLoader.load(
+            KansokushaApiProvider.class, KansokushaApiProvider.class.getClassLoader()
+        ).stream().map(ServiceLoader.Provider::get).toList();
+
+        assertInstanceOf(CommonKansokushaApiProvider.class,
+            providers.stream().filter(CommonKansokushaApiProvider.class::isInstance).findFirst().orElseThrow());
     }
 
     @Test
@@ -122,19 +135,31 @@ class DefaultKansokushaApiTest {
 
     @Test
     void testApiEntryPointPublishesAndUnpublishesOnlyCurrentApi() {
-        assertEquals(RegistrationOutcome.CLOSED, Kansokusha.api().registerEventType(definition(1)));
-        assertTrue(Kansokusha.api().localServerKey().isEmpty());
+        assertThrows(IllegalStateException.class, Kansokusha::api);
         DefaultKansokushaApi api = api(submission -> true);
         DefaultKansokushaApi other = api(submission -> true);
         publish(api);
 
         assertSame(api, Kansokusha.api());
-        assertFalse(KansokushaApiProvider.publish(other));
-        assertFalse(KansokushaApiProvider.unpublish(other));
+        assertFalse(CommonKansokushaApiProvider.publish(api));
+        assertFalse(CommonKansokushaApiProvider.publish(other));
+        assertFalse(CommonKansokushaApiProvider.unpublish(other));
         assertSame(api, Kansokusha.api());
-        assertTrue(KansokushaApiProvider.unpublish(api));
-        assertTrue(Kansokusha.api().localServerKey().isEmpty());
-        assertEquals(SubmissionOutcome.CLOSED, Kansokusha.api().submit(submission(1)));
+        assertTrue(CommonKansokushaApiProvider.unpublish(api));
+        assertFalse(CommonKansokushaApiProvider.unpublish(api));
+        assertThrows(IllegalStateException.class, Kansokusha::api);
+    }
+
+    @Test
+    void testRetrievedApiReturnsClosedOutcomesAfterImplementationCloses() {
+        DefaultKansokushaApi implementation = api(submission -> true);
+        publish(implementation);
+        KansokushaApi retrievedApi = Kansokusha.api();
+
+        implementation.close();
+
+        assertEquals(RegistrationOutcome.CLOSED, retrievedApi.registerEventType(definition(1)));
+        assertEquals(SubmissionOutcome.CLOSED, retrievedApi.submit(submission(1)));
     }
 
     private DefaultKansokushaApi api(EventIntake intake) {
@@ -146,7 +171,7 @@ class DefaultKansokushaApiTest {
     }
 
     private void publish(DefaultKansokushaApi api) {
-        assertTrue(KansokushaApiProvider.publish(api));
+        assertTrue(CommonKansokushaApiProvider.publish(api));
         this.publishedApi = api;
     }
 

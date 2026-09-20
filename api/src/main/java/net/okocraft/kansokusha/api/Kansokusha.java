@@ -1,12 +1,9 @@
 package net.okocraft.kansokusha.api;
 
-import net.kyori.adventure.key.Key;
-import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.api.spi.KansokushaApiProvider;
 import org.jetbrains.annotations.NotNullByDefault;
 
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.ServiceLoader;
 
 /**
  * Provides the Kansokusha API published by the running platform plugin.
@@ -14,29 +11,17 @@ import java.util.concurrent.atomic.AtomicReference;
 @NotNullByDefault
 public final class Kansokusha {
 
-    static final KansokushaApi CLOSED_API = new KansokushaApi() {
-        @Override
-        public Optional<Key> localServerKey() {
-            return Optional.empty();
-        }
-
-        @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.CLOSED;
-        }
-
-        @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
-            return SubmissionOutcome.CLOSED;
-        }
-    };
-
-    static final AtomicReference<KansokushaApi> API = new AtomicReference<>(CLOSED_API);
-
     private Kansokusha() {
     }
 
+    /**
+     * Returns the API published by the running Kansokusha instance.
+     *
+     * @throws IllegalStateException if the API has not been published or has already shut down
+     */
     public static KansokushaApi api() {
-        return API.get();
+        KansokushaApiProvider provider = ServiceLoader.load(KansokushaApiProvider.class).findFirst()
+            .orElseThrow(() -> new IllegalStateException("Kansokusha API provider is not available"));
+        return provider.api();
     }
 }

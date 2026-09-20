@@ -22,7 +22,7 @@ event type の登録と event の送信に用いる契約は common モジュー
 
 外部プラグインには runtime registry、persistent registry、キュー、writer、database connection を公開しない。
 
-API は common entry point の `Kansokusha.api()` から取得する。shutdown 後の操作は closed outcome を返す。shutdown と同時に行われる API 取得には、それ以上の強い順序保証を設けない。
+API は `Kansokusha.api()` から取得し、実装は内部 SPI と `ServiceLoader` を介して解決する。API が未公開の場合と shutdown 後の取得は `IllegalStateException` とする。取得済み API に対する shutdown 後の操作は closed outcome を返す。shutdown と同時に行われる API 取得には、それ以上の強い順序保証を設けない。
 
 ### 2. event type identity には Adventure `Key` を使用する
 
