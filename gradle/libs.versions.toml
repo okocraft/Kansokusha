@@ -3,6 +3,7 @@
 annotations = "26.1.0"
 adventure = "4.25.0"
 configurate = "4.2.0"
+duckdb = "1.5.5.1"
 
 # platform api
 paper = "26.2.build.125-stable"
@@ -25,6 +26,7 @@ gradle-plugins = "1.8.6"
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
 adventure-key = { module = "net.kyori:adventure-key", version.ref = "adventure" }
 configurate-yaml = { module = "org.spongepowered:configurate-yaml", version.ref = "configurate" }
+duckdb-jdbc = { module = "org.duckdb:duckdb_jdbc", version.ref = "duckdb" }
 
 # platform api
 paper = { module = "io.papermc.paper:paper-api", version.ref = "paper" }

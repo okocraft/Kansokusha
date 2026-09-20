@@ -19,6 +19,16 @@ bundler {
 }
 
 tasks {
+    named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+        doLast {
+            java.util.zip.ZipFile(archiveFile.get().asFile).use { jar ->
+                check(jar.getEntry("org/duckdb/DuckDBDriver.class") != null) {
+                    "DuckDB JDBC driver is missing from the Velocity artifact."
+                }
+            }
+        }
+    }
+
     runVelocity {
         velocityVersion(libs.versions.velocity.get())
     }

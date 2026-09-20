@@ -21,6 +21,16 @@ bundler {
 }
 
 tasks {
+    named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+        doLast {
+            java.util.zip.ZipFile(archiveFile.get().asFile).use { jar ->
+                check(jar.getEntry("org/duckdb/DuckDBDriver.class") != null) {
+                    "DuckDB JDBC driver is missing from the Paper artifact."
+                }
+            }
+        }
+    }
+
     runServer {
         minecraftVersion(minecraftVersion)
         systemProperty("com.mojang.eula.agree", "true")
