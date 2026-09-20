@@ -103,6 +103,64 @@ class DuckDbEventWriterTest {
     }
 
     @Test
+    void testTimestampMsFiniteBoundariesPersistWithoutMicrosecondConversion(@TempDir Path dir)
+        throws Exception {
+        try (var database = open(dir.resolve("timestamp-boundaries.duckdb"))) {
+            var upper = new AcceptedEvent(
+                new EventSubmission(
+                    EVENT_A,
+                    PayloadGeneration.FIRST,
+                    Instant.ofEpochMilli(Long.MAX_VALUE - 2),
+                    SERVER_A,
+                    null,
+                    null,
+                    null,
+                    EventPayload.copyOf(new byte[]{11})
+                ),
+                SHORT,
+                Instant.ofEpochMilli(Long.MAX_VALUE - 1)
+            );
+            var lower = new AcceptedEvent(
+                new EventSubmission(
+                    EVENT_B,
+                    PayloadGeneration.FIRST,
+                    Instant.ofEpochMilli(-Long.MAX_VALUE + 1),
+                    SERVER_B,
+                    null,
+                    null,
+                    null,
+                    EventPayload.copyOf(new byte[]{12})
+                ),
+                SHORT,
+                Instant.ofEpochMilli(-Long.MAX_VALUE + 2)
+            );
+
+            Assertions.assertEquals(2, new DuckDbEventWriter(database).append(List.of(upper, lower)));
+
+            try (var statement = database.connection().createStatement();
+                 var rows = statement.executeQuery(
+                     """
+                         SELECT epoch_ms(occurred_at) occurred_ms, epoch_ms(expires_at) expires_ms
+                         FROM events
+                         ORDER BY payload_generation_id
+                         """
+                 )) {
+                var persisted = new java.util.HashSet<String>();
+                while (rows.next()) {
+                    persisted.add(rows.getLong("occurred_ms") + ":" + rows.getLong("expires_ms"));
+                }
+                Assertions.assertEquals(
+                    java.util.Set.of(
+                        (Long.MAX_VALUE - 2) + ":" + (Long.MAX_VALUE - 1),
+                        (-Long.MAX_VALUE + 1) + ":" + (-Long.MAX_VALUE + 2)
+                    ),
+                    persisted
+                );
+            }
+        }
+    }
+
+    @Test
     void testFailureRollsBackWrittenBatchAndMetadata(@TempDir Path dir) throws Exception {
         try (var database = open(dir.resolve("rollback.duckdb"))) {
             var committed = event(
