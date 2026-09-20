@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.common.storage;
 
-import org.jetbrains.annotations.NotNullByDefault;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,11 +59,10 @@ class DuckDbDatabaseTest {
         });
 
         var commonClasses = DuckDbDatabase.class.getProtectionDomain().getCodeSource().getLocation();
-        var annotations = NotNullByDefault.class.getProtectionDomain().getCodeSource().getLocation();
         var duckDbJdbc = jarContaining("org/duckdb/DuckDBDriver.class");
 
         try (var classLoader = new URLClassLoader(
-            new URL[]{commonClasses, annotations, duckDbJdbc},
+            new URL[]{commonClasses, duckDbJdbc},
             ClassLoader.getPlatformClassLoader()
         )) {
             var databaseClass = Class.forName(DuckDbDatabase.class.getName(), true, classLoader);

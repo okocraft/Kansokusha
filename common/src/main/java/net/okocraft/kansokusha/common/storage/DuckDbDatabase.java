@@ -1,7 +1,5 @@
 package net.okocraft.kansokusha.common.storage;
 
-import org.jetbrains.annotations.NotNullByDefault;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,7 +8,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
 
-@NotNullByDefault
 public final class DuckDbDatabase implements AutoCloseable {
 
     private static final String DRIVER_CLASS = "org.duckdb.DuckDBDriver";
