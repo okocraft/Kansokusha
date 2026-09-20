@@ -19,26 +19,52 @@ class AcceptedEventTest {
     private static final Key SERVER_KEY = Key.key("test", "survival-1");
     private static final Key RETENTION_POLICY_KEY = Key.key("test", "default-retention");
     private static final Instant OCCURRED_AT = Instant.parse("2026-01-02T03:04:05Z");
+    private static final Instant EXPIRES_AT = Instant.parse("2026-02-01T03:04:05Z");
     private static final EventPayload PAYLOAD = EventPayload.copyOf(new byte[]{10, 20});
 
     @Test
-    void testAcceptedEventRetainsSubmissionAndRetentionPolicyKey() {
+    void testAcceptedEventRetainsResolvedStorageMetadata() {
         EventSubmission submission = submission();
 
-        AcceptedEvent acceptedEvent = new AcceptedEvent(submission, RETENTION_POLICY_KEY);
+        AcceptedEvent acceptedEvent = new AcceptedEvent(
+            submission,
+            RETENTION_POLICY_KEY,
+            EXPIRES_AT
+        );
 
         assertEquals(submission, acceptedEvent.submission());
         assertEquals(RETENTION_POLICY_KEY, acceptedEvent.retentionPolicyKey());
+        assertEquals(EXPIRES_AT, acceptedEvent.expiresAt());
     }
 
     @Test
     void testNullRequiredValuesAreRejected() {
         EventSubmission submission = submission();
 
-        assertThrows(NullPointerException.class,
-            () -> new AcceptedEvent(null, RETENTION_POLICY_KEY));
-        assertThrows(NullPointerException.class,
-            () -> new AcceptedEvent(submission, null));
+        assertThrows(
+            NullPointerException.class,
+            () -> new AcceptedEvent(null, RETENTION_POLICY_KEY, EXPIRES_AT)
+        );
+        assertThrows(
+            NullPointerException.class,
+            () -> new AcceptedEvent(submission, null, EXPIRES_AT)
+        );
+        assertThrows(
+            NullPointerException.class,
+            () -> new AcceptedEvent(submission, RETENTION_POLICY_KEY, null)
+        );
+    }
+
+    @Test
+    void testSubMillisecondExpiryIsRejected() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new AcceptedEvent(
+                submission(),
+                RETENTION_POLICY_KEY,
+                Instant.parse("2026-02-01T03:04:05.000000001Z")
+            )
+        );
     }
 
     private static EventSubmission submission() {
