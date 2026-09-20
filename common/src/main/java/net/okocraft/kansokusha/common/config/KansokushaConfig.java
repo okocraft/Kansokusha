@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.config;
 
+import net.kyori.adventure.key.InvalidKeyException;
 import net.kyori.adventure.key.Key;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
@@ -142,7 +143,7 @@ public class KansokushaConfig {
 
             try {
                 return Key.key(value);
-            } catch (IllegalArgumentException e) {
+            } catch (InvalidKeyException e) {
                 throw invalid(path + " is not a valid namespace-qualified key: " + value, e);
             }
         }
