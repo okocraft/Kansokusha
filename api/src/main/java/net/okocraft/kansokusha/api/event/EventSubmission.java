@@ -16,7 +16,7 @@ public record EventSubmission(
     Key serverKey,
     @Nullable Key worldKey,
     @Nullable BlockPosition position,
-    @Nullable String subjectReference,
+    @Nullable Key subjectKey,
     EventPayload payload
 ) {
 
@@ -25,7 +25,6 @@ public record EventSubmission(
         Objects.requireNonNull(payloadGeneration, "payloadGeneration");
         Objects.requireNonNull(occurredAt, "occurredAt");
         Objects.requireNonNull(serverKey, "serverKey");
-        requireNullableNonBlank(subjectReference, "subjectReference");
         Objects.requireNonNull(payload, "payload");
 
         if (position != null && worldKey == null) {
@@ -33,9 +32,4 @@ public record EventSubmission(
         }
     }
 
-    private static void requireNullableNonBlank(@Nullable String value, String name) {
-        if (value != null && value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

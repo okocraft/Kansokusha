@@ -58,13 +58,13 @@ generation は schema や serializer 自体を表さない。payload の encodin
 - position
 - subject reference
 
-server と world の識別子には Adventure `Key` を使用する。position はブロック座標を表す3つの整数とする。subject はプラットフォーム API のオブジェクトではなく文字列の参照として表現し、プレイヤーだけに限定しない。
+server、world、subject の識別子には Adventure `Key` を使用する。position はブロック座標を表す3つの整数とする。subject はプラットフォーム API のオブジェクトではなく namespace 付きの参照として表現し、プレイヤーだけに限定しない。
 
 Paper integration はローカル server key を API から取得可能にする。複数の backend server を扱う Velocity integration では、送信側が対象 server key を指定する。
 
 payload は byte sequence とし、Kansokusha は内容を解釈しない。
 
-`AcceptedEvent` は、検証済み submission に Kansokusha が解決した retention policy key を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、対応付け、expiry 情報は retention ADR で決定する。
+common 内部の `AcceptedEvent` は、検証済み submission に Kansokusha が解決した retention policy key を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、対応付け、expiry 情報は retention ADR で決定する。
 
 ### 5. runtime registration と persistent identity を分離する
 

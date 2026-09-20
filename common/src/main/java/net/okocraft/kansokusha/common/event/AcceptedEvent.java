@@ -1,6 +1,7 @@
-package net.okocraft.kansokusha.api.event;
+package net.okocraft.kansokusha.common.event;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.event.EventSubmission;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.Objects;

@@ -16,13 +16,14 @@ class EventSubmissionTest {
     private static final Key EVENT_TYPE = Key.key("test", "block-break");
     private static final Key SERVER_KEY = Key.key("test", "survival-1");
     private static final Key WORLD_KEY = Key.key("test", "world");
+    private static final Key SUBJECT_KEY = Key.key("test", "player-123");
     private static final Instant OCCURRED_AT = Instant.parse("2026-01-02T03:04:05Z");
     private static final EventPayload PAYLOAD = EventPayload.copyOf(new byte[]{10, 20});
 
     @Test
     void testSubmissionPreservesRequiredAndOptionalValues() {
         BlockPosition position = new BlockPosition(1, 64, -3);
-        EventSubmission submission = submission(SERVER_KEY, WORLD_KEY, position, "player:123");
+        EventSubmission submission = submission(SERVER_KEY, WORLD_KEY, position, SUBJECT_KEY);
 
         assertAll(
             () -> assertEquals(EVENT_TYPE, submission.eventType()),
@@ -31,7 +32,7 @@ class EventSubmissionTest {
             () -> assertEquals(SERVER_KEY, submission.serverKey()),
             () -> assertEquals(WORLD_KEY, submission.worldKey()),
             () -> assertEquals(position, submission.position()),
-            () -> assertEquals("player:123", submission.subjectReference()),
+            () -> assertEquals(SUBJECT_KEY, submission.subjectKey()),
             () -> assertEquals(PAYLOAD, submission.payload())
         );
     }
@@ -42,18 +43,15 @@ class EventSubmissionTest {
         assertAll(
             () -> assertNull(withoutLocation.worldKey()),
             () -> assertNull(withoutLocation.position()),
-            () -> assertNull(withoutLocation.subjectReference()),
+            () -> assertNull(withoutLocation.subjectKey()),
             () -> assertThrows(IllegalArgumentException.class,
                 () -> submission(SERVER_KEY, null, new BlockPosition(0, 64, 0), null))
         );
     }
 
     @Test
-    void testBlankOrNullIdentifiersAndRequiredValuesAreRejected() {
+    void testNullIdentifiersAndRequiredValuesAreRejected() {
         assertAll(
-            () -> assertThrows(IllegalArgumentException.class, () -> submission(SERVER_KEY, null, null, "")),
-            () -> assertThrows(IllegalArgumentException.class, () -> submission(SERVER_KEY, null, null, " ")),
-            () -> assertThrows(IllegalArgumentException.class, () -> submission(SERVER_KEY, null, null, "\t\n")),
             () -> assertThrows(NullPointerException.class, () -> submission(null, null, null, null)),
             () -> assertThrows(NullPointerException.class,
                 () -> new EventSubmission(null, PayloadGeneration.FIRST, OCCURRED_AT,
@@ -73,22 +71,12 @@ class EventSubmissionTest {
         );
     }
 
-    @Test
-    void testAcceptedEventRetainsSubmissionAndRetentionPolicyKey() {
-        EventSubmission submission = submission(SERVER_KEY, null, null, null);
-        Key retentionPolicyKey = Key.key("test", "default-retention");
-        AcceptedEvent acceptedEvent = new AcceptedEvent(submission, retentionPolicyKey);
-
-        assertEquals(submission, acceptedEvent.submission());
-        assertEquals(retentionPolicyKey, acceptedEvent.retentionPolicyKey());
-    }
-
     private static EventSubmission submission(
-        Key serverKey, Key worldKey, BlockPosition position, String subjectReference
+        Key serverKey, Key worldKey, BlockPosition position, Key subjectKey
     ) {
         return new EventSubmission(
             EVENT_TYPE, new PayloadGeneration(3), OCCURRED_AT, serverKey,
-            worldKey, position, subjectReference, PAYLOAD
+            worldKey, position, subjectKey, PAYLOAD
         );
     }
 }
