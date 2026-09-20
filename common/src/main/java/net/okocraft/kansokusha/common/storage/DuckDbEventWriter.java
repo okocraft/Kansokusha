@@ -4,15 +4,15 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.common.event.AcceptedEvent;
+import org.duckdb.DuckDBConnection;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,17 +23,6 @@ public final class DuckDbEventWriter {
 
     private static final long MIN_FINITE_TIMESTAMP_MILLIS = -Long.MAX_VALUE + 1;
     private static final long MAX_FINITE_TIMESTAMP_MILLIS = Long.MAX_VALUE - 1;
-
-    private static final String INSERT_EVENT = """
-        INSERT INTO events (
-            payload_generation_id, occurred_at, server_id, world_id,
-            block_x, block_y, block_z, subject_player_uuid,
-            retention_policy_id, expires_at, payload
-        ) VALUES (
-            ?, make_timestamp_ms(?), ?, ?, ?, ?, ?, CAST(? AS UUID),
-            ?, make_timestamp_ms(?), ?
-        )
-        """;
 
     private final DuckDbDatabase database;
     private final AfterBatchInsert afterBatchInsert;
@@ -61,51 +50,90 @@ public final class DuckDbEventWriter {
         var serverIds = new HashMap<Key, Integer>();
         var worldIds = new HashMap<WorldIdentity, Integer>();
         var retentionIds = new HashMap<Key, Integer>();
+        var resolved = new ArrayList<ResolvedEvent>(events.size());
 
-        try (var statement = connection.prepareStatement(INSERT_EVENT)) {
-            for (var event : events) {
-                var submission = event.submission();
-                var definition = new EventTypeDefinition(
-                    submission.eventType(),
-                    submission.payloadGeneration()
+        for (var event : events) {
+            var submission = event.submission();
+            var definition = new EventTypeDefinition(
+                submission.eventType(),
+                submission.payloadGeneration()
+            );
+            var payloadId = cached(
+                payloadIds,
+                definition,
+                () -> DuckDbEventTypeRegistry.resolve(connection, definition).id()
+            );
+            var serverId = cached(
+                serverIds,
+                submission.serverKey(),
+                () -> resolveKey(connection, "servers", "server_key", submission.serverKey())
+            );
+            var worldId = submission.worldKey() == null
+                ? null
+                : cached(
+                    worldIds,
+                    new WorldIdentity(serverId, submission.worldKey()),
+                    () -> resolveWorld(connection, serverId, submission.worldKey())
                 );
-                var payloadId = cached(
-                    payloadIds,
-                    definition,
-                    () -> DuckDbEventTypeRegistry.resolve(connection, definition).id()
-                );
-                var serverId = cached(
-                    serverIds,
-                    submission.serverKey(),
-                    () -> resolveKey(connection, "servers", "server_key", submission.serverKey())
-                );
-                var worldId = submission.worldKey() == null
-                    ? null
-                    : cached(
-                        worldIds,
-                        new WorldIdentity(serverId, submission.worldKey()),
-                        () -> resolveWorld(connection, serverId, submission.worldKey())
-                    );
-                var retentionId = cached(
-                    retentionIds,
-                    event.retentionPolicyKey(),
-                    () -> resolveKey(
-                        connection,
-                        "retention_policies",
-                        "retention_policy_key",
-                        event.retentionPolicyKey()
-                    )
-                );
+            var retentionId = cached(
+                retentionIds,
+                event.retentionPolicyKey(),
+                () -> resolveKey(
+                    connection,
+                    "retention_policies",
+                    "retention_policy_key",
+                    event.retentionPolicyKey()
+                )
+            );
+            resolved.add(new ResolvedEvent(event, payloadId, serverId, worldId, retentionId));
+        }
 
-                bind(statement, event, payloadId, serverId, worldId, retentionId);
-                if (statement.executeUpdate() != 1) {
-                    throw new SQLException("DuckDB did not insert exactly one event row");
-                }
+        var duckConnection = connection.unwrap(DuckDBConnection.class);
+        try (var appender = duckConnection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, "events")) {
+            for (var event : resolved) {
+                appendRow(appender, event);
             }
+            appender.flush();
         }
 
         this.afterBatchInsert.accept(connection, events.size());
         return events.size();
+    }
+
+    private static void appendRow(
+        org.duckdb.DuckDBAppender appender,
+        ResolvedEvent resolved
+    ) throws SQLException {
+        var event = resolved.event();
+        var submission = event.submission();
+        var position = submission.position();
+        var subject = submission.subject();
+
+        appender.beginRow()
+            .append(resolved.payloadGenerationId())
+            .appendEpochMillis(finiteMillis(submission.occurredAt(), true, "occurredAt"))
+            .append(resolved.serverId())
+            .append(resolved.worldId());
+
+        if (position == null) {
+            appender.appendNull().appendNull().appendNull();
+        } else {
+            appender.append(position.x()).append(position.y()).append(position.z());
+        }
+
+        if (subject == null) {
+            appender.appendNull();
+        } else if (subject instanceof PlayerSubject player) {
+            appender.append(player.uniqueId());
+        } else {
+            throw new SQLException("Unsupported event subject type: " + subject.getClass().getName());
+        }
+
+        appender
+            .append(resolved.retentionPolicyId())
+            .appendEpochMillis(finiteMillis(event.expiresAt(), false, "expiresAt"))
+            .append(submission.payload().copyBytes())
+            .endRow();
     }
 
     private static int resolveKey(
@@ -166,48 +194,6 @@ public final class DuckDbEventWriter {
         }
     }
 
-    private static void bind(
-        PreparedStatement statement,
-        AcceptedEvent event,
-        int payloadId,
-        int serverId,
-        @Nullable Integer worldId,
-        int retentionId
-    ) throws SQLException {
-        var submission = event.submission();
-        var position = submission.position();
-        var subject = submission.subject();
-
-        statement.setInt(1, payloadId);
-        statement.setLong(2, finiteMillis(submission.occurredAt(), true, "occurredAt"));
-        statement.setInt(3, serverId);
-        setNullableInt(statement, 4, worldId);
-        setNullableInt(statement, 5, position == null ? null : position.x());
-        setNullableInt(statement, 6, position == null ? null : position.y());
-        setNullableInt(statement, 7, position == null ? null : position.z());
-
-        if (subject == null) {
-            statement.setNull(8, Types.VARCHAR);
-        } else if (subject instanceof PlayerSubject player) {
-            statement.setString(8, player.uniqueId().toString());
-        } else {
-            throw new SQLException("Unsupported event subject type: " + subject.getClass().getName());
-        }
-
-        statement.setInt(9, retentionId);
-        statement.setLong(10, finiteMillis(event.expiresAt(), false, "expiresAt"));
-        statement.setBytes(11, submission.payload().copyBytes());
-    }
-
-    private static void setNullableInt(PreparedStatement statement, int index, @Nullable Integer value)
-        throws SQLException {
-        if (value == null) {
-            statement.setNull(index, Types.INTEGER);
-        } else {
-            statement.setInt(index, value);
-        }
-    }
-
     private static long finiteMillis(Instant instant, boolean truncate, String field)
         throws SQLException {
         final long millis;
@@ -231,6 +217,15 @@ public final class DuckDbEventWriter {
         var created = supplier.getAsInt();
         cache.put(key, created);
         return created;
+    }
+
+    private record ResolvedEvent(
+        AcceptedEvent event,
+        int payloadGenerationId,
+        int serverId,
+        @Nullable Integer worldId,
+        int retentionPolicyId
+    ) {
     }
 
     private record WorldIdentity(int serverId, Key worldKey) {
