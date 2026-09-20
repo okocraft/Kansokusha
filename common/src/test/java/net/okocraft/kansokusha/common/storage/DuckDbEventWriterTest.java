@@ -53,7 +53,7 @@ class DuckDbEventWriterTest {
                              et.event_type_key, pg.generation, epoch_ms(e.occurred_at) occurred_ms,
                              s.server_key, w.world_key, e.block_x, e.block_y, e.block_z,
                              CAST(e.subject_player_uuid AS VARCHAR) player_uuid,
-                             rp.retention_policy_key, epoch_ms(e.expires_at) expires_ms, e.payload,
+                             rp.retention_policy_key, epoch_ms(e.expires_at) expires_ms,
                              e.payload_generation_id, e.server_id, e.world_id, e.retention_policy_id, hex(e.payload) payload_hex
                          FROM events e
                          JOIN payload_generations pg ON pg.id = e.payload_generation_id
