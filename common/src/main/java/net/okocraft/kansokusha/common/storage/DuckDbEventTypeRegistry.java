@@ -13,32 +13,62 @@ import java.util.Optional;
 @NotNullByDefault
 public final class DuckDbEventTypeRegistry {
 
-    private final Connection connection;
+    private final DuckDbDatabase database;
 
-    public DuckDbEventTypeRegistry(Connection connection) {
-        this.connection = Objects.requireNonNull(connection, "connection");
+    public DuckDbEventTypeRegistry(DuckDbDatabase database) {
+        this.database = Objects.requireNonNull(database, "database");
     }
 
-    public synchronized PersistentPayloadGeneration resolve(EventTypeDefinition definition) throws SQLException {
+    public PersistentPayloadGeneration resolve(EventTypeDefinition definition) throws SQLException {
         Objects.requireNonNull(definition, "definition");
+        return this.database.serialized(connection -> resolve(connection, definition));
+    }
 
-        var eventType = findEventType(definition.key()).orElse(null);
+    public Optional<PersistentEventType> findEventType(Key key) throws SQLException {
+        Objects.requireNonNull(key, "key");
+        return this.database.serialized(connection -> findEventType(connection, key));
+    }
+
+    public Optional<PersistentEventType> findEventType(int id) throws SQLException {
+        requirePositiveId(id);
+        return this.database.serialized(connection -> findEventType(connection, id));
+    }
+
+    public Optional<PersistentPayloadGeneration> findPayloadGeneration(int id) throws SQLException {
+        requirePositiveId(id);
+        return this.database.serialized(connection -> findPayloadGeneration(connection, id));
+    }
+
+    private static PersistentPayloadGeneration resolve(
+        Connection connection,
+        EventTypeDefinition definition
+    ) throws SQLException {
+        var eventType = findEventType(connection, definition.key()).orElse(null);
         if (eventType == null) {
-            eventType = createEventType(definition.key());
+            eventType = createEventType(connection, definition.key());
         }
 
-        var payloadGeneration = findPayloadGeneration(eventType, definition.payloadGeneration()).orElse(null);
+        var payloadGeneration = findPayloadGeneration(
+            connection,
+            eventType,
+            definition.payloadGeneration()
+        ).orElse(null);
         if (payloadGeneration == null) {
-            payloadGeneration = createPayloadGeneration(eventType, definition.payloadGeneration());
+            payloadGeneration = createPayloadGeneration(
+                connection,
+                eventType,
+                definition.payloadGeneration()
+            );
         }
 
         return payloadGeneration;
     }
 
-    public synchronized Optional<PersistentEventType> findEventType(Key key) throws SQLException {
-        Objects.requireNonNull(key, "key");
-
-        try (var statement = this.connection.prepareStatement(
+    private static Optional<PersistentEventType> findEventType(
+        Connection connection,
+        Key key
+    ) throws SQLException {
+        try (var statement = connection.prepareStatement(
             "SELECT id FROM event_types WHERE event_type_key = ?"
         )) {
             statement.setString(1, key.asString());
@@ -52,10 +82,11 @@ public final class DuckDbEventTypeRegistry {
         }
     }
 
-    public synchronized Optional<PersistentEventType> findEventType(int id) throws SQLException {
-        requirePositiveId(id);
-
-        try (var statement = this.connection.prepareStatement(
+    private static Optional<PersistentEventType> findEventType(
+        Connection connection,
+        int id
+    ) throws SQLException {
+        try (var statement = connection.prepareStatement(
             "SELECT event_type_key FROM event_types WHERE id = ?"
         )) {
             statement.setInt(1, id);
@@ -71,10 +102,11 @@ public final class DuckDbEventTypeRegistry {
         }
     }
 
-    public synchronized Optional<PersistentPayloadGeneration> findPayloadGeneration(int id) throws SQLException {
-        requirePositiveId(id);
-
-        try (var statement = this.connection.prepareStatement(
+    private static Optional<PersistentPayloadGeneration> findPayloadGeneration(
+        Connection connection,
+        int id
+    ) throws SQLException {
+        try (var statement = connection.prepareStatement(
             """
                 SELECT
                     pg.generation,
@@ -106,11 +138,12 @@ public final class DuckDbEventTypeRegistry {
         }
     }
 
-    private Optional<PersistentPayloadGeneration> findPayloadGeneration(
+    private static Optional<PersistentPayloadGeneration> findPayloadGeneration(
+        Connection connection,
         PersistentEventType eventType,
         PayloadGeneration generation
     ) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
+        try (var statement = connection.prepareStatement(
             """
                 SELECT id
                 FROM payload_generations
@@ -131,8 +164,11 @@ public final class DuckDbEventTypeRegistry {
         }
     }
 
-    private PersistentEventType createEventType(Key key) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
+    private static PersistentEventType createEventType(
+        Connection connection,
+        Key key
+    ) throws SQLException {
+        try (var statement = connection.prepareStatement(
             "INSERT INTO event_types (event_type_key) VALUES (?) RETURNING id"
         )) {
             statement.setString(1, key.asString());
@@ -146,11 +182,12 @@ public final class DuckDbEventTypeRegistry {
         }
     }
 
-    private PersistentPayloadGeneration createPayloadGeneration(
+    private static PersistentPayloadGeneration createPayloadGeneration(
+        Connection connection,
         PersistentEventType eventType,
         PayloadGeneration generation
     ) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
+        try (var statement = connection.prepareStatement(
             """
                 INSERT INTO payload_generations (event_type_id, generation)
                 VALUES (?, ?)

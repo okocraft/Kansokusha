@@ -11,7 +11,11 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 class DuckDbEventTypeRegistryTest {
 
@@ -24,7 +28,7 @@ class DuckDbEventTypeRegistryTest {
         DuckDbEventTypeRegistry.PersistentPayloadGeneration first;
         try (var database = DuckDbDatabase.open(filepath)) {
             DuckDbMigrations.migrate(database.connection());
-            var registry = new DuckDbEventTypeRegistry(database.connection());
+            var registry = new DuckDbEventTypeRegistry(database);
 
             first = registry.resolve(definition(1));
             Assertions.assertEquals(EVENT_KEY, first.eventType().key());
@@ -33,7 +37,7 @@ class DuckDbEventTypeRegistryTest {
 
         try (var database = DuckDbDatabase.open(filepath)) {
             DuckDbMigrations.migrate(database.connection());
-            var registry = new DuckDbEventTypeRegistry(database.connection());
+            var registry = new DuckDbEventTypeRegistry(database);
 
             var reregistered = registry.resolve(definition(1));
             Assertions.assertEquals(first, reregistered);
@@ -54,7 +58,7 @@ class DuckDbEventTypeRegistryTest {
     void testMultiplePayloadGenerationsRemainDistinct(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("generations.duckdb"))) {
             DuckDbMigrations.migrate(database.connection());
-            var registry = new DuckDbEventTypeRegistry(database.connection());
+            var registry = new DuckDbEventTypeRegistry(database);
 
             var first = registry.resolve(definition(1));
             var second = registry.resolve(definition(2));
@@ -71,27 +75,83 @@ class DuckDbEventTypeRegistryTest {
     }
 
     @Test
-    void testResolveParticipatesInCallerTransaction(@TempDir Path dir) throws Exception {
+    void testResolveParticipatesInStorageOwnedTransaction(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("transaction.duckdb"))) {
-            var connection = database.connection();
-            DuckDbMigrations.migrate(connection);
-            var registry = new DuckDbEventTypeRegistry(connection);
+            DuckDbMigrations.migrate(database.connection());
+            var registry = new DuckDbEventTypeRegistry(database);
 
-            execute(connection, "BEGIN TRANSACTION");
-            var resolved = registry.resolve(definition(1));
-            Assertions.assertTrue(registry.findEventType(resolved.eventType().id()).isPresent());
-            execute(connection, "ROLLBACK");
+            Assertions.assertThrows(
+                SQLException.class,
+                () -> database.transaction(connection -> {
+                    var resolved = registry.resolve(definition(1));
+                    Assertions.assertTrue(registry.findEventType(resolved.eventType().id()).isPresent());
+                    throw new SQLException("rollback");
+                })
+            );
 
             Assertions.assertTrue(registry.findEventType(EVENT_KEY).isEmpty());
-            Assertions.assertTrue(registry.findPayloadGeneration(resolved.id()).isEmpty());
+            Assertions.assertEquals(0, count(database.connection(), "payload_generations"));
         }
     }
 
     @Test
-    void testConcurrentResolutionIsSerializedWithinRegistryInstance(@TempDir Path dir) throws Exception {
-        try (var database = DuckDbDatabase.open(dir.resolve("serialized.duckdb"))) {
+    void testTransactionBlocksOtherRegistryAccessUntilRollback(@TempDir Path dir) throws Exception {
+        try (var database = DuckDbDatabase.open(dir.resolve("transaction-serialization.duckdb"))) {
             DuckDbMigrations.migrate(database.connection());
-            var registry = new DuckDbEventTypeRegistry(database.connection());
+            var firstRegistry = new DuckDbEventTypeRegistry(database);
+            var secondRegistry = new DuckDbEventTypeRegistry(database);
+            var firstResolved = new CountDownLatch(1);
+            var allowRollback = new CountDownLatch(1);
+            var otherKey = Key.key("example", "block_place");
+
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var first = executor.submit(() -> {
+                    try {
+                        database.transaction(connection -> {
+                            firstRegistry.resolve(definition(1));
+                            firstResolved.countDown();
+                            await(allowRollback);
+                            throw new SQLException("rollback");
+                        });
+                        throw new AssertionError("transaction should have rolled back");
+                    } catch (SQLException expected) {
+                        return null;
+                    }
+                });
+
+                Assertions.assertTrue(firstResolved.await(5, TimeUnit.SECONDS));
+
+                var second = executor.submit(
+                    () -> secondRegistry.resolve(
+                        new EventTypeDefinition(otherKey, PayloadGeneration.FIRST)
+                    )
+                );
+
+                Assertions.assertThrows(
+                    TimeoutException.class,
+                    () -> second.get(200, TimeUnit.MILLISECONDS)
+                );
+
+                allowRollback.countDown();
+                first.get(5, TimeUnit.SECONDS);
+                var secondResolved = second.get(5, TimeUnit.SECONDS);
+
+                Assertions.assertEquals(otherKey, secondResolved.eventType().key());
+            }
+
+            Assertions.assertTrue(firstRegistry.findEventType(EVENT_KEY).isEmpty());
+            Assertions.assertTrue(secondRegistry.findEventType(otherKey).isPresent());
+            Assertions.assertEquals(1, count(database.connection(), "event_types"));
+            Assertions.assertEquals(1, count(database.connection(), "payload_generations"));
+        }
+    }
+
+    @Test
+    void testMultipleRegistryInstancesShareStorageSerializer(@TempDir Path dir) throws Exception {
+        try (var database = DuckDbDatabase.open(dir.resolve("shared-serializer.duckdb"))) {
+            DuckDbMigrations.migrate(database.connection());
+            var firstRegistry = new DuckDbEventTypeRegistry(database);
+            var secondRegistry = new DuckDbEventTypeRegistry(database);
 
             try (var executor = Executors.newFixedThreadPool(8)) {
                 var futures = new ArrayList<java.util.concurrent.Future<
@@ -99,6 +159,7 @@ class DuckDbEventTypeRegistryTest {
                 >>();
 
                 for (int index = 0; index < 32; index++) {
+                    var registry = index % 2 == 0 ? firstRegistry : secondRegistry;
                     futures.add(executor.submit(() -> registry.resolve(definition(1))));
                 }
 
@@ -117,7 +178,7 @@ class DuckDbEventTypeRegistryTest {
     void testDifferentKeysNeverOverwritePersistentIdentity(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("identity.duckdb"))) {
             DuckDbMigrations.migrate(database.connection());
-            var registry = new DuckDbEventTypeRegistry(database.connection());
+            var registry = new DuckDbEventTypeRegistry(database);
 
             var first = registry.resolve(definition(1));
             var otherKey = Key.key("example", "block_place");
@@ -135,17 +196,22 @@ class DuckDbEventTypeRegistryTest {
         return new EventTypeDefinition(EVENT_KEY, new PayloadGeneration(generation));
     }
 
+    private static void await(CountDownLatch latch) throws SQLException {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new SQLException("Timed out waiting for test coordination.");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SQLException("Interrupted while waiting for test coordination.", e);
+        }
+    }
+
     private static int count(Connection connection, String table) throws SQLException {
         try (var statement = connection.createStatement();
              var result = statement.executeQuery("SELECT count(*) FROM " + table)) {
             Assertions.assertTrue(result.next());
             return result.getInt(1);
-        }
-    }
-
-    private static void execute(Connection connection, String sql) throws SQLException {
-        try (var statement = connection.createStatement()) {
-            statement.execute(sql);
         }
     }
 }
