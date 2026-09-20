@@ -138,6 +138,21 @@ class DuckDbEventWriterTest {
             Assertions.assertEquals(1, count(database.connection(), "servers"));
             Assertions.assertEquals(0, count(database.connection(), "worlds"));
             Assertions.assertEquals(1, count(database.connection(), "retention_policies"));
+
+            try (var statement = database.connection().createStatement();
+                 var rows = statement.executeQuery(
+                     """
+                         SELECT et.event_type_key, e.payload
+                         FROM events e
+                         JOIN payload_generations pg ON pg.id = e.payload_generation_id
+                         JOIN event_types et ON et.id = pg.event_type_id
+                         """
+                 )) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals(EVENT_A.asString(), rows.getString("event_type_key"));
+                Assertions.assertArrayEquals(new byte[]{1}, rows.getBytes("payload"));
+                Assertions.assertFalse(rows.next());
+            }
         }
     }
 
