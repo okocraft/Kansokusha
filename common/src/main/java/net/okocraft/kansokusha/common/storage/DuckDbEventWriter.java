@@ -6,6 +6,7 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.common.event.AcceptedEvent;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -155,7 +156,7 @@ public final class DuckDbEventWriter {
         Connection connection,
         Map<WorldIdentity, Integer> cache,
         int serverId,
-        Key worldKey
+        @Nullable Key worldKey
     ) throws SQLException {
         if (worldKey == null) {
             return null;
@@ -266,7 +267,7 @@ public final class DuckDbEventWriter {
         AcceptedEvent acceptedEvent,
         int payloadGenerationId,
         int serverId,
-        Integer worldId,
+        @Nullable Integer worldId,
         int retentionPolicyId
     ) throws SQLException {
         var submission = acceptedEvent.submission();
