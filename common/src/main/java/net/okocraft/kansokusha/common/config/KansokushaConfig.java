@@ -140,6 +140,9 @@ public class KansokushaConfig {
             if (value == null || value.isBlank()) {
                 throw invalid(path + " must be a non-blank namespace-qualified key");
             }
+            if (value.indexOf(Key.DEFAULT_SEPARATOR) <= 0) {
+                throw invalid(path + " must explicitly include a namespace: " + value);
+            }
 
             try {
                 return Key.key(value);
