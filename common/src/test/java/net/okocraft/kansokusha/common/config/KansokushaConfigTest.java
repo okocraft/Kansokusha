@@ -178,7 +178,7 @@ class KansokushaConfigTest {
         );
         assertInvalid(
             dir.resolve("overflow"),
-            validConfig("PT2562047788015216H", "example:fallback"),
+            validConfig("PT1000000000000000H", "example:fallback"),
             "millisecond range"
         );
     }
