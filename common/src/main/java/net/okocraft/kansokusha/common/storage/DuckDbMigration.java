@@ -66,7 +66,10 @@ public record DuckDbMigration(int version, String name, List<String> statements)
         for (int index = 0; index < tokens.size(); index++) {
             var token = tokens.get(index);
 
-            if ("BEGIN".equals(token) || "COMMIT".equals(token) || "ROLLBACK".equals(token)) {
+            if ("BEGIN".equals(token)
+                || "COMMIT".equals(token)
+                || "ROLLBACK".equals(token)
+                || "ABORT".equals(token)) {
                 throw transactionControlNotAllowed(token);
             }
 
@@ -85,9 +88,24 @@ public record DuckDbMigration(int version, String name, List<String> statements)
         while (index < sql.length()) {
             var current = sql.charAt(index);
 
-            if (current == '\'' || current == '"') {
-                index = skipQuoted(sql, index, current);
+            if ((current == 'e' || current == 'E')
+                && index + 1 < sql.length()
+                && sql.charAt(index + 1) == '\'') {
+                index = skipQuoted(sql, index + 1, '\'', true);
                 continue;
+            }
+
+            if (current == '\'' || current == '"') {
+                index = skipQuoted(sql, index, current, false);
+                continue;
+            }
+
+            if (current == '$') {
+                var afterDollarQuoted = skipDollarQuoted(sql, index);
+                if (afterDollarQuoted != index) {
+                    index = afterDollarQuoted;
+                    continue;
+                }
             }
 
             if (current == '-' && index + 1 < sql.length() && sql.charAt(index + 1) == '-') {
@@ -120,11 +138,18 @@ public record DuckDbMigration(int version, String name, List<String> statements)
         return tokens;
     }
 
-    private static int skipQuoted(String sql, int index, char quote) {
+    private static int skipQuoted(String sql, int index, char quote, boolean backslashEscapes) {
         index++;
 
         while (index < sql.length()) {
-            if (sql.charAt(index) != quote) {
+            var current = sql.charAt(index);
+
+            if (backslashEscapes && current == '\\' && index + 1 < sql.length()) {
+                index += 2;
+                continue;
+            }
+
+            if (current != quote) {
                 index++;
                 continue;
             }
@@ -138,6 +163,30 @@ public record DuckDbMigration(int version, String name, List<String> statements)
         }
 
         return index;
+    }
+
+    private static int skipDollarQuoted(String sql, int index) {
+        var delimiterEnd = index + 1;
+
+        while (delimiterEnd < sql.length() && isDollarTagCharacter(sql.charAt(delimiterEnd))) {
+            delimiterEnd++;
+        }
+
+        if (delimiterEnd >= sql.length() || sql.charAt(delimiterEnd) != '$') {
+            return index;
+        }
+
+        var delimiter = sql.substring(index, delimiterEnd + 1);
+        var closing = sql.indexOf(delimiter, delimiterEnd + 1);
+        if (closing < 0) {
+            return sql.length();
+        }
+
+        return closing + delimiter.length();
+    }
+
+    private static boolean isDollarTagCharacter(char character) {
+        return Character.isLetterOrDigit(character) || character == '_';
     }
 
     private static int skipLineComment(String sql, int index) {

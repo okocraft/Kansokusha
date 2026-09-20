@@ -177,6 +177,7 @@ class DuckDbMigrationRunnerTest {
         for (var sql : List.of(
             "COMMIT",
             "ROLLBACK",
+            "ABORT",
             "BEGIN TRANSACTION",
             "START TRANSACTION",
             "CREATE TABLE escaped_transaction (value INTEGER); COMMIT; SELECT 1"
@@ -192,12 +193,54 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
-    void testTransactionKeywordsInCommentsAndStringsAreAllowed() {
+    void testAbortIsRejectedBeforeSchemaOrHistoryMutation(@TempDir Path dir) throws Exception {
+        try (var database = DuckDbDatabase.open(dir.resolve("abort.duckdb"))) {
+            new DuckDbMigrationRunner(List.of()).migrate(database.connection());
+
+            Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> DuckDbMigration.of(
+                    1,
+                    "abort_transaction",
+                    "CREATE TABLE must_not_exist (value INTEGER)",
+                    "ABORT"
+                )
+            );
+
+            Assertions.assertFalse(tableExists(database.connection(), "must_not_exist"));
+            Assertions.assertEquals(0, migrationCount(database.connection()));
+        }
+    }
+
+    @Test
+    void testTransactionKeywordsInQuotedValuesIdentifiersAndCommentsAreAllowed() {
         Assertions.assertDoesNotThrow(
             () -> DuckDbMigration.of(
                 1,
                 "transaction_words_as_data",
                 "SELECT 'COMMIT', \"ROLLBACK\" -- BEGIN TRANSACTION\n/* START TRANSACTION */"
+            )
+        );
+    }
+
+    @Test
+    void testTransactionKeywordsInDollarQuotedStringsAreAllowed() {
+        Assertions.assertDoesNotThrow(
+            () -> DuckDbMigration.of(
+                1,
+                "dollar_quoted_transaction_words",
+                "SELECT $COMMIT ABORT$, $tag$ROLLBACK; BEGIN TRANSACTION$tag$"
+            )
+        );
+    }
+
+    @Test
+    void testTransactionKeywordsInEscapeStringsAreAllowed() {
+        Assertions.assertDoesNotThrow(
+            () -> DuckDbMigration.of(
+                1,
+                "escaped_transaction_words",
+                "SELECT E'quote\\' COMMIT ABORT'"
             )
         );
     }
