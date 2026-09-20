@@ -39,7 +39,7 @@ public final class DuckDbEventTypeRegistry {
         return this.database.serialized(connection -> findPayloadGeneration(connection, id));
     }
 
-    private static PersistentPayloadGeneration resolve(
+    static PersistentPayloadGeneration resolve(
         Connection connection,
         EventTypeDefinition definition
     ) throws SQLException {
