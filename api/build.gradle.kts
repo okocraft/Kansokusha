@@ -1,4 +1,4 @@
 dependencies {
-    api(projects.kansokushaApi)
+    compileOnlyApi(libs.adventure.key)
     testImplementation(libs.adventure.key)
 }

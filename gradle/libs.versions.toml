@@ -1,6 +1,7 @@
 [versions]
 # libraries
 annotations = "26.1.0"
+adventure = "4.25.0"
 configurate = "4.2.0"
 
 # platform api
@@ -22,6 +23,7 @@ gradle-plugins = "1.8.6"
 
 # libraries
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
+adventure-key = { module = "net.kyori:adventure-key", version.ref = "adventure" }
 configurate-yaml = { module = "org.spongepowered:configurate-yaml", version.ref = "configurate" }
 
 # platform api
