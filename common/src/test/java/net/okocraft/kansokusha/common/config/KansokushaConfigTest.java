@@ -169,6 +169,30 @@ class KansokushaConfigTest {
             "retention.event-type-mappings[0].event-type"
         );
 
+        assertInvalid(
+            dir.resolve("implicit-namespace"),
+            """
+                retention:
+                  policies:
+                    - key: audit
+                      duration: PT1H
+                  fallback-policy: audit
+                """,
+            "must explicitly include a namespace"
+        );
+
+        assertInvalid(
+            dir.resolve("empty-namespace"),
+            """
+                retention:
+                  policies:
+                    - key: :audit
+                      duration: PT1H
+                  fallback-policy: :audit
+                """,
+            "must explicitly include a namespace"
+        );
+
         assertInvalid(dir.resolve("malformed"), validConfig("one hour", "example:fallback"), "ISO-8601 duration");
         assertInvalid(dir.resolve("zero"), validConfig("PT0S", "example:fallback"), "must be positive");
         assertInvalid(
