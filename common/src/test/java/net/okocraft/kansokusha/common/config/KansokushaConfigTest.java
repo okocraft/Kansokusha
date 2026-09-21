@@ -156,6 +156,40 @@ class KansokushaConfigTest {
     }
 
     @Test
+    void testInvalidIngestionSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
+        assertInvalid(
+            dir.resolve("queue-capacity"),
+            ingestionConfig("0", "8", "PT0.1S"),
+            "ingestion.queue-capacity must be positive"
+        );
+        assertInvalid(
+            dir.resolve("batch-size"),
+            ingestionConfig("16", "0", "PT0.1S"),
+            "ingestion.max-batch-size must be positive"
+        );
+        assertInvalid(
+            dir.resolve("delay-malformed"),
+            ingestionConfig("16", "8", "not-a-duration"),
+            "ingestion.max-batch-delay is not a valid ISO-8601 duration"
+        );
+        assertInvalid(
+            dir.resolve("delay-zero"),
+            ingestionConfig("16", "8", "PT0S"),
+            "ingestion.max-batch-delay must be positive"
+        );
+        assertInvalid(
+            dir.resolve("delay-sub-millisecond"),
+            ingestionConfig("16", "8", "PT0.000000001S"),
+            "ingestion.max-batch-delay must resolve to whole milliseconds"
+        );
+        assertInvalid(
+            dir.resolve("delay-overflow"),
+            ingestionConfig("16", "8", "PT3000000H"),
+            "ingestion.max-batch-delay exceeds the supported nanosecond range"
+        );
+    }
+
+    @Test
     void testInvalidCleanupSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
         assertInvalid(
             dir.resolve("cleanup-duration"),
@@ -263,6 +297,22 @@ class KansokushaConfigTest {
             validConfig("PT1000000000000000H", "example:fallback"),
             "millisecond range"
         );
+    }
+
+    private static String ingestionConfig(String queueCapacity, String maxBatchSize, String maxBatchDelay) {
+        return """
+            ingestion:
+              queue-capacity: %s
+              max-batch-size: %s
+              max-batch-delay: %s
+            retention:
+              policies:
+                - key: example:fallback
+                  duration: PT1H
+              fallback-policy: example:fallback
+              cleanup-interval: PT5M
+              max-rows-per-pass: 100
+            """.formatted(queueCapacity, maxBatchSize, maxBatchDelay);
     }
 
     private static String validConfig(String duration, String fallback) {
