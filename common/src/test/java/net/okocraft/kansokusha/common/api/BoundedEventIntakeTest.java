@@ -161,6 +161,22 @@ class BoundedEventIntakeTest {
     }
 
     @Test
+    void testDrainingCanTransitionToFailed() {
+        var intake = new BoundedEventIntake(1, policies(Duration.ofHours(1)));
+        var failure = new IllegalStateException("drain failed");
+
+        intake.beginDraining();
+        intake.fail(failure);
+
+        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
+        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(
+            EventIntake.Admission.UNAVAILABLE,
+            intake.accept(submission(OCCURRED_AT))
+        );
+    }
+
+    @Test
     void testFailureTransitionLinearizesWithConcurrentAdmission() throws Exception {
         int producers = 8;
         var intake = new BoundedEventIntake(producers, policies(Duration.ofHours(1)));
