@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 class RetentionCleanupServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-09-21T00:00:00Z");
+    private static final Duration INTERVAL = Duration.ofMinutes(1);
 
     @Test
     void testStartSchedulesImmediateFixedDelayPass() throws Exception {
@@ -28,20 +29,13 @@ class RetentionCleanupServiceTest {
         var failure = new AtomicReference<Throwable>();
         var cutoff = new AtomicReference<Instant>();
         var maxRows = new AtomicInteger();
-        var interval = Duration.ofMinutes(5);
-        var service = service(
-            (instant, bound) -> {
-                cutoff.set(instant);
-                maxRows.set(bound);
-                return 0;
-            },
-            failure::set,
-            interval,
-            37,
-            executor
-        );
+        var service = service((instant, bound) -> {
+            cutoff.set(instant);
+            maxRows.set(bound);
+            return 0;
+        }, failure::set, INTERVAL, 37, executor);
 
-        var task = scheduledTask(service, executor, interval);
+        var task = scheduledTask(service, executor, INTERVAL);
         Assertions.assertNull(cutoff.get());
 
         task.run();
@@ -66,20 +60,19 @@ class RetentionCleanupServiceTest {
             var reports = new CopyOnWriteArrayList<Throwable>();
             var calls = new AtomicInteger();
             RetentionCleaner cleaner = (cutoff, bound) -> {
-                if (calls.incrementAndGet() == 1) {
-                    if (expected instanceof SQLException sqlException) {
-                        throw sqlException;
-                    }
-                    if (expected instanceof RuntimeException runtimeException) {
-                        throw runtimeException;
-                    }
-                    throw (AssertionError) expected;
+                if (calls.incrementAndGet() != 1) {
+                    return 0;
                 }
-                return 0;
+                if (expected instanceof SQLException sqlException) {
+                    throw sqlException;
+                }
+                if (expected instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw (AssertionError) expected;
             };
-            var interval = Duration.ofMinutes(1);
-            var service = service(cleaner, reports::add, interval, 5, executor);
-            var task = scheduledTask(service, executor, interval);
+            var service = service(cleaner, reports::add, INTERVAL, 5, executor);
+            var task = scheduledTask(service, executor, INTERVAL);
 
             task.run();
             task.run();
@@ -87,7 +80,6 @@ class RetentionCleanupServiceTest {
             Assertions.assertEquals(List.of(expected), reports);
             Assertions.assertEquals(2, calls.get());
             Assertions.assertEquals(RetentionCleanupService.State.RUNNING, service.state());
-
             service.close();
         }
     }
@@ -97,21 +89,12 @@ class RetentionCleanupServiceTest {
         var executor = executor();
         var reported = new AtomicReference<Throwable>();
         var failure = new OutOfMemoryError("fatal cleanup failure");
-        var interval = Duration.ofMinutes(1);
-        var service = service(
-            (cutoff, bound) -> {
-                throw failure;
-            },
-            reported::set,
-            interval,
-            5,
-            executor
-        );
-        var task = scheduledTask(service, executor, interval);
+        var service = service((cutoff, bound) -> {
+            throw failure;
+        }, reported::set, INTERVAL, 5, executor);
+        var task = scheduledTask(service, executor, INTERVAL);
 
-        var thrown = Assertions.assertThrows(OutOfMemoryError.class, task::run);
-
-        Assertions.assertSame(failure, thrown);
+        Assertions.assertSame(failure, Assertions.assertThrows(OutOfMemoryError.class, task::run));
         Assertions.assertNull(reported.get());
         Assertions.assertEquals(RetentionCleanupService.State.FAILED, service.state());
         Mockito.verify(executor).shutdown();
@@ -126,7 +109,6 @@ class RetentionCleanupServiceTest {
         var serviceRef = new AtomicReference<RetentionCleanupService>();
         var reported = new AtomicReference<Throwable>();
         var failure = new SQLException("cleanup failed");
-        var interval = Duration.ofMinutes(1);
         var service = service(
             (cutoff, bound) -> {
                 throw failure;
@@ -135,14 +117,13 @@ class RetentionCleanupServiceTest {
                 reported.set(cause);
                 serviceRef.get().close();
             },
-            interval,
+            INTERVAL,
             5,
             executor
         );
         serviceRef.set(service);
-        var task = scheduledTask(service, executor, interval);
 
-        task.run();
+        scheduledTask(service, executor, INTERVAL).run();
 
         Assertions.assertSame(failure, reported.get());
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
@@ -156,27 +137,20 @@ class RetentionCleanupServiceTest {
         RetentionCleaner cleaner = (cutoff, bound) -> 0;
         var executor = Mockito.mock(ScheduledExecutorService.class);
 
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> service(cleaner, failure -> {
-            }, Duration.ZERO, 1, executor)
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+            service(cleaner, failure -> { }, Duration.ZERO, 1, executor)
         );
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> service(cleaner, failure -> {
-            }, Duration.ofNanos(1), 1, executor)
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+            service(cleaner, failure -> { }, Duration.ofNanos(1), 1, executor)
         );
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> service(cleaner, failure -> {
-            }, Duration.ofSeconds(1), 0, executor)
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+            service(cleaner, failure -> { }, INTERVAL, 0, executor)
         );
     }
 
     private static ScheduledExecutorService executor() throws InterruptedException {
         var executor = Mockito.mock(ScheduledExecutorService.class);
-        Mockito.when(executor.awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class)))
-            .thenReturn(true);
+        Mockito.when(executor.awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class))).thenReturn(true);
         return executor;
     }
 
@@ -186,14 +160,9 @@ class RetentionCleanupServiceTest {
         Duration interval
     ) {
         var task = ArgumentCaptor.forClass(Runnable.class);
-
         service.start();
-
         Mockito.verify(executor).scheduleWithFixedDelay(
-            task.capture(),
-            Mockito.eq(0L),
-            Mockito.eq(interval.toMillis()),
-            Mockito.eq(TimeUnit.MILLISECONDS)
+            task.capture(), Mockito.eq(0L), Mockito.eq(interval.toMillis()), Mockito.eq(TimeUnit.MILLISECONDS)
         );
         return task.getValue();
     }
@@ -206,12 +175,7 @@ class RetentionCleanupServiceTest {
         ScheduledExecutorService executor
     ) {
         return new RetentionCleanupService(
-            cleaner,
-            reporter,
-            interval,
-            maxRowsPerPass,
-            Clock.fixed(NOW, ZoneOffset.UTC),
-            executor
+            cleaner, reporter, interval, maxRowsPerPass, Clock.fixed(NOW, ZoneOffset.UTC), executor
         );
     }
 }
