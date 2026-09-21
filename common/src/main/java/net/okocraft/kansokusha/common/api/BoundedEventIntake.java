@@ -38,11 +38,8 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         var lock = this.lifecycleLock.readLock();
         lock.lock();
         try {
-            if (this.state == State.DRAINING || this.state == State.CLOSED) {
+            if (this.state != State.RUNNING) {
                 return Admission.CLOSED;
-            }
-            if (this.state == State.FAILED) {
-                return Admission.UNAVAILABLE;
             }
 
             final AcceptedEvent acceptedEvent;
@@ -89,18 +86,6 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         }
     }
 
-    public void fail() {
-        var lock = this.lifecycleLock.writeLock();
-        lock.lock();
-        try {
-            if (this.state == State.RUNNING || this.state == State.DRAINING) {
-                this.state = State.FAILED;
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
     @Override
     public void close() {
         var lock = this.lifecycleLock.writeLock();
@@ -115,7 +100,6 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     public enum State {
         RUNNING,
         DRAINING,
-        FAILED,
         CLOSED
     }
 }
