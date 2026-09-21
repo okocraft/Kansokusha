@@ -266,6 +266,45 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
+    void testBeginDrainingStopsAdmissionsWithoutWaitingForActiveWrite() throws Exception {
+        var intake = intake(2);
+        submit(intake, 1);
+        var writeStarted = new CountDownLatch(1);
+        var releaseWrite = new CountDownLatch(1);
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                writeStarted.countDown();
+                releaseWrite.await();
+                return events.size();
+            },
+            NOOP_REPORTER,
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        Assertions.assertTrue(writeStarted.await(2, TimeUnit.SECONDS));
+
+        try {
+            service.beginDraining();
+
+            Assertions.assertEquals(AsyncBatchWriterService.State.DRAINING, service.state());
+            Assertions.assertEquals(BoundedEventIntake.State.DRAINING, intake.state());
+            Assertions.assertEquals(
+                EventIntake.Admission.CLOSED,
+                intake.accept(submission(OCCURRED_AT.plusSeconds(1)))
+            );
+        } finally {
+            releaseWrite.countDown();
+            service.drainAndStop();
+        }
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+    }
+
+    @Test
     void testDrainWaitsForActiveWriteThenPersistsRemainingAcceptedEvents() throws Exception {
         var intake = intake(4);
         submit(intake, 2);
