@@ -30,14 +30,14 @@ public final class KansokushaRuntime implements AutoCloseable {
     private static final String STARTUP_FAILURE_MESSAGE = "Kansokusha runtime failed to start.";
     private static final String WRITER_FAILURE_MESSAGE =
         "Kansokusha event writer failed; event recording is unavailable.";
-    private static final String CLEANUP_FAILURE_MESSAGE =
-        "Kansokusha retention cleanup failed; automatic expiry will retry.";
+    private static final String CLEANUP_FAILURE_MESSAGE = "Kansokusha retention cleanup failed.";
 
     private final DefaultKansokushaApi api;
     private final AsyncBatchWriterService writer;
     private final RetentionCleanupService cleanup;
     private final DuckDbDatabase database;
-    private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicBoolean closeStarted = new AtomicBoolean();
+    private volatile boolean closed;
 
     private KansokushaRuntime(
         DefaultKansokushaApi api,
@@ -130,9 +130,23 @@ public final class KansokushaRuntime implements AutoCloseable {
         return this.api;
     }
 
+    public State state() {
+        if (this.closed) {
+            return State.CLOSED;
+        }
+        if (this.writer.state() == AsyncBatchWriterService.State.FAILED) {
+            return State.FAILED;
+        }
+        return this.closeStarted.get() ? State.DRAINING : State.RUNNING;
+    }
+
+    public Optional<Throwable> failureCause() {
+        return this.writer.failureCause();
+    }
+
     @Override
     public void close() throws SQLException {
-        if (!this.closed.compareAndSet(false, true)) {
+        if (!this.closeStarted.compareAndSet(false, true)) {
             return;
         }
 
@@ -155,6 +169,8 @@ public final class KansokushaRuntime implements AutoCloseable {
             this.database.close();
         } catch (SQLException | RuntimeException | Error e) {
             failure = suppress(failure, e);
+        } finally {
+            this.closed = true;
         }
 
         if (failure instanceof SQLException sqlException) {
@@ -223,5 +239,12 @@ public final class KansokushaRuntime implements AutoCloseable {
         if (primary != secondary) {
             primary.addSuppressed(secondary);
         }
+    }
+
+    public enum State {
+        RUNNING,
+        DRAINING,
+        FAILED,
+        CLOSED
     }
 }
