@@ -326,6 +326,82 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
+    void testForceStoppingWorkerIsNotReusedWhenDrainStartsBeforeInterruptDelivery() throws Exception {
+        var intake = intake(2);
+        submit(intake, 2);
+        var firstWriteStarted = new CountDownLatch(1);
+        var interruptReady = new CountDownLatch(1);
+        var releaseInterrupt = new CountDownLatch(1);
+        var firstWriteInterrupted = new AtomicBoolean();
+        var firstWorker = new AtomicReference<Thread>();
+        var secondWorker = new AtomicReference<Thread>();
+        var persisted = new AtomicInteger();
+        var writes = new AtomicInteger();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                if (writes.getAndIncrement() == 0) {
+                    firstWorker.set(Thread.currentThread());
+                    firstWriteStarted.countDown();
+                    try {
+                        Thread.sleep(Duration.ofHours(1));
+                    } catch (InterruptedException e) {
+                        firstWriteInterrupted.set(true);
+                    }
+                } else {
+                    secondWorker.set(Thread.currentThread());
+                }
+                persisted.addAndGet(events.size());
+                return events.size();
+            },
+            NOOP_REPORTER,
+            1,
+            Duration.ofSeconds(1),
+            System::nanoTime,
+            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS),
+            worker -> {
+                interruptReady.countDown();
+                try {
+                    releaseInterrupt.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+                worker.interrupt();
+            }
+        );
+
+        service.start();
+        Assertions.assertTrue(firstWriteStarted.await(2, TimeUnit.SECONDS));
+
+        var forceStop = Thread.ofPlatform().start(service::requestStop);
+        Assertions.assertTrue(interruptReady.await(2, TimeUnit.SECONDS));
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPING, service.state());
+
+        var gracefulDrain = Thread.ofPlatform().start(service::drainAndStop);
+        while (intake.state() == BoundedEventIntake.State.RUNNING) {
+            Thread.onSpinWait();
+        }
+        Assertions.assertEquals(BoundedEventIntake.State.DRAINING, intake.state());
+
+        releaseInterrupt.countDown();
+
+        forceStop.join(2_000);
+        gracefulDrain.join(2_000);
+
+        Assertions.assertFalse(forceStop.isAlive());
+        Assertions.assertFalse(gracefulDrain.isAlive());
+        Assertions.assertTrue(firstWriteInterrupted.get());
+        Assertions.assertNotNull(firstWorker.get());
+        Assertions.assertNotNull(secondWorker.get());
+        Assertions.assertNotSame(firstWorker.get(), secondWorker.get());
+        Assertions.assertEquals(2, persisted.get());
+        Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+    }
+
+    @Test
     void testDrainAfterForceStopPersistsRemainingAcceptedEvents() throws Exception {
         var intake = intake(3);
         submit(intake, 2);
