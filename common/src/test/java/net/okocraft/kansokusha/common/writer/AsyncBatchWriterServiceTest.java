@@ -335,7 +335,11 @@ class AsyncBatchWriterServiceTest {
             intake,
             events -> {
                 writeStarted.countDown();
-                releaseWrite.await();
+                try {
+                    releaseWrite.await();
+                } catch (InterruptedException e) {
+                    throw new SQLException("Writer was interrupted during graceful drain.", e);
+                }
                 return events.size();
             },
             NOOP_REPORTER,
