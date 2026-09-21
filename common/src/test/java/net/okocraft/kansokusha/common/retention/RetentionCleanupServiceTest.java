@@ -93,62 +93,40 @@ class RetentionCleanupServiceTest {
     }
 
     @Test
-    void testCleanupFailureIsReportedAndNextPassStillRuns() throws Exception {
-        var reports = new CopyOnWriteArrayList<Throwable>();
-        var secondPass = new CountDownLatch(1);
-        var calls = new AtomicInteger();
-        var failure = new SQLException("cleanup failed");
-        RetentionCleaner cleaner = (cutoff, bound) -> {
-            if (calls.incrementAndGet() == 1) {
-                throw failure;
-            }
-            secondPass.countDown();
-            return 0;
-        };
-        var service = new RetentionCleanupService(
-            cleaner,
-            reports::add,
-            Duration.ofMillis(25),
-            5
-        );
-
-        service.start();
-
-        Assertions.assertTrue(secondPass.await(2, TimeUnit.SECONDS));
-        service.close();
-
-        Assertions.assertEquals(List.of(failure), reports);
-        Assertions.assertTrue(calls.get() >= 2);
-        Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
-    }
-
-    @Test
-    void testErrorIsReportedAndNextPassStillRuns() throws Exception {
-        var reports = new CopyOnWriteArrayList<Throwable>();
-        var secondPass = new CountDownLatch(1);
-        var calls = new AtomicInteger();
-        var failure = new AssertionError("cleanup error");
-        var service = new RetentionCleanupService(
-            (cutoff, bound) -> {
+    void testCleanupFailuresAreReportedAndNextPassStillRuns() throws Exception {
+        for (var failure : List.<Throwable>of(
+            new SQLException("cleanup failed"),
+            new AssertionError("cleanup error")
+        )) {
+            var reports = new CopyOnWriteArrayList<Throwable>();
+            var secondPass = new CountDownLatch(1);
+            var calls = new AtomicInteger();
+            RetentionCleaner cleaner = (cutoff, bound) -> {
                 if (calls.incrementAndGet() == 1) {
-                    throw failure;
+                    if (failure instanceof SQLException sqlException) {
+                        throw sqlException;
+                    }
+                    throw (Error) failure;
                 }
                 secondPass.countDown();
                 return 0;
-            },
-            reports::add,
-            Duration.ofMillis(25),
-            5
-        );
+            };
+            var service = new RetentionCleanupService(
+                cleaner,
+                reports::add,
+                Duration.ofMillis(25),
+                5
+            );
 
-        service.start();
+            service.start();
 
-        Assertions.assertTrue(secondPass.await(2, TimeUnit.SECONDS));
-        service.close();
+            Assertions.assertTrue(secondPass.await(2, TimeUnit.SECONDS));
+            service.close();
 
-        Assertions.assertEquals(List.of(failure), reports);
-        Assertions.assertTrue(calls.get() >= 2);
-        Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
+            Assertions.assertEquals(List.of(failure), reports);
+            Assertions.assertTrue(calls.get() >= 2);
+            Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
+        }
     }
 
     @Test
