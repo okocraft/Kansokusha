@@ -78,6 +78,13 @@ public final class DuckDbMigrations {
     private DuckDbMigrations() {
     }
 
+    public static void migrate(DuckDbDatabase database) throws SQLException {
+        database.serialized(connection -> {
+            RUNNER.migrate(connection);
+            return null;
+        });
+    }
+
     public static void migrate(Connection connection) throws SQLException {
         RUNNER.migrate(connection);
     }

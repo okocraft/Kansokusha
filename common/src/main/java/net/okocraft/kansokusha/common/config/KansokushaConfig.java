@@ -25,14 +25,26 @@ public class KansokushaConfig {
     @Comment("More output to the console.")
     private boolean debug = false;
 
+    @Comment("Bounded asynchronous event ingestion and batch writing.")
+    private Ingestion ingestion = new Ingestion();
+
     @Comment("Event retention policies and event-type mappings.")
     private Retention retention = new Retention();
 
+    private transient IngestionSettings ingestionSettings;
     private transient RetentionSettings retentionSettings;
     private transient RetentionCleanupSettings retentionCleanupSettings;
 
     public boolean debug() {
         return this.debug;
+    }
+
+    public IngestionSettings ingestionSettings() {
+        var settings = this.ingestionSettings;
+        if (settings == null) {
+            throw new IllegalStateException("Ingestion configuration has not been validated.");
+        }
+        return settings;
     }
 
     public RetentionSettings retentionSettings() {
@@ -52,9 +64,41 @@ public class KansokushaConfig {
     }
 
     private void validate() throws IOException {
-        var validated = Objects.requireNonNull(this.retention, "retention").validate();
-        this.retentionSettings = validated.retentionSettings();
-        this.retentionCleanupSettings = validated.cleanupSettings();
+        var validatedRetention = Objects.requireNonNull(this.retention, "retention").validate();
+        this.retentionSettings = validatedRetention.retentionSettings();
+        this.retentionCleanupSettings = validatedRetention.cleanupSettings();
+        this.ingestionSettings = Objects.requireNonNull(this.ingestion, "ingestion").validate();
+    }
+
+    @ConfigSerializable
+    public static final class Ingestion {
+
+        @Comment("Maximum number of accepted events waiting for the asynchronous writer.")
+        private int queueCapacity = 0;
+
+        @Comment("Maximum number of events persisted by one writer batch.")
+        private int maxBatchSize = 0;
+
+        @Comment("Maximum time the writer waits to fill a partial batch.")
+        private String maxBatchDelay = "";
+
+        private IngestionSettings validate() throws IOException {
+            if (this.queueCapacity <= 0) {
+                throw invalid("ingestion.queue-capacity must be positive");
+            }
+            if (this.maxBatchSize <= 0) {
+                throw invalid("ingestion.max-batch-size must be positive");
+            }
+
+            var delay = Retention.parseDuration(this.maxBatchDelay, "ingestion.max-batch-delay");
+            try {
+                delay.toNanos();
+            } catch (ArithmeticException e) {
+                throw invalid("ingestion.max-batch-delay exceeds the supported nanosecond range", e);
+            }
+
+            return new IngestionSettings(this.queueCapacity, this.maxBatchSize, delay);
+        }
     }
 
     @ConfigSerializable
@@ -220,6 +264,34 @@ public class KansokushaConfig {
 
         private String eventType = "";
         private String policy = "";
+    }
+
+    public record IngestionSettings(
+        int queueCapacity,
+        int maxBatchSize,
+        Duration maxBatchDelay
+    ) {
+
+        public IngestionSettings {
+            if (queueCapacity <= 0) {
+                throw new IllegalArgumentException("queueCapacity must be positive.");
+            }
+            if (maxBatchSize <= 0) {
+                throw new IllegalArgumentException("maxBatchSize must be positive.");
+            }
+            Objects.requireNonNull(maxBatchDelay, "maxBatchDelay");
+            if (maxBatchDelay.isZero() || maxBatchDelay.isNegative()) {
+                throw new IllegalArgumentException("maxBatchDelay must be positive.");
+            }
+            if (maxBatchDelay.getNano() % 1_000_000 != 0) {
+                throw new IllegalArgumentException("maxBatchDelay must use whole milliseconds.");
+            }
+            try {
+                maxBatchDelay.toNanos();
+            } catch (ArithmeticException e) {
+                throw new IllegalArgumentException("maxBatchDelay exceeds the supported nanosecond range.", e);
+            }
+        }
     }
 
     public record RetentionCleanupSettings(
