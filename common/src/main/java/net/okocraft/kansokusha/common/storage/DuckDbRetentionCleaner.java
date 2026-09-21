@@ -64,7 +64,7 @@ public final class DuckDbRetentionCleaner {
         long cutoffMillis,
         int maxRowsPerPass
     ) throws SQLException {
-        var rowIds = new ArrayList<Long>(maxRowsPerPass);
+        var rowIds = new ArrayList<Long>();
         try (var statement = connection.prepareStatement(
             """
                 SELECT rowid
