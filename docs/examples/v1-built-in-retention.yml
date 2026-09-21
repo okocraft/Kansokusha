@@ -1,0 +1,20 @@
+# Operator-facing example for the v1 built-in event catalog.
+# This file is not copied into the generated config skeleton automatically.
+retention:
+  policies:
+    - key: kansokusha:audit
+      duration: P180D
+    - key: kansokusha:session
+      duration: P30D
+    - key: kansokusha:default
+      duration: P30D
+  event-type-mappings:
+    - event-type: kansokusha:block_break
+      policy: kansokusha:audit
+    - event-type: kansokusha:block_place
+      policy: kansokusha:audit
+    - event-type: kansokusha:server_connected
+      policy: kansokusha:session
+  fallback-policy: kansokusha:default
+  cleanup-interval: PT5M
+  max-rows-per-pass: 1000
