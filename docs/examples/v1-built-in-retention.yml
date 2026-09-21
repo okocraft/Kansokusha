@@ -16,5 +16,6 @@ retention:
     - event-type: kansokusha:server_connected
       policy: kansokusha:session
   fallback-policy: kansokusha:default
+  # Cleanup cadence/batch size are illustrative operational values, not catalog decisions.
   cleanup-interval: PT5M
   max-rows-per-pass: 1000
