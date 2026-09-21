@@ -129,8 +129,8 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     public void drainAndStop() throws InterruptedException {
         this.intake.beginDraining();
 
-        final Thread threadToJoin;
-        final boolean interruptWorker;
+        Thread threadToJoin = null;
+        boolean interruptWorker = false;
 
         synchronized (this.lifecycleMonitor) {
             switch (this.state) {
