@@ -16,7 +16,7 @@ The verification requires all of the following:
 - Kansokusha starts without a separately installed DuckDB driver;
 - the external fixture obtains `Kansokusha.api()`, registers an event type, and receives `ACCEPTED` from `submit`;
 - normal server shutdown makes fresh API discovery unavailable and closes the previously acquired API;
-- after plugin disable, the fixture reopens the instance-local `kansokusha.duckdb` through the shaded DuckDB driver;
+- after the Paper process exits, the Gradle verification reloads `org.duckdb.DuckDBDriver` directly from the packaged Kansokusha jar and reopens the instance-local `kansokusha.duckdb`;
 - the accepted fixture event is present exactly once with its event key, generation, timestamp, server key, and payload intact.
 
 The task is also part of `check`.
