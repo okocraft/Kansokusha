@@ -21,6 +21,7 @@ public final class AsyncBatchWriterService {
 
     private final BoundedEventIntake intake;
     private final EventBatchWriter writer;
+    private final PipelineFailureReporter failureReporter;
     private final int maxBatchSize;
     private final long maxBatchDelayNanos;
     private final NanoClock clock;
@@ -37,12 +38,14 @@ public final class AsyncBatchWriterService {
     public AsyncBatchWriterService(
         BoundedEventIntake intake,
         EventBatchWriter writer,
+        PipelineFailureReporter failureReporter,
         int maxBatchSize,
         Duration maxBatchDelay
     ) {
         this(
             intake,
             writer,
+            failureReporter,
             maxBatchSize,
             maxBatchDelay,
             System::nanoTime,
@@ -53,6 +56,7 @@ public final class AsyncBatchWriterService {
     AsyncBatchWriterService(
         BoundedEventIntake intake,
         EventBatchWriter writer,
+        PipelineFailureReporter failureReporter,
         int maxBatchSize,
         Duration maxBatchDelay,
         NanoClock clock,
@@ -78,6 +82,7 @@ public final class AsyncBatchWriterService {
 
         this.intake = Objects.requireNonNull(intake, "intake");
         this.writer = Objects.requireNonNull(writer, "writer");
+        this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
         this.maxBatchSize = maxBatchSize;
         this.maxBatchDelayNanos = delayNanos;
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -189,13 +194,29 @@ public final class AsyncBatchWriterService {
             failure = e;
             throw e;
         } finally {
-            synchronized (this.lifecycleMonitor) {
-                if (failure != null) {
-                    this.failureCause = failure;
-                    this.state = State.FAILED;
-                } else {
+            if (failure != null) {
+                this.transitionToFailed(failure);
+            } else {
+                synchronized (this.lifecycleMonitor) {
                     this.state = State.STOPPED;
                 }
+            }
+        }
+    }
+
+    private void transitionToFailed(Throwable failure) {
+        this.intake.fail(failure);
+
+        synchronized (this.lifecycleMonitor) {
+            this.failureCause = failure;
+            this.state = State.FAILED;
+        }
+
+        try {
+            this.failureReporter.report(failure);
+        } catch (Throwable reportingFailure) {
+            if (reportingFailure != failure) {
+                failure.addSuppressed(reportingFailure);
             }
         }
     }
