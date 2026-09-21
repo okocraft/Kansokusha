@@ -20,7 +20,7 @@ ADR-0002 は metadata resolution と event batch write を1 transaction にま�
 | §12 | intake queue と writer batch の明示的な有限 bound |
 | §13 | accepted / persisted / failed-to-persist の区別、storage failure の可視化、正常停止時の drain |
 
-具体的な queue capacity、batch size、batch delay、shutdown timeout 等の運用値は configuration に委ね、この ADR では値を固定しない。
+具体的な queue capacity、batch size、batch delay 等の運用値は configuration に委ね、この ADR では値を固定しない。v1 は shutdown timeout を設けない。
 
 ## 決定
 
@@ -31,6 +31,14 @@ runtime は正の有限 capacity を持つ thread-safe な intake queue を1つ�
 `submit` の caller thread では、runtime registration と payload generation の検証後、ADR-0003 の retention policy resolution と absolute expiry 計算を行い、storage-facing `AcceptedEvent` を作る。これらは immutable configuration と event value に対する in-memory 計算だけとし、DuckDB access を含めない。
 
 resolved event は queue へ non-blocking に渡す。queue への追加は待機型 `put` ではなく `offer` 相当とし、storage transaction、persistent metadata lookup、batch flush 完了を待たない。
+
+intake admission は「pipeline が `RUNNING` であることの判定」と「event ownership の queue への移転」を1つの論理操作として扱い、`RUNNING -> DRAINING` および `RUNNING -> FAILED` transition と線形化しなければならない。実装は lock、atomic state、queue close protocol 等の具体手段を自由に選べるが、次の保証を満たす。
+
+- admission が lifecycle transition より先に linearize した場合、その event は accepted 済みとして transition 側が必ず考慮する。
+- lifecycle transition が先に linearize した場合、その後の admission は ownership transfer に成功してはならない。
+- state を `RUNNING` と読んだ後に transition が完了し、それでも単独の `offer` が成功して `ACCEPTED` を返す check-then-act race を許容しない。
+
+したがって、`DRAINING` または `FAILED` transition の完了後に新しい event が queue ownership を取得することはない。
 
 結果は次のように扱う。
 
@@ -133,6 +141,8 @@ public API 自体が閉じている場合は ADR-0001 の `CLOSED` を優先す�
 
 queue saturation は terminal state transition を起こさない。capacity が空けば後続 submission は再び `ACCEPTED` になり得る。
 
+`RUNNING -> DRAINING` / `FAILED` transition は section 1 の intake admission と同じ linearization order に参加する。transition が完了した時点で、それより後に新たな ownership transfer が成立しないことを lifecycle invariant とする。
+
 ### 8. normal shutdown は intake を先に閉じ、その後 accepted event を drain する
 
 正常停止開始時は次の順序とする。
@@ -145,7 +155,9 @@ queue saturation は terminal state transition を起こさない。capacity が
 
 shutdown drain 中の storage failure は通常運用中と同じ `FAILED` transition と reporting semantics を使用する。失敗を success として扱わない。
 
-shutdown coordination が待機を必要とする場合、その待機は plugin lifecycle / shutdown context で行い、event-recording caller thread の submission path では行わない。
+v1 は shutdown timeout を設けない。正常停止では writer が queue と partial batch の drain を完了して終了するまで lifecycle / shutdown context が待機し、その後にだけ storage resource を閉じる。storage failure が発生した場合は通常どおり `FAILED` へ遷移して writer を終了させ、その終了後に storage resource を閉じる。
+
+この待機は event-recording caller thread の submission path では行わない。JVM 強制終了や process termination により正常停止 sequence 自体が完了しない場合は、この drain guarantee の対象外とする。
 
 JVM crash、OS crash、強制終了では queue または writer batch の未永続化 event が失われ得る。これは §13 の許容範囲であり、`ACCEPTED` は crash durability を意味しない。
 
