@@ -30,7 +30,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
 
     private volatile State state = State.NEW;
     private volatile boolean stopRequested;
-    private volatile boolean drainRequested;
     @Nullable
     private volatile Throwable failureCause;
     @Nullable
@@ -111,11 +110,10 @@ public final class AsyncBatchWriterService implements AutoCloseable {
                 this.state = State.STOPPED;
                 return;
             }
-            if (this.state != State.RUNNING && this.state != State.DRAINING) {
+            if (this.state != State.RUNNING) {
                 return;
             }
 
-            this.drainRequested = false;
             this.stopRequested = true;
             this.state = State.STOPPING;
             threadToInterrupt = this.worker;
@@ -127,33 +125,59 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     }
 
     public void drainAndStop() {
-        this.intake.beginDraining();
-
-        Thread threadToJoin = null;
+        Thread threadToJoin;
 
         synchronized (this.lifecycleMonitor) {
-            switch (this.state) {
+            threadToJoin = switch (this.state) {
                 case NEW -> {
-                    this.drainRequested = true;
+                    this.stopRequested = false;
                     this.state = State.DRAINING;
                     this.worker = this.newWorker();
                     this.worker.start();
-                    threadToJoin = this.worker;
+                    yield this.worker;
                 }
                 case RUNNING -> {
-                    this.drainRequested = true;
                     this.state = State.DRAINING;
-                    threadToJoin = this.worker;
+                    yield this.worker;
                 }
-                case DRAINING, STOPPING, STOPPED, FAILED -> threadToJoin = this.worker;
-            }
+                case STOPPED -> {
+                    this.stopRequested = false;
+                    this.state = State.DRAINING;
+                    this.worker = this.newWorker();
+                    this.worker.start();
+                    yield this.worker;
+                }
+                case DRAINING, STOPPING, FAILED -> this.worker;
+            };
         }
 
+        this.intake.beginDraining();
+
         var interrupted = joinUninterruptibly(threadToJoin);
+        threadToJoin = this.resumeDrainAfterForceStop();
+        interrupted |= joinUninterruptibly(threadToJoin);
+
         this.intake.close();
 
         if (interrupted) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    @Nullable
+    private Thread resumeDrainAfterForceStop() {
+        synchronized (this.lifecycleMonitor) {
+            if (this.state == State.STOPPED && this.intake.size() > 0) {
+                this.stopRequested = false;
+                this.state = State.DRAINING;
+                this.worker = this.newWorker();
+                this.worker.start();
+                return this.worker;
+            }
+            if (this.state == State.DRAINING) {
+                return this.worker;
+            }
+            return null;
         }
     }
 
@@ -173,7 +197,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     }
 
     private boolean isDrainRequested() {
-        return this.drainRequested || this.intake.state() == BoundedEventIntake.State.DRAINING;
+        return this.intake.state() == BoundedEventIntake.State.DRAINING;
     }
 
     private static boolean joinUninterruptibly(@Nullable Thread thread) {
