@@ -67,6 +67,31 @@ class PaperRuntimeLifecycleTest {
     }
 
     @Test
+    void testFatalShutdownFailureIsReportedAndRethrown(@TempDir Path dir) throws Exception {
+        var runtime = Mockito.mock(KansokushaRuntime.class);
+        var reporter = Mockito.mock(AdministratorReporter.class);
+        var failure = new AssertionError("fatal close failure");
+        Mockito.doThrow(failure).when(runtime).close();
+
+        var lifecycle = new PaperRuntimeLifecycle(
+            dir,
+            SERVER_KEY,
+            reporter,
+            (dataDirectory, serverKey, actualReporter) -> runtime
+        );
+        lifecycle.start();
+
+        var thrown = Assertions.assertThrows(AssertionError.class, lifecycle::close);
+
+        Assertions.assertSame(failure, thrown);
+        Mockito.verify(reporter).report(
+            "Kansokusha runtime failed to shut down cleanly.",
+            failure
+        );
+        Assertions.assertNull(lifecycle.runtime());
+    }
+
+    @Test
     void testStartupFailureDoesNotInstallRuntime(@TempDir Path dir) {
         var reporter = Mockito.mock(AdministratorReporter.class);
         var failure = new SQLException("startup failed");
