@@ -18,6 +18,10 @@ class KansokushaConfigTest {
             dir,
             """
                 debug: true
+                ingestion:
+                  queue-capacity: 1024
+                  max-batch-size: 128
+                  max-batch-delay: PT0.25S
                 retention:
                   policies:
                     - key: example:short
@@ -38,6 +42,11 @@ class KansokushaConfigTest {
 
         var config = holder.get();
         Assertions.assertTrue(config.debug());
+
+        var ingestion = config.ingestionSettings();
+        Assertions.assertEquals(1024, ingestion.queueCapacity());
+        Assertions.assertEquals(128, ingestion.maxBatchSize());
+        Assertions.assertEquals(Duration.ofMillis(250), ingestion.maxBatchDelay());
 
         var retention = config.retentionSettings();
         Assertions.assertEquals(
@@ -144,6 +153,31 @@ class KansokushaConfigTest {
               fallback-policy: example:missing
             """;
         assertInvalid(dir.resolve("fallback"), unknownFallback, "fallback policy references unknown");
+    }
+
+    @Test
+    void testInvalidIngestionSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
+        assertInvalid(
+            dir.resolve("queue-capacity"),
+            validConfig("PT1H", "example:fallback").replace("queue-capacity: 16", "queue-capacity: 0"),
+            "ingestion.queue-capacity must be positive"
+        );
+        assertInvalid(
+            dir.resolve("batch-size"),
+            validConfig("PT1H", "example:fallback").replace("max-batch-size: 8", "max-batch-size: 0"),
+            "ingestion.max-batch-size must be positive"
+        );
+        assertInvalid(
+            dir.resolve("batch-delay"),
+            validConfig("PT1H", "example:fallback").replace("max-batch-delay: PT0.1S", "max-batch-delay: PT0S"),
+            "ingestion.max-batch-delay must be positive"
+        );
+        assertInvalid(
+            dir.resolve("batch-delay-fractional"),
+            validConfig("PT1H", "example:fallback")
+                .replace("max-batch-delay: PT0.1S", "max-batch-delay: PT0.000000001S"),
+            "ingestion.max-batch-delay must resolve to whole milliseconds"
+        );
     }
 
     @Test
@@ -259,6 +293,10 @@ class KansokushaConfigTest {
     private static String validConfig(String duration, String fallback) {
         return """
             debug: true
+            ingestion:
+              queue-capacity: 16
+              max-batch-size: 8
+              max-batch-delay: PT0.1S
             retention:
               policies:
                 - key: example:fallback
