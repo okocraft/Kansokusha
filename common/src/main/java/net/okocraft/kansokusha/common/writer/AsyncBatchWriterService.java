@@ -197,7 +197,8 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     }
 
     private boolean isDrainRequested() {
-        return this.intake.state() == BoundedEventIntake.State.DRAINING;
+        return this.state == State.DRAINING
+            && this.intake.state() == BoundedEventIntake.State.DRAINING;
     }
 
     private static boolean joinUninterruptibly(@Nullable Thread thread) {
