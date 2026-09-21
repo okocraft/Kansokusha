@@ -46,7 +46,7 @@ public final class ExternalVelocityPlugin {
         } catch (Throwable failure) {
             writeFailure(failure);
         } finally {
-            this.proxy.getScheduler().buildTask(this, this.proxy::shutdown).schedule();
+            this.proxy.getScheduler().buildTask(this, () -> this.proxy.shutdown()).schedule();
         }
     }
 
