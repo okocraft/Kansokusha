@@ -9,7 +9,6 @@ import net.okocraft.kansokusha.common.api.EventIntake;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.event.AcceptedEvent;
 import net.okocraft.kansokusha.common.event.RetentionPolicySet;
-import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +31,7 @@ class AsyncBatchWriterServiceTest {
     private static final Key SERVER = Key.key("test", "server");
     private static final Key POLICY = Key.key("test", "retention");
     private static final Instant OCCURRED_AT = Instant.parse("2026-01-01T00:00:00Z");
-    private static final AdministratorReporter NOOP_REPORTER = (message, failure) -> {
+    private static final PipelineFailureReporter NOOP_REPORTER = failure -> {
     };
 
     @Test
@@ -547,7 +546,7 @@ class AsyncBatchWriterServiceTest {
             events -> {
                 throw failure;
             },
-            (message, reported) -> {
+            reported -> {
                 reportCount.incrementAndGet();
                 reportedFailure.compareAndSet(null, reported);
             },
@@ -586,7 +585,7 @@ class AsyncBatchWriterServiceTest {
             events -> {
                 throw pipelineFailure;
             },
-            (message, failure) -> {
+            failure -> {
                 throw reportingFailure;
             },
             1,
