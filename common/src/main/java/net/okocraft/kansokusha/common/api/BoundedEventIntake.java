@@ -16,6 +16,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @NotNullByDefault
 public final class BoundedEventIntake implements EventIntake, AutoCloseable {
 
+    private final int capacity;
     private final RetentionPolicySet retentionPolicies;
     private final ArrayBlockingQueue<AcceptedEvent> queue;
     private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
@@ -25,6 +26,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         if (capacity <= 0) {
             throw new IllegalArgumentException("capacity must be positive.");
         }
+        this.capacity = capacity;
         this.retentionPolicies = Objects.requireNonNull(retentionPolicies, "retentionPolicies");
         this.queue = new ArrayBlockingQueue<>(capacity);
     }
@@ -68,7 +70,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     }
 
     public int capacity() {
-        return this.queue.size() + this.queue.remainingCapacity();
+        return this.capacity;
     }
 
     public State state() {
