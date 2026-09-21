@@ -646,6 +646,17 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
+    void testJoinUninterruptiblyDoesNotWaitForCurrentThread() throws Exception {
+        var completed = new CountDownLatch(1);
+        Thread.ofPlatform().daemon(true).start(() -> {
+            AsyncBatchWriterService.joinUninterruptibly(Thread.currentThread());
+            completed.countDown();
+        });
+
+        Assertions.assertTrue(completed.await(2, TimeUnit.SECONDS));
+    }
+
+    @Test
     void testInvalidBatchSettingsAreRejected() {
         var intake = intake(1);
 
