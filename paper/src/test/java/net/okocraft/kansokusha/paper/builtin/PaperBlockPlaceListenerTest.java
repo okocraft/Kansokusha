@@ -110,7 +110,13 @@ class PaperBlockPlaceListenerTest {
             SubmissionOutcome.INGESTION_UNAVAILABLE,
             SubmissionOutcome.ACCEPTED
         );
-        var listener = listener(api);
+        var clock = Mockito.mock(Clock.class);
+        Mockito.when(clock.instant()).thenReturn(
+            OCCURRED_AT,
+            OCCURRED_AT.plusSeconds(1),
+            OCCURRED_AT.plusSeconds(2)
+        );
+        var listener = PaperBlockPlaceListener.register(api, SERVER_KEY, clock);
         var replaced = List.of(
             Blocks.AIR.defaultBlockState(),
             Blocks.WATER.defaultBlockState(),
@@ -147,6 +153,7 @@ class PaperBlockPlaceListenerTest {
             );
         }
         Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(clock, Mockito.times(1)).instant();
     }
 
     @Test
