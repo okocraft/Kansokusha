@@ -52,11 +52,14 @@ class KansokushaVelocityPluginTest {
             });
             Assertions.assertTrue(startEntered.await(2, TimeUnit.SECONDS));
 
+            var shutdownEntered = new CountDownLatch(1);
             var shutdown = executor.submit(() -> {
+                shutdownEntered.countDown();
                 plugin.onProxyShutdown(null);
                 return null;
             });
 
+            Assertions.assertTrue(shutdownEntered.await(2, TimeUnit.SECONDS));
             Assertions.assertFalse(shutdown.isDone());
             releaseStart.countDown();
             initialize.get(2, TimeUnit.SECONDS);
