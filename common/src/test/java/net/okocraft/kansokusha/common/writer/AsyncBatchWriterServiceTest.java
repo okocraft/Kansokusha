@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 class AsyncBatchWriterServiceTest {
 
@@ -29,6 +30,8 @@ class AsyncBatchWriterServiceTest {
     private static final Key SERVER = Key.key("test", "server");
     private static final Key POLICY = Key.key("test", "retention");
     private static final Instant OCCURRED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final PipelineFailureReporter NOOP_REPORTER = failure -> {
+    };
 
     @Test
     void testFullBatchesFlushAtConfiguredSize() throws Exception {
@@ -43,6 +46,7 @@ class AsyncBatchWriterServiceTest {
                 written.countDown();
                 return events.size();
             },
+            NOOP_REPORTER,
             3,
             Duration.ofHours(1)
         );
@@ -79,6 +83,7 @@ class AsyncBatchWriterServiceTest {
                 written.countDown();
                 return events.size();
             },
+            NOOP_REPORTER,
             4,
             delay,
             now::get,
@@ -120,6 +125,7 @@ class AsyncBatchWriterServiceTest {
                 written.countDown();
                 return events.size();
             },
+            NOOP_REPORTER,
             1,
             Duration.ofSeconds(1)
         );
@@ -150,6 +156,7 @@ class AsyncBatchWriterServiceTest {
                 batches.add(List.copyOf(events));
                 return events.size();
             },
+            NOOP_REPORTER,
             2,
             Duration.ofHours(1),
             System::nanoTime,
@@ -182,6 +189,7 @@ class AsyncBatchWriterServiceTest {
                 writes.incrementAndGet();
                 return events.size();
             },
+            NOOP_REPORTER,
             1,
             Duration.ofSeconds(1)
         );
@@ -195,14 +203,20 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
-    void testStorageFailureTerminatesWorkerAndRemainsInspectable() throws Exception {
-        var intake = intake(1);
-        submit(intake, 1);
+    void testStorageFailureTransitionsPipelineAndReportsOnce() throws Exception {
+        var intake = intake(2);
+        submit(intake, 2);
         var failure = new SQLException("injected failure");
+        var reportCount = new AtomicInteger();
+        var reportedFailure = new AtomicReference<Throwable>();
         var service = new AsyncBatchWriterService(
             intake,
             events -> {
                 throw failure;
+            },
+            reported -> {
+                reportCount.incrementAndGet();
+                reportedFailure.compareAndSet(null, reported);
             },
             1,
             Duration.ofSeconds(1)
@@ -213,6 +227,46 @@ class AsyncBatchWriterServiceTest {
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
         Assertions.assertSame(failure, service.failureCause().orElseThrow());
+        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
+        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(1, reportCount.get());
+        Assertions.assertSame(failure, reportedFailure.get());
+        Assertions.assertEquals(1, intake.size());
+
+        for (var index = 0; index < 100; index++) {
+            Assertions.assertEquals(
+                EventIntake.Admission.UNAVAILABLE,
+                intake.accept(submission(OCCURRED_AT.plusSeconds(index + 1L)))
+            );
+        }
+        Assertions.assertEquals(1, intake.size());
+    }
+
+    @Test
+    void testReportingFailureDoesNotReplacePipelineFailure() throws Exception {
+        var intake = intake(1);
+        submit(intake, 1);
+        var pipelineFailure = new SQLException("storage failed");
+        var reportingFailure = new IllegalStateException("reporting failed");
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                throw pipelineFailure;
+            },
+            failure -> {
+                throw reportingFailure;
+            },
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        service.awaitStopped();
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
+        Assertions.assertSame(pipelineFailure, service.failureCause().orElseThrow());
+        Assertions.assertSame(pipelineFailure, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(List.of(reportingFailure), List.of(pipelineFailure.getSuppressed()));
     }
 
     @Test
@@ -225,6 +279,7 @@ class AsyncBatchWriterServiceTest {
             events -> {
                 throw failure;
             },
+            NOOP_REPORTER,
             1,
             Duration.ofSeconds(1)
         );
@@ -246,6 +301,7 @@ class AsyncBatchWriterServiceTest {
             events -> {
                 throw failure;
             },
+            NOOP_REPORTER,
             1,
             Duration.ofSeconds(1)
         );
@@ -266,6 +322,7 @@ class AsyncBatchWriterServiceTest {
             () -> new AsyncBatchWriterService(
                 intake,
                 events -> events.size(),
+                NOOP_REPORTER,
                 0,
                 Duration.ofSeconds(1)
             )
@@ -275,6 +332,7 @@ class AsyncBatchWriterServiceTest {
             () -> new AsyncBatchWriterService(
                 intake,
                 events -> events.size(),
+                NOOP_REPORTER,
                 1,
                 Duration.ZERO
             )
@@ -284,6 +342,7 @@ class AsyncBatchWriterServiceTest {
             () -> new AsyncBatchWriterService(
                 intake,
                 events -> events.size(),
+                NOOP_REPORTER,
                 1,
                 Duration.ofNanos(1)
             )
@@ -307,19 +366,21 @@ class AsyncBatchWriterServiceTest {
         for (var index = 0; index < count; index++) {
             Assertions.assertEquals(
                 EventIntake.Admission.ACCEPTED,
-                intake.accept(
-                    new EventSubmission(
-                        EVENT_TYPE,
-                        PayloadGeneration.FIRST,
-                        OCCURRED_AT.plusMillis(index),
-                        SERVER,
-                        null,
-                        null,
-                        null,
-                        EventPayload.copyOf(new byte[]{(byte) index})
-                    )
-                )
+                intake.accept(submission(OCCURRED_AT.plusMillis(index)))
             );
         }
+    }
+
+    private static EventSubmission submission(Instant occurredAt) {
+        return new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
+            occurredAt,
+            SERVER,
+            null,
+            null,
+            null,
+            EventPayload.copyOf(new byte[]{1})
+        );
     }
 }
