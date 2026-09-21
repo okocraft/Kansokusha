@@ -11,6 +11,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @ApiStatus.Internal
@@ -19,19 +21,16 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     private final RetentionCleaner cleaner;
     private final PipelineFailureReporter failureReporter;
-    private static final long MAX_WAIT_CHUNK_MILLIS = TimeUnit.DAYS.toMillis(1);
-
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
-    private boolean stopRequested;
     @Nullable
     private volatile Throwable failureCause;
     @Nullable
-    private Thread worker;
+    private ScheduledExecutorService executor;
 
     public RetentionCleanupService(
         RetentionCleaner cleaner,
@@ -76,36 +75,47 @@ public final class RetentionCleanupService implements AutoCloseable {
                 throw new IllegalStateException("Retention cleanup service can only be started once.");
             }
 
-            this.worker = Thread.ofPlatform()
-                .name("kansokusha-retention-cleanup")
-                .unstarted(this::runLoop);
+            this.executor = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform()
+                    .name("kansokusha-retention-cleanup")
+                    .factory()
+            );
             this.state = State.RUNNING;
-            this.worker.start();
+            this.executor.scheduleWithFixedDelay(
+                this::runPass,
+                0,
+                this.intervalMillis,
+                TimeUnit.MILLISECONDS
+            );
         }
     }
 
     @Override
     public void close() {
-        final Thread threadToJoin;
+        final ScheduledExecutorService executorToClose;
         synchronized (this.lifecycleMonitor) {
             if (this.state == State.NEW) {
-                this.stopRequested = true;
                 this.state = State.STOPPED;
                 return;
             }
-            if (this.state == State.STOPPED || this.state == State.FAILED) {
-                return;
+            executorToClose = this.executor;
+            if (this.state != State.FAILED) {
+                this.state = State.STOPPING;
             }
-
-            this.stopRequested = true;
-            this.state = State.STOPPING;
-            this.lifecycleMonitor.notifyAll();
-            threadToJoin = this.worker;
         }
 
-        var interrupted = joinUninterruptibly(threadToJoin);
-        if (interrupted) {
-            Thread.currentThread().interrupt();
+        if (executorToClose != null) {
+            executorToClose.shutdown();
+            var interrupted = awaitTerminationUninterruptibly(executorToClose);
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        synchronized (this.lifecycleMonitor) {
+            if (this.state != State.FAILED) {
+                this.state = State.STOPPED;
+            }
         }
     }
 
@@ -117,77 +127,28 @@ public final class RetentionCleanupService implements AutoCloseable {
         return Optional.ofNullable(this.failureCause);
     }
 
-    private void runLoop() {
-        Throwable fatalFailure = null;
+    private void runPass() {
+        synchronized (this.lifecycleMonitor) {
+            if (this.state != State.RUNNING) {
+                return;
+            }
+        }
 
         try {
-            while (this.beginPass()) {
-                try {
-                    this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
-                } catch (SQLException | RuntimeException e) {
-                    this.reportFailure(e);
-                } catch (Error e) {
-                    this.reportFailure(e);
-                    fatalFailure = e;
-                    throw e;
-                }
-
-                if (!this.awaitNextPass()) {
-                    break;
-                }
-            }
-        } finally {
+            this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
+        } catch (SQLException | RuntimeException e) {
+            this.reportFailure(e);
+        } catch (Error e) {
+            this.reportFailure(e);
             synchronized (this.lifecycleMonitor) {
-                if (fatalFailure != null) {
-                    this.failureCause = fatalFailure;
-                    this.state = State.FAILED;
-                } else {
-                    this.state = State.STOPPED;
-                }
-                this.lifecycleMonitor.notifyAll();
-            }
-        }
-    }
-
-    private boolean beginPass() {
-        synchronized (this.lifecycleMonitor) {
-            if (this.stopRequested) {
-                return false;
-            }
-            return true;
-        }
-    }
-
-    private boolean awaitNextPass() {
-        var remainingMillis = this.intervalMillis;
-
-        while (remainingMillis > 0) {
-            var chunkMillis = Math.min(remainingMillis, MAX_WAIT_CHUNK_MILLIS);
-            var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(chunkMillis);
-
-            synchronized (this.lifecycleMonitor) {
-                while (!this.stopRequested) {
-                    var remainingNanos = deadline - System.nanoTime();
-                    if (remainingNanos <= 0) {
-                        break;
-                    }
-
-                    try {
-                        var millis = remainingNanos / 1_000_000;
-                        var nanos = (int) (remainingNanos % 1_000_000);
-                        this.lifecycleMonitor.wait(millis, nanos);
-                    } catch (InterruptedException ignored) {
-                    }
-                }
-                if (this.stopRequested) {
-                    return false;
+                this.failureCause = e;
+                this.state = State.FAILED;
+                if (this.executor != null) {
+                    this.executor.shutdown();
                 }
             }
-
-            remainingMillis -= chunkMillis;
+            throw e;
         }
-
-        return true;
     }
 
     private void reportFailure(Throwable failure) {
@@ -200,20 +161,16 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
     }
 
-    private static boolean joinUninterruptibly(@Nullable Thread thread) {
-        if (thread == null) {
-            return false;
-        }
-
+    private static boolean awaitTerminationUninterruptibly(ScheduledExecutorService executor) {
         var interrupted = false;
-        while (true) {
+        while (!executor.isTerminated()) {
             try {
-                thread.join();
-                return interrupted;
+                executor.awaitTermination(1, TimeUnit.DAYS);
             } catch (InterruptedException e) {
                 interrupted = true;
             }
         }
+        return interrupted;
     }
 
     public enum State {
