@@ -25,8 +25,7 @@ class KansokushaRuntimeTest {
     private static final Key EVENT_TYPE = Key.key("example", "runtime-test");
     private static final Key PAPER_SERVER = Key.key("example", "paper");
     private static final Key PROXY_SERVER = Key.key("example", "backend");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
+    private static final EventTypeDefinition DEFINITION = new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     @Test
     void testIndependentRuntimesPersistAndDrainOnClose(@TempDir Path dir) throws Exception {
@@ -44,23 +43,10 @@ class KansokushaRuntimeTest {
             Assertions.assertEquals(Optional.of(PAPER_SERVER), paper.api().localServerKey());
             Assertions.assertEquals(Optional.empty(), proxy.api().localServerKey());
 
-            Assertions.assertEquals(
-                RegistrationOutcome.REGISTERED,
-                paper.api().registerEventType(DEFINITION)
-            );
-            Assertions.assertEquals(
-                RegistrationOutcome.REGISTERED,
-                proxy.api().registerEventType(DEFINITION)
-            );
-
-            Assertions.assertEquals(
-                SubmissionOutcome.ACCEPTED,
-                paper.api().submit(submission(PAPER_SERVER, 1))
-            );
-            Assertions.assertEquals(
-                SubmissionOutcome.ACCEPTED,
-                proxy.api().submit(submission(PROXY_SERVER, 2))
-            );
+            Assertions.assertEquals(RegistrationOutcome.REGISTERED, paper.api().registerEventType(DEFINITION));
+            Assertions.assertEquals(RegistrationOutcome.REGISTERED, proxy.api().registerEventType(DEFINITION));
+            Assertions.assertEquals(SubmissionOutcome.ACCEPTED, paper.api().submit(submission(PAPER_SERVER, 1)));
+            Assertions.assertEquals(SubmissionOutcome.ACCEPTED, proxy.api().submit(submission(PROXY_SERVER, 2)));
         }
 
         Assertions.assertTrue(failures.isEmpty(), failures::toString);
