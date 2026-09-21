@@ -4,7 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
-import net.okocraft.kansokusha.paper.api.PaperKansokushaApiProvider;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
