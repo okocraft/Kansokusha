@@ -59,7 +59,7 @@ class DuckDbMigrationRunnerTest {
         var eventV2 = DuckDbMigration.of(
             2,
             "event_fixture_v2",
-            "ALTER TABLE fixture_events ADD COLUMN generation INTEGER DEFAULT 1 NOT NULL"
+            "ALTER TABLE fixture_events ADD COLUMN generation INTEGER DEFAULT 1"
         );
         var filepath = dir.resolve("event-fixture-upgrade.duckdb");
 
