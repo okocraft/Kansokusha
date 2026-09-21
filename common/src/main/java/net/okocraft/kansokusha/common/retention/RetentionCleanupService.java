@@ -9,7 +9,6 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,8 +25,6 @@ public final class RetentionCleanupService implements AutoCloseable {
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
-    @Nullable
-    private volatile Throwable failureCause;
     @Nullable
     private ScheduledExecutorService executor;
 
@@ -97,10 +94,12 @@ public final class RetentionCleanupService implements AutoCloseable {
                 this.state = State.STOPPED;
                 return;
             }
-            executorToClose = this.executor;
-            if (this.state != State.FAILED) {
-                this.state = State.STOPPING;
+            if (this.state == State.STOPPED) {
+                return;
             }
+
+            executorToClose = this.executor;
+            this.state = State.STOPPING;
         }
 
         if (executorToClose != null) {
@@ -112,18 +111,12 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
 
         synchronized (this.lifecycleMonitor) {
-            if (this.state != State.FAILED) {
-                this.state = State.STOPPED;
-            }
+            this.state = State.STOPPED;
         }
     }
 
     public State state() {
         return this.state;
-    }
-
-    public Optional<Throwable> failureCause() {
-        return Optional.ofNullable(this.failureCause);
     }
 
     private void runPass() {
@@ -135,18 +128,8 @@ public final class RetentionCleanupService implements AutoCloseable {
 
         try {
             this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
-        } catch (SQLException | RuntimeException e) {
+        } catch (SQLException | RuntimeException | Error e) {
             this.reportFailure(e);
-        } catch (Error e) {
-            this.reportFailure(e);
-            synchronized (this.lifecycleMonitor) {
-                this.failureCause = e;
-                this.state = State.FAILED;
-                if (this.executor != null) {
-                    this.executor.shutdown();
-                }
-            }
-            throw e;
         }
     }
 
@@ -182,7 +165,6 @@ public final class RetentionCleanupService implements AutoCloseable {
         NEW,
         RUNNING,
         STOPPING,
-        STOPPED,
-        FAILED
+        STOPPED
     }
 }
