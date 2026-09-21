@@ -22,7 +22,6 @@ class RetentionCleanupServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-09-21T00:00:00Z");
     private static final Duration INTERVAL = Duration.ofMinutes(1);
-
     @Test
     void testStartSchedulesImmediateFixedDelayPass() throws Exception {
         var executor = executor();
@@ -48,7 +47,6 @@ class RetentionCleanupServiceTest {
         Mockito.verify(executor).shutdown();
         Mockito.verify(executor).awaitTermination(Mockito.anyLong(), Mockito.eq(TimeUnit.DAYS));
     }
-
     @Test
     void testCleanupFailuresAreReportedAndNextPassStillRuns() throws Exception {
         for (var expected : List.<Throwable>of(
@@ -83,7 +81,6 @@ class RetentionCleanupServiceTest {
             service.close();
         }
     }
-
     @Test
     void testVirtualMachineErrorStopsSchedulingAndIsRethrown() throws Exception {
         var executor = executor();
@@ -102,7 +99,6 @@ class RetentionCleanupServiceTest {
         service.close();
         Assertions.assertEquals(RetentionCleanupService.State.FAILED, service.state());
     }
-
     @Test
     void testCloseFromCleanupReporterDoesNotAwaitOwnTermination() throws Exception {
         var executor = executor();
@@ -131,7 +127,6 @@ class RetentionCleanupServiceTest {
         Mockito.verify(executor, Mockito.never())
             .awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class));
     }
-
     @Test
     void testInvalidSettingsAreRejected() {
         RetentionCleaner cleaner = (cutoff, bound) -> 0;
@@ -147,13 +142,11 @@ class RetentionCleanupServiceTest {
             service(cleaner, failure -> { }, INTERVAL, 0, executor)
         );
     }
-
     private static ScheduledExecutorService executor() throws InterruptedException {
         var executor = Mockito.mock(ScheduledExecutorService.class);
         Mockito.when(executor.awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class))).thenReturn(true);
         return executor;
     }
-
     private static Runnable scheduledTask(
         RetentionCleanupService service, ScheduledExecutorService executor, Duration interval
     ) {
@@ -164,7 +157,6 @@ class RetentionCleanupServiceTest {
         );
         return task.getValue();
     }
-
     private static RetentionCleanupService service(
         RetentionCleaner cleaner, RetentionCleanupService.CleanupFailureReporter reporter,
         Duration interval, int maxRowsPerPass, ScheduledExecutorService executor
