@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.common.retention;
 
-import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.storage.RetentionCleaner;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -19,11 +18,8 @@ import java.util.concurrent.TimeUnit;
 @NotNullByDefault
 public final class RetentionCleanupService implements AutoCloseable {
 
-    private static final String FAILURE_MESSAGE =
-        "Kansokusha retention cleanup failed; automatic expiry deletion will retry on the next scheduled pass.";
-
     private final RetentionCleaner cleaner;
-    private final AdministratorReporter failureReporter;
+    private final RetentionCleanupFailureReporter failureReporter;
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
@@ -37,7 +33,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     public RetentionCleanupService(
         RetentionCleaner cleaner,
-        AdministratorReporter failureReporter,
+        RetentionCleanupFailureReporter failureReporter,
         Duration interval,
         int maxRowsPerPass
     ) {
@@ -46,7 +42,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     RetentionCleanupService(
         RetentionCleaner cleaner,
-        AdministratorReporter failureReporter,
+        RetentionCleanupFailureReporter failureReporter,
         Duration interval,
         int maxRowsPerPass,
         Clock clock
@@ -156,7 +152,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     private void reportFailure(Throwable failure) {
         try {
-            this.failureReporter.report(FAILURE_MESSAGE, failure);
+            this.failureReporter.report(failure);
         } catch (Throwable reportingFailure) {
             if (reportingFailure != failure) {
                 failure.addSuppressed(reportingFailure);
