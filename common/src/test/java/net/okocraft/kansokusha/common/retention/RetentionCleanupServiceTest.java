@@ -155,9 +155,7 @@ class RetentionCleanupServiceTest {
     }
 
     private static Runnable scheduledTask(
-        RetentionCleanupService service,
-        ScheduledExecutorService executor,
-        Duration interval
+        RetentionCleanupService service, ScheduledExecutorService executor, Duration interval
     ) {
         var task = ArgumentCaptor.forClass(Runnable.class);
         service.start();
@@ -168,11 +166,8 @@ class RetentionCleanupServiceTest {
     }
 
     private static RetentionCleanupService service(
-        RetentionCleaner cleaner,
-        RetentionCleanupService.CleanupFailureReporter reporter,
-        Duration interval,
-        int maxRowsPerPass,
-        ScheduledExecutorService executor
+        RetentionCleaner cleaner, RetentionCleanupService.CleanupFailureReporter reporter,
+        Duration interval, int maxRowsPerPass, ScheduledExecutorService executor
     ) {
         return new RetentionCleanupService(
             cleaner, reporter, interval, maxRowsPerPass, Clock.fixed(NOW, ZoneOffset.UTC), executor
