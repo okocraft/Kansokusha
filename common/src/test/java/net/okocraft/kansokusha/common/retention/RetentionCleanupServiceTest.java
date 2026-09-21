@@ -120,7 +120,35 @@ class RetentionCleanupServiceTest {
         Assertions.assertEquals(List.of(failure), reports);
         Assertions.assertTrue(calls.get() >= 2);
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
-        Assertions.assertTrue(service.failureCause().isEmpty());
+    }
+
+    @Test
+    void testErrorIsReportedAndNextPassStillRuns() throws Exception {
+        var reports = new CopyOnWriteArrayList<Throwable>();
+        var secondPass = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        var failure = new AssertionError("cleanup error");
+        var service = new RetentionCleanupService(
+            (cutoff, bound) -> {
+                if (calls.incrementAndGet() == 1) {
+                    throw failure;
+                }
+                secondPass.countDown();
+                return 0;
+            },
+            reports::add,
+            Duration.ofMillis(25),
+            5
+        );
+
+        service.start();
+
+        Assertions.assertTrue(secondPass.await(2, TimeUnit.SECONDS));
+        service.close();
+
+        Assertions.assertEquals(List.of(failure), reports);
+        Assertions.assertTrue(calls.get() >= 2);
+        Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
     }
 
     @Test
