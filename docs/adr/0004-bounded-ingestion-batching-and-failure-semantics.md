@@ -101,25 +101,13 @@ v1 は automatic writer recovery、unbounded retry queue、exponential backoff�
 
 batch persistence が失敗した場合、pipeline は最初の failure cause を保持して terminal `FAILED` state へ遷移する。
 
-failure transition 後は次を行う。
+failure transition 後は新しい submission を `INGESTION_UNAVAILABLE` とし、失敗した batch と queue 内の accepted event を再試行せず failed-to-persist とする。writer は persistence loop を終了し、最初の failure cause を保持して administrator-visible reporting port へ1回だけ通知する。
 
-- 新しい submission は `INGESTION_UNAVAILABLE` とする。
-- 失敗した batch は成功扱いせず、再 enqueue しない。
-- queue に残っている accepted event は failed-to-persist とし、再試行のため保持し続けない。
-- writer は通常の batch persistence loop を終了する。
-- 最初の failure cause を administrator-visible reporting port へ1回通知する。
-
-同じ terminal failure に対して event ごと、poll ごと、shutdown ごとに同じ error を繰り返し report しない。
-
-runtime state は少なくとも `RUNNING`, `DRAINING`, `FAILED`, `CLOSED` を区別し、`FAILED` では最初の failure cause を inspection 可能にする。これは event ごとの durability receipt ではなく、runtime が現在 ingestion 不能であることを表す health state である。
+runtime state は `RUNNING`, `DRAINING`, `FAILED`, `CLOSED` を区別し、`FAILED` では最初の failure cause を inspection 可能にする。
 
 ### 6. administrator-visible reporting は platform-neutral port とする
 
-common runtime は storage / pipeline failure を受け取る platform-neutral reporting port を持つ。
-
-port は exception と operation context を受け取り、Paper / Folia / Velocity adapter が server logger 等へ接続する。common code は platform logger type に依存しない。
-
-reporting port 自体が exception を投げても original pipeline failure を置き換えない。reporting failure は可能な範囲で secondary failure として扱い、writer を再開しない。
+common runtime は storage / pipeline failure を受け取る platform-neutral reporting port を持ち、Paper / Folia / Velocity adapter が logger 等へ接続する。reporting failure は original pipeline failure を置き換えず、writer の再開理由にもならない。
 
 ### 7. lifecycle transition と submission outcome を明確に分ける
 
@@ -147,7 +135,6 @@ public API 自体が閉じている場合は ADR-0001 の `CLOSED` を優先す�
 
 queue saturation は terminal state transition を起こさない。capacity が空けば後続 submission は再び `ACCEPTED` になり得る。
 
-`RUNNING -> DRAINING` / `FAILED` transition は section 1 の intake admission と同じ linearization order に参加する。transition が完了した時点で、それより後に新たな ownership transfer が成立しないことを lifecycle invariant とする。
 
 ### 8. normal shutdown は intake を先に閉じ、その後 accepted event を drain する
 
@@ -159,21 +146,13 @@ queue saturation は terminal state transition を起こさない。capacity が
 4. writer が終了した後に storage resource を閉じる。
 5. runtime を `CLOSED` にする。
 
-shutdown drain 中の storage failure は通常運用中と同じ `FAILED` transition と reporting semantics を使用する。失敗を success として扱わない。
+v1 は shutdown timeout を設けず、正常停止では drain 完了まで lifecycle / shutdown context が待機する。drain 中の storage failure は `FAILED` とする。この待機は submission path では行わない。
 
-v1 は shutdown timeout を設けない。正常停止では writer が queue と partial batch の drain を完了して終了するまで lifecycle / shutdown context が待機し、その後にだけ storage resource を閉じる。storage failure が発生した場合は通常どおり `FAILED` へ遷移して writer を終了させ、その終了後に storage resource を閉じる。
-
-この待機は event-recording caller thread の submission path では行わない。JVM 強制終了や process termination により正常停止 sequence 自体が完了しない場合は、この drain guarantee の対象外とする。
-
-JVM crash、OS crash、強制終了では queue または writer batch の未永続化 event が失われ得る。これは §13 の許容範囲であり、`ACCEPTED` は crash durability を意味しない。
+JVM crash、OS crash、強制終了では未永続化 event が失われ得るため、`ACCEPTED` は crash durability を意味しない。
 
 ### 9. storage access は runtime 内で serialized ownership を維持する
 
-event writer は dedicated worker から storage operation を実行する。
-
-retention cleanup 等の別 background storage operation は ADR-0003 のとおり recording caller thread では動かさず、database の serialized storage ownership mechanism を通す。cleanup と event batch write が同時に同一 connection を操作しないようにする。
-
-caller thread が queue offer 後に database lock の取得を待つ設計は採用しない。
+writer と cleanup を含む storage operation は同一の serialized ownership mechanism を通し、submission path はその ownership 待ちを行わない。
 
 ## 状態の意味
 
@@ -190,11 +169,11 @@ v1 public API は persisted / failed-to-persist を event ごとに問い合わ�
 
 ### unbounded queue
 
-一時的な writer 遅延を吸収しやすいが、§12 の有限メモリ要件を満たさないため採用しない。
+§12 の有限メモリ要件を満たさないため採用しない。
 
 ### caller を queue capacity が空くまで block する
 
-event loss は減るが、game-processing thread が writer / storage の進行を待つ可能性があるため採用しない。v1 は saturation を `INGESTION_UNAVAILABLE` として明示する。
+game-processing thread が writer / storage の進行を待ち得るため採用せず、saturation は `INGESTION_UNAVAILABLE` とする。
 
 ### retention resolution を writer dequeue 後まで遅延する
 
@@ -202,7 +181,7 @@ caller-side work は減るが、accepted event が queue 待機中の configurat
 
 ### event ごとの Future を返す
 
-永続化結果を精密に伝えられるが、caller の待機を誘発し、未完了 future の lifecycle と memory ownership を増やすため v1 では採用しない。
+caller の待機と未完了 future の lifecycle / memory ownership を増やすため v1 では採用しない。
 
 ### storage failure 後に同じ batch を無期限 retry する
 
@@ -210,7 +189,7 @@ caller-side work は減るが、accepted event が queue 待機中の configurat
 
 ### failure 後も新しい event を queue に受け続ける
 
-memory は queue capacity で有限でも、永続化見込みのない event に `ACCEPTED` を返し続けることになるため採用しない。
+永続化見込みのない event に `ACCEPTED` を返すため採用しない。
 
 ## 結果
 
