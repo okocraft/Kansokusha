@@ -119,7 +119,7 @@ field order:
 
 #### Granularity
 
-LOWEST snapshot が存在し、MONITOR で non-cancelled と確認できた `BlockBreakEvent` 1件につき1 row を submit する。MONITOR 到達後の vanilla destroy 成功を row の意味には含めない。
+LOWEST snapshot が存在し、MONITOR で non-cancelled と確認できた `BlockBreakEvent` 1件につき1つの `EventSubmission` を生成して `KansokushaApi.submit` を試行する。`ACCEPTED` 以降の persistence semantics は ADR-0004 に従い、MONITOR 到達後の vanilla destroy 成功を event の意味には含めない。
 
 item drops、experience、tool durability などの副作用はこの event の payload に含めない。
 
@@ -168,7 +168,7 @@ field order:
 
 #### Granularity
 
-通常の `BlockPlaceEvent` は1 changed block = 1 row とする。
+通常の `BlockPlaceEvent` は1 changed block につき1つの `EventSubmission` を生成して `KansokushaApi.submit` を試行する。
 
 `BlockMultiPlaceEvent` は event 全体を1 submission にまとめず、LOWEST で snapshot した replaced-state list の各 changed block について厳密に1つの `EventSubmission` を生成し、それぞれ `KansokushaApi.submit` を試行する。replaced-state list が N blocks なら厳密に N submissions を生成・試行し、base `BlockPlaceEvent` 分の追加 submission を作らない。
 
@@ -221,7 +221,7 @@ address、IP、player username は generation 1 payload に含めない。
 
 #### Granularity
 
-successful `ServerConnectedEvent` 1件につき1 row を submitする。初回 backend connection と backend 間 switch の両方を同じ event type で記録する。
+successful `ServerConnectedEvent` 1件につき1つの `EventSubmission` を生成して `KansokushaApi.submit` を試行する。acceptance / persistence semantics は ADR-0004 に従う。初回 backend connection と backend 間 switch の両方を同じ event type で記録する。
 
 #### Coalescing
 
