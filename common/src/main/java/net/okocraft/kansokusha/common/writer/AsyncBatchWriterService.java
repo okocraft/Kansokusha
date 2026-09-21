@@ -216,7 +216,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         synchronized (this.lifecycleMonitor) {
             currentWorker = this.worker;
         }
-        if (currentWorker != null) {
+        if (currentWorker != null && currentWorker != Thread.currentThread()) {
             currentWorker.join();
         }
     }
