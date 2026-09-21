@@ -1,7 +1,10 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.bundling.Jar
 import xyz.jpenilla.runpaper.task.RunServer
+import java.net.URLClassLoader
 import java.nio.file.Files
+import java.sql.Driver
+import java.util.Properties
 import java.util.zip.ZipFile
 
 plugins {
@@ -110,7 +113,7 @@ tasks {
             }
 
             val packagedJar = paperShadowJar.get().archiveFile.get().asFile
-            java.net.URLClassLoader(
+            URLClassLoader(
                 arrayOf(packagedJar.toURI().toURL()),
                 ClassLoader.getPlatformClassLoader()
             ).use { loader ->
@@ -120,7 +123,7 @@ tasks {
                     .newInstance() as java.sql.Driver
                 driver.connect(
                     "jdbc:duckdb:" + database.absolutePath,
-                    java.util.Properties()
+                    Properties()
                 ).use { connection ->
                     connection.prepareStatement(
                         """
