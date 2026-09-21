@@ -237,6 +237,27 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
+    void testErrorFailureIsRecordedBeforeWorkerRethrows() throws Exception {
+        var intake = intake(1);
+        submit(intake, 1);
+        var failure = new AssertionError("fatal writer failure");
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                throw failure;
+            },
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        service.awaitStopped();
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
+        Assertions.assertSame(failure, service.failureCause().orElseThrow());
+    }
+
+    @Test
     void testInvalidBatchSettingsAreRejected() {
         var intake = intake(1);
 
