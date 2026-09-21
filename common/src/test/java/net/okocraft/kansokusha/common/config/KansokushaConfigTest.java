@@ -28,6 +28,8 @@ class KansokushaConfigTest {
                     - event-type: example:block_break
                       policy: example:audit
                   fallback-policy: example:short
+                  cleanup-interval: PT5M
+                  max-rows-per-pass: 250
                 """
         );
 
@@ -51,6 +53,10 @@ class KansokushaConfigTest {
             retention.eventTypeMappings().get(Key.key("example", "block_break"))
         );
         Assertions.assertEquals(Key.key("example", "short"), retention.fallbackPolicy());
+
+        var cleanup = config.retentionCleanupSettings();
+        Assertions.assertEquals(Duration.ofMinutes(5), cleanup.interval());
+        Assertions.assertEquals(250, cleanup.maxRowsPerPass());
     }
 
     @Test
@@ -141,6 +147,49 @@ class KansokushaConfigTest {
     }
 
     @Test
+    void testInvalidCleanupSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
+        assertInvalid(
+            dir.resolve("cleanup-duration"),
+            """
+                retention:
+                  policies:
+                    - key: example:fallback
+                      duration: PT1H
+                  fallback-policy: example:fallback
+                  cleanup-interval: PT0S
+                  max-rows-per-pass: 10
+                """,
+            "retention.cleanup-interval must be positive"
+        );
+        assertInvalid(
+            dir.resolve("cleanup-fractional"),
+            """
+                retention:
+                  policies:
+                    - key: example:fallback
+                      duration: PT1H
+                  fallback-policy: example:fallback
+                  cleanup-interval: PT0.000000001S
+                  max-rows-per-pass: 10
+                """,
+            "retention.cleanup-interval must resolve to whole milliseconds"
+        );
+        assertInvalid(
+            dir.resolve("cleanup-bound"),
+            """
+                retention:
+                  policies:
+                    - key: example:fallback
+                      duration: PT1H
+                  fallback-policy: example:fallback
+                  cleanup-interval: PT1M
+                  max-rows-per-pass: 0
+                """,
+            "retention.max-rows-per-pass must be positive"
+        );
+    }
+
+    @Test
     void testMalformedKeysAndDurationsFailWithActionableMessages(@TempDir Path dir) throws Exception {
         assertInvalid(
             dir.resolve("policy-key"),
@@ -215,6 +264,8 @@ class KansokushaConfigTest {
                 - key: example:fallback
                   duration: %s
               fallback-policy: %s
+              cleanup-interval: PT5M
+              max-rows-per-pass: 100
             """.formatted(duration, fallback);
     }
 
