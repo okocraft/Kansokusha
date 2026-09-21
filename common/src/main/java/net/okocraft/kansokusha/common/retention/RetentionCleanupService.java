@@ -22,7 +22,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
-    private final CleanupScheduler scheduler;
+    private final ScheduledExecutorService executor;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
@@ -35,7 +35,16 @@ public final class RetentionCleanupService implements AutoCloseable {
         Duration interval,
         int maxRowsPerPass
     ) {
-        this(cleaner, failureReporter, interval, maxRowsPerPass, Clock.systemUTC(), new ExecutorCleanupScheduler());
+        this(
+            cleaner,
+            failureReporter,
+            interval,
+            maxRowsPerPass,
+            Clock.systemUTC(),
+            Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().name("kansokusha-retention-cleanup").factory()
+            )
+        );
     }
 
     RetentionCleanupService(
@@ -44,7 +53,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         Duration interval,
         int maxRowsPerPass,
         Clock clock,
-        CleanupScheduler scheduler
+        ScheduledExecutorService executor
     ) {
         this.cleaner = Objects.requireNonNull(cleaner, "cleaner");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
@@ -65,7 +74,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
         this.maxRowsPerPass = maxRowsPerPass;
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.executor = Objects.requireNonNull(executor, "executor");
     }
 
     public void start() {
@@ -75,7 +84,12 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
 
             this.state = State.RUNNING;
-            this.scheduler.scheduleWithFixedDelay(this::runPass, 0, this.intervalMillis);
+            this.executor.scheduleWithFixedDelay(
+                this::runPass,
+                0,
+                this.intervalMillis,
+                TimeUnit.MILLISECONDS
+            );
         }
     }
 
@@ -95,14 +109,14 @@ public final class RetentionCleanupService implements AutoCloseable {
                 this.state = State.STOPPING;
             }
             calledFromCleanupThread = Thread.currentThread() == this.cleanupThread;
-            this.scheduler.shutdown();
+            this.executor.shutdown();
         }
 
         if (calledFromCleanupThread) {
             return;
         }
 
-        var interrupted = awaitTerminationUninterruptibly(this.scheduler);
+        var interrupted = awaitTerminationUninterruptibly(this.executor);
         synchronized (this.lifecycleMonitor) {
             if (this.state != State.FAILED) {
                 this.state = State.STOPPED;
@@ -130,7 +144,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         } catch (SQLException | RuntimeException | AssertionError e) {
             this.reportFailure(e);
         } catch (Error e) {
-            this.failFatally(e);
+            this.failFatally();
             throw e;
         } finally {
             synchronized (this.lifecycleMonitor) {
@@ -146,7 +160,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         try {
             this.failureReporter.report(failure);
         } catch (VirtualMachineError | LinkageError | ThreadDeath fatalReportingFailure) {
-            this.failFatally(fatalReportingFailure);
+            this.failFatally();
             throw fatalReportingFailure;
         } catch (Throwable reportingFailure) {
             if (reportingFailure != failure) {
@@ -155,18 +169,18 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
     }
 
-    private void failFatally(Error failure) {
+    private void failFatally() {
         synchronized (this.lifecycleMonitor) {
             this.state = State.FAILED;
-            this.scheduler.shutdown();
+            this.executor.shutdown();
         }
     }
 
-    private static boolean awaitTerminationUninterruptibly(CleanupScheduler scheduler) {
+    private static boolean awaitTerminationUninterruptibly(ScheduledExecutorService executor) {
         var interrupted = false;
         while (true) {
             try {
-                if (scheduler.awaitTermination(1, TimeUnit.DAYS)) {
+                if (executor.awaitTermination(1, TimeUnit.DAYS)) {
                     return interrupted;
                 }
             } catch (InterruptedException e) {
@@ -179,44 +193,6 @@ public final class RetentionCleanupService implements AutoCloseable {
     public interface CleanupFailureReporter {
 
         void report(Throwable failure);
-    }
-
-    interface CleanupScheduler {
-
-        void scheduleWithFixedDelay(Runnable task, long initialDelayMillis, long delayMillis);
-
-        void shutdown();
-
-        boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
-    }
-
-    private static final class ExecutorCleanupScheduler implements CleanupScheduler {
-
-        private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
-            Thread.ofPlatform()
-                .name("kansokusha-retention-cleanup")
-                .factory()
-        );
-
-        @Override
-        public void scheduleWithFixedDelay(Runnable task, long initialDelayMillis, long delayMillis) {
-            this.executor.scheduleWithFixedDelay(
-                task,
-                initialDelayMillis,
-                delayMillis,
-                TimeUnit.MILLISECONDS
-            );
-        }
-
-        @Override
-        public void shutdown() {
-            this.executor.shutdown();
-        }
-
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-            return this.executor.awaitTermination(timeout, unit);
-        }
     }
 
     public enum State {
