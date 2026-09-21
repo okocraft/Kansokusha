@@ -134,10 +134,11 @@ public final class KansokushaRuntime implements AutoCloseable {
         if (this.closed) {
             return State.CLOSED;
         }
-        if (this.writer.state() == AsyncBatchWriterService.State.FAILED) {
-            return State.FAILED;
-        }
-        return this.closeStarted.get() ? State.DRAINING : State.RUNNING;
+        return switch (this.writer.state()) {
+            case FAILED -> State.FAILED;
+            case DRAINING, STOPPING, STOPPED -> State.DRAINING;
+            case NEW, RUNNING -> State.RUNNING;
+        };
     }
 
     public Optional<Throwable> failureCause() {
@@ -150,6 +151,7 @@ public final class KansokushaRuntime implements AutoCloseable {
             return;
         }
 
+        this.writer.beginDraining();
         this.api.close();
 
         Throwable failure = null;
