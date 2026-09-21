@@ -128,6 +128,16 @@ class RetentionCleanupServiceTest {
             .awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class));
     }
     @Test
+    void testCloseBeforeStartShutsDownOwnedExecutor() {
+        var executor = Mockito.mock(ScheduledExecutorService.class);
+        var service = service((cutoff, bound) -> 0, failure -> { }, INTERVAL, 1, executor);
+
+        service.close();
+
+        Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
+        Mockito.verify(executor).shutdown();
+    }
+    @Test
     void testInvalidSettingsAreRejected() {
         RetentionCleaner cleaner = (cutoff, bound) -> 0;
         var executor = Mockito.mock(ScheduledExecutorService.class);
