@@ -35,7 +35,7 @@ class RetentionCleanupServiceTest {
                 pass.countDown();
                 return 0;
             },
-            failure -> Assertions.fail(failure),
+            (message, failure) -> Assertions.fail(message, failure),
             Duration.ofHours(1),
             37,
             Clock.fixed(NOW, ZoneOffset.UTC)
@@ -73,7 +73,7 @@ class RetentionCleanupServiceTest {
                 }
                 return 0;
             },
-            failure -> Assertions.fail(failure),
+            (message, failure) -> Assertions.fail(message, failure),
             Duration.ofMillis(150),
             10
         );
@@ -95,6 +95,7 @@ class RetentionCleanupServiceTest {
     @Test
     void testCleanupFailureIsReportedAndNextPassStillRuns() throws Exception {
         var reports = new CopyOnWriteArrayList<Throwable>();
+        var messages = new CopyOnWriteArrayList<String>();
         var secondPass = new CountDownLatch(1);
         var calls = new AtomicInteger();
         var failure = new SQLException("cleanup failed");
@@ -107,7 +108,10 @@ class RetentionCleanupServiceTest {
         };
         var service = new RetentionCleanupService(
             cleaner,
-            reports::add,
+            (message, failure) -> {
+                messages.add(message);
+                reports.add(failure);
+            },
             Duration.ofMillis(25),
             5
         );
@@ -117,6 +121,10 @@ class RetentionCleanupServiceTest {
         Assertions.assertTrue(secondPass.await(2, TimeUnit.SECONDS));
         service.close();
 
+        Assertions.assertEquals(
+            List.of("Kansokusha retention cleanup failed; automatic expiry deletion will retry on the next scheduled pass."),
+            messages
+        );
         Assertions.assertEquals(List.of(failure), reports);
         Assertions.assertTrue(calls.get() >= 2);
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
@@ -139,7 +147,7 @@ class RetentionCleanupServiceTest {
                 }
                 return 0;
             },
-            failure -> Assertions.fail(failure),
+            (message, failure) -> Assertions.fail(message, failure),
             Duration.ofMillis(1),
             5
         );
@@ -166,17 +174,17 @@ class RetentionCleanupServiceTest {
 
         Assertions.assertThrows(
             IllegalArgumentException.class,
-            () -> new RetentionCleanupService(cleaner, failure -> {
+            () -> new RetentionCleanupService(cleaner, (message, failure) -> {
             }, Duration.ZERO, 1)
         );
         Assertions.assertThrows(
             IllegalArgumentException.class,
-            () -> new RetentionCleanupService(cleaner, failure -> {
+            () -> new RetentionCleanupService(cleaner, (message, failure) -> {
             }, Duration.ofNanos(1), 1)
         );
         Assertions.assertThrows(
             IllegalArgumentException.class,
-            () -> new RetentionCleanupService(cleaner, failure -> {
+            () -> new RetentionCleanupService(cleaner, (message, failure) -> {
             }, Duration.ofSeconds(1), 0)
         );
     }
