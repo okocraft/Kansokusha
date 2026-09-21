@@ -47,7 +47,34 @@ class PaperRuntimeLifecycleTest {
         shutdownOrder.verify(runtime).close();
 
         lifecycle.close();
+        Mockito.verify(runtime, Mockito.times(2)).api();
         Mockito.verifyNoMoreInteractions(runtime);
+    }
+
+    @Test
+    void testPublicationFailureClosesStartedRuntime(@TempDir Path dir) throws Exception {
+        var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
+        var reporter = Mockito.mock(AdministratorReporter.class);
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
+        var failure = new IllegalStateException("already published");
+        Mockito.doThrow(failure).when(publication).publish(api);
+
+        var lifecycle = new PaperRuntimeLifecycle(
+            dir,
+            SERVER_KEY,
+            reporter,
+            (dataDirectory, serverKey, actualReporter) -> runtime,
+            publication
+        );
+
+        Assertions.assertSame(
+            failure,
+            Assertions.assertThrows(IllegalStateException.class, lifecycle::start)
+        );
+        Mockito.verify(runtime).close();
+        Assertions.assertNull(lifecycle.runtime());
     }
 
     @Test
