@@ -73,9 +73,11 @@ public final class DefaultKansokushaApi implements KansokushaApi, AutoCloseable 
         if (!definition.payloadGeneration().equals(submission.payloadGeneration())) {
             return SubmissionOutcome.PAYLOAD_GENERATION_MISMATCH;
         }
-        return this.intake.accept(submission)
-            ? SubmissionOutcome.ACCEPTED
-            : SubmissionOutcome.INGESTION_UNAVAILABLE;
+        return switch (this.intake.accept(submission)) {
+            case ACCEPTED -> SubmissionOutcome.ACCEPTED;
+            case UNAVAILABLE -> SubmissionOutcome.INGESTION_UNAVAILABLE;
+            case CLOSED -> SubmissionOutcome.CLOSED;
+        };
     }
 
     @Override
