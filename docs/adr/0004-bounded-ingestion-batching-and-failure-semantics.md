@@ -26,11 +26,7 @@ ADR-0002 は metadata resolution と event batch write を1 transaction にま�
 
 ### 1. recording path は in-memory resolution と bounded queue への non-blocking offer だけを行う
 
-runtime は正の有限 capacity を持つ thread-safe な intake queue を1つ持つ。
-
-`submit` の caller thread では、runtime registration と payload generation の検証後、ADR-0003 の retention policy resolution と absolute expiry 計算を行い、storage-facing `AcceptedEvent` を作る。これらは immutable configuration と event value に対する in-memory 計算だけとし、DuckDB access を含めない。
-
-resolved event は queue へ non-blocking に渡す。queue への追加は待機型 `put` ではなく `offer` 相当とし、storage transaction、persistent metadata lookup、batch flush 完了を待たない。
+runtime は正の有限 capacity を持つ thread-safe な intake queue を1つ持つ。caller thread は registration / payload generation の検証後、ADR-0003 の retention policy と absolute expiry を in-memory で解決して `AcceptedEvent` を作り、`offer` 相当で non-blocking に queue へ渡す。DuckDB access、persistent metadata lookup、batch flush 完了は待たない。
 
 intake admission は「pipeline が `RUNNING` であることの判定」と「event ownership の queue への移転」を1つの論理操作として扱い、`RUNNING -> DRAINING` および `RUNNING -> FAILED` transition と線形化しなければならない。実装は lock、atomic state、queue close protocol 等の具体手段を自由に選べるが、次の保証を満たす。
 
@@ -40,27 +36,13 @@ intake admission は「pipeline が `RUNNING` であることの判定」と「e
 
 したがって、`DRAINING` または `FAILED` transition の完了後に新しい event が queue ownership を取得することはない。
 
-結果は次のように扱う。
+submission outcome は、ownership transfer 成功を `ACCEPTED`、queue saturation・writer failure・event-specific retention resolution failure を `INGESTION_UNAVAILABLE`、shutdown 後を `CLOSED` とする。retention resolution failure はその submission だけを拒否し、pipeline 全体を terminal failure にしない。
 
-- retention resolution が成功し queue が ownership を受け取った場合: `ACCEPTED`
-- queue が満杯の場合: `INGESTION_UNAVAILABLE`
-- writer failure により ingestion が利用不能の場合: `INGESTION_UNAVAILABLE`
-- event-specific な retention resolution が完了できず ownership を取得しない場合: `INGESTION_UNAVAILABLE`
-- shutdown により intake が閉じている場合: `CLOSED`
-
-retention resolution failure はその submission の acceptance failure であり、pipeline 全体を terminal failure にしない。valid configuration 自体を構築できない場合は runtime startup / reload の configuration failure として別に扱う。
-
-`ACCEPTED` は queue に追加された時点で返し、event が後で storage failure により永続化されない可能性を含む。
-
-queue capacity は runtime startup 前に validation し、正の有限整数でなければ runtime を active にしない。
+`ACCEPTED` は永続化完了を意味しない。queue capacity は startup 前に正の有限整数として validation する。
 
 ### 2. queue は resolved AcceptedEvent を保持し、persistent metadata resolution は writer 側に残す
 
-intake queue は ADR-0003 に従って policy identity と absolute `expiresAt` が固定済みの `AcceptedEvent` を保持する。
-
-これにより、configuration reload が queue 待機中に発生しても、既に accepted 済み event の retention decision は後から変化しない。
-
-一方、persistent event type / payload generation / server / world / retention policy の compact ID 解決と DuckDB write は caller thread へ移さない。これらは dedicated writer context から storage operation を呼び出した transaction 内で行う。
+intake queue は ADR-0003 に従って policy identity と absolute `expiresAt` が固定済みの `AcceptedEvent` を保持し、queue 待機中の configuration reload で retention decision が変化しないようにする。persistent metadata ID の解決と DuckDB write は dedicated writer context の storage transaction に残す。
 
 ### 3. dedicated single consumer が batch を所有する
 
@@ -80,13 +62,9 @@ idle 中は busy loop せず、queue wait / timed poll 等で worker を休止�
 
 ### 4. 1 batch は storage transaction 1回に対応する
 
-writer は batch を `DuckDbEventWriter.append` 相当の storage operation に1回渡す。
+writer は batch ごとに storage operation を1回実行する。ADR-0002 のとおり persistent metadata ID の find-or-create と event inserts を同じ transaction に含め、commit 後にだけ persisted とみなす。per-event persistence future / acknowledgment は保持しない。
 
-storage operation は ADR-0002 のとおり、必要な persistent metadata ID の find-or-create と event inserts を同じ transaction に含め、commit 後にだけ success を返す。
-
-batch flush 成功後、その batch の event は persisted とみなし、writer-owned collection から解放する。per-event persistence future や acknowledgment object は保持しない。
-
-これにより retained memory は概ね次で bounded になる。
+retained memory は概ね次で bounded になる。
 
 ```text
 intake queue <= queueCapacity
@@ -123,17 +101,13 @@ NEW -> RUNNING -> DRAINING -> CLOSED
         CLOSED
 ```
 
-`FAILED` には通常運用中の `RUNNING` と shutdown drain 中の `DRAINING` のどちらからも遷移し得る。
+- `NEW`: submission を受けない。
+- `RUNNING`: intake と writer persistence が有効。
+- `DRAINING`: new intake を閉じ、accepted event だけを処理する。
+- `FAILED`: `RUNNING` または `DRAINING` 中の persistence failure による terminal unavailable state。
+- `CLOSED`: lifecycle 終了。
 
-- `NEW`: queue / writer はまだ submission を受けない。
-- `RUNNING`: non-blocking intake と writer persistence が有効。
-- `DRAINING`: new intake は閉じ、既に accepted 済みの event だけを処理する。
-- `FAILED`: persistence failure 後の terminal unavailable state。
-- `CLOSED`: worker と runtime resource の lifecycle が終了した状態。
-
-public API 自体が閉じている場合は ADR-0001 の `CLOSED` を優先する。API が open でも pipeline が `FAILED` または saturation 中なら `INGESTION_UNAVAILABLE` を返す。
-
-queue saturation は terminal state transition を起こさない。capacity が空けば後続 submission は再び `ACCEPTED` になり得る。
+public API が閉じていれば ADR-0001 の `CLOSED` を優先する。queue saturation は terminal transition ではなく、capacity が空けば後続 submission を再び受理できる。
 
 
 ### 8. normal shutdown は intake を先に閉じ、その後 accepted event を drain する
@@ -163,7 +137,7 @@ writer と cleanup を含む storage operation は同一の serialized ownership
 | persisted | batch transaction が commit 済み |
 | failed-to-persist | accepted 後、storage failure または terminal failure transition により永続化されなかった |
 
-v1 public API は persisted / failed-to-persist を event ごとに問い合わせる receipt API を提供しない。管理者には runtime failure state と reporting port で記録不能を知らせる。
+v1 public API は event ごとの persistence receipt を提供せず、記録不能は runtime failure state と reporting port で管理者へ知らせる。
 
 ## 検討した選択肢
 
@@ -193,12 +167,10 @@ caller の待機と未完了 future の lifecycle / memory ownership を増や�
 
 ## 結果
 
-- recording caller は in-memory validation / retention resolution と bounded queue への non-blocking offer だけを行い、DuckDB I/O を待たない。
-- accepted event の policy / expiry は queue 待機中の reload で変化しない。
-- queue と batch の両方に finite bound があり、writer 遅延時も retained event 数は無制限に増えない。
-- batch flush は size と delay の両方で trigger され、low-volume 時にも partial batch が残り続けない。
-- storage failure は terminal runtime state と administrator-visible report になり、silently ignored されない。
-- normal shutdown は new intake を止めた後に accepted event の drain を試みるが、crash durability は保証しない。
+- recording caller は DuckDB I/O を待たず、accepted event の retention decision は acceptance 時点で固定される。
+- queue と batch は有限で、flush は size / delay / shutdown drain により発生する。
+- storage failure は terminal `FAILED` state と administrator-visible report になり、正常停止は accepted event の drain を試みる。
+- `ACCEPTED` は crash durability を保証しない。
 
 ## 参照
 
