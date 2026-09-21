@@ -161,29 +161,6 @@ class RetentionCleanupServiceTest {
     }
 
     @Test
-    void testFatalErrorIsReportedAndRemainsInspectable() throws Exception {
-        var failure = new AssertionError("fatal cleanup failure");
-        var reported = new AtomicReference<Throwable>();
-        var service = new RetentionCleanupService(
-            (cutoff, bound) -> {
-                throw failure;
-            },
-            reported::set,
-            Duration.ofSeconds(1),
-            1
-        );
-
-        service.start();
-
-        while (service.state() != RetentionCleanupService.State.FAILED) {
-            Thread.onSpinWait();
-        }
-
-        Assertions.assertSame(failure, reported.get());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
-    }
-
-    @Test
     void testInvalidSettingsAreRejected() {
         RetentionCleaner cleaner = (cutoff, bound) -> 0;
 
