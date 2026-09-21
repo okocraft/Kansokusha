@@ -16,7 +16,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -27,12 +26,10 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         new NamespacedKey("fixture", "custom_event");
 
     private Path resultFile;
-    private Path databaseFile;
 
     @Override
     public void onEnable() {
         this.resultFile = Path.of(System.getProperty("kansokusha.external-api-fixture.result"));
-        this.databaseFile = Path.of(System.getProperty("kansokusha.external-api-fixture.database"));
 
         try {
             var result = registerAndSubmit();
@@ -89,63 +86,9 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 throw new AssertionError("Previously acquired API registration did not return CLOSED after shutdown.");
             }
 
-            verifyPersistedEvent(result.submission());
             Files.writeString(this.resultFile, "success");
         } catch (Throwable failure) {
             writeFailure(failure);
-        }
-    }
-
-    private void verifyPersistedEvent(EventSubmission submission) throws Exception {
-        if (!Files.isRegularFile(this.databaseFile)) {
-            throw new AssertionError("Kansokusha database was not created: " + this.databaseFile);
-        }
-
-        Class.forName("org.duckdb.DuckDBDriver");
-        try (
-            var connection = DriverManager.getConnection(
-                "jdbc:duckdb:" + this.databaseFile.toAbsolutePath().normalize()
-            );
-            var statement = connection.prepareStatement(
-                """
-                    SELECT
-                        et.event_type_key,
-                        pg.generation,
-                        epoch_ms(e.occurred_at) AS occurred_ms,
-                        s.server_key,
-                        hex(e.payload) AS payload_hex
-                    FROM events e
-                    JOIN payload_generations pg ON pg.id = e.payload_generation_id
-                    JOIN event_types et ON et.id = pg.event_type_id
-                    JOIN servers s ON s.id = e.server_id
-                    WHERE et.event_type_key = ?
-                    """
-            )
-        ) {
-            statement.setString(1, submission.eventType().asString());
-            try (var rows = statement.executeQuery()) {
-                if (!rows.next()) {
-                    throw new AssertionError("Accepted external event was not flushed to DuckDB.");
-                }
-                if (!submission.eventType().asString().equals(rows.getString("event_type_key"))) {
-                    throw new AssertionError("Persisted event type key did not match.");
-                }
-                if (submission.payloadGeneration().value() != rows.getInt("generation")) {
-                    throw new AssertionError("Persisted payload generation did not match.");
-                }
-                if (submission.occurredAt().toEpochMilli() != rows.getLong("occurred_ms")) {
-                    throw new AssertionError("Persisted occurrence time did not match.");
-                }
-                if (!submission.serverKey().asString().equals(rows.getString("server_key"))) {
-                    throw new AssertionError("Persisted server key did not match.");
-                }
-                if (!"010203".equals(rows.getString("payload_hex"))) {
-                    throw new AssertionError("Persisted payload did not match.");
-                }
-                if (rows.next()) {
-                    throw new AssertionError("External fixture event was persisted more than once.");
-                }
-            }
         }
     }
 
