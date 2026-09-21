@@ -137,7 +137,7 @@ class PaperBlockPlaceListenerTest {
         );
         var byX = submissionsByX(api.submissions);
         for (int i = 0; i < 3; i++) {
-            var submission = Assertions.assertDoesNotThrow(() -> byX.get(100 + i));
+            var submission = byX.get(100 + i);
             Assertions.assertNotNull(submission);
             Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
             Assertions.assertEquals(new BlockPosition(100 + i, 70, -i), submission.position());
@@ -213,7 +213,7 @@ class PaperBlockPlaceListenerTest {
         boolean canBuild
     ) {
         var world = world();
-        var placedBlock = block(placed, x, y, z);
+        var placedBlock = block(placed);
         var replacedState = state(world, placedBlock, replaced, x, y, z);
         var event = Mockito.mock(BlockPlaceEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player());
@@ -230,7 +230,7 @@ class PaperBlockPlaceListenerTest {
         var world = world();
         var states = new ArrayList<org.bukkit.block.BlockState>();
         for (int i = 0; i < replaced.size(); i++) {
-            var block = block(placed.get(i), 100 + i, 70, -i);
+            var block = block(placed.get(i));
             states.add(state(world, block, replaced.get(i), 100 + i, 70, -i));
         }
         var event = Mockito.mock(BlockMultiPlaceEvent.class);
@@ -264,11 +264,8 @@ class PaperBlockPlaceListenerTest {
         return world;
     }
 
-    private static Block block(BlockState state, int x, int y, int z) {
+    private static Block block(BlockState state) {
         var block = Mockito.mock(Block.class);
-        Mockito.when(block.getX()).thenReturn(x);
-        Mockito.when(block.getY()).thenReturn(y);
-        Mockito.when(block.getZ()).thenReturn(z);
         Mockito.when(block.getBlockData()).thenReturn(state.asBlockData());
         return block;
     }
