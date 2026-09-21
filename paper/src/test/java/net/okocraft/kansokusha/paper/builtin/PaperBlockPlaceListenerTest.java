@@ -254,7 +254,8 @@ class PaperBlockPlaceListenerTest {
         Mockito.when(result.getX()).thenReturn(x);
         Mockito.when(result.getY()).thenReturn(y);
         Mockito.when(result.getZ()).thenReturn(z);
-        Mockito.when(result.getBlockData()).thenReturn(state.asBlockData());
+        var blockData = state.asBlockData();
+        Mockito.when(result.getBlockData()).thenReturn(blockData);
         return result;
     }
 
@@ -265,8 +266,9 @@ class PaperBlockPlaceListenerTest {
     }
 
     private static Block block(BlockState state) {
+        var blockData = state.asBlockData();
         var block = Mockito.mock(Block.class);
-        Mockito.when(block.getBlockData()).thenReturn(state.asBlockData());
+        Mockito.when(block.getBlockData()).thenReturn(blockData);
         return block;
     }
 
