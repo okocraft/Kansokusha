@@ -7,6 +7,15 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.common.api.BoundedEventIntake;
+import net.okocraft.kansokusha.common.api.DefaultKansokushaApi;
+import net.okocraft.kansokusha.common.api.EventIntake;
+import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.event.RetentionPolicySet;
+import net.okocraft.kansokusha.common.event.registry.InMemoryRuntimeEventTypeRegistry;
+import net.okocraft.kansokusha.common.retention.RetentionCleanupService;
+import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
+import net.okocraft.kansokusha.common.writer.AsyncBatchWriterService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,9 +24,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 class KansokushaRuntimeTest {
@@ -58,6 +72,97 @@ class KansokushaRuntimeTest {
         var proxyDatabase = proxyDir.resolve(KansokushaRuntime.DATABASE_FILENAME);
         Assertions.assertEquals(1, eventCount(paperDatabase));
         Assertions.assertEquals(1, eventCount(proxyDatabase));
+    }
+
+    @Test
+    void testCloseStopsAdmissionsBeforeWaitingForCleanup(@TempDir Path dir) throws Exception {
+        var intake = new BoundedEventIntake(
+            2,
+            RetentionPolicySet.from(
+                new KansokushaConfig.RetentionSettings(
+                    Map.of(Key.key("example", "default"), Duration.ofDays(1)),
+                    Map.of(),
+                    Key.key("example", "default")
+                )
+            )
+        );
+        var acceptEntered = new CountDownLatch(1);
+        var releaseAccept = new CountDownLatch(1);
+        EventIntake delayedIntake = submission -> {
+            acceptEntered.countDown();
+            try {
+                releaseAccept.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return EventIntake.Admission.UNAVAILABLE;
+            }
+            return intake.accept(submission);
+        };
+
+        var registry = new InMemoryRuntimeEventTypeRegistry();
+        var api = new DefaultKansokushaApi(registry, delayedIntake, PAPER_SERVER);
+        Assertions.assertEquals(RegistrationOutcome.REGISTERED, api.registerEventType(DEFINITION));
+
+        var writer = new AsyncBatchWriterService(
+            intake,
+            events -> events.size(),
+            failure -> {
+            },
+            1,
+            Duration.ofSeconds(1)
+        );
+        var cleanupStarted = new CountDownLatch(1);
+        var releaseCleanup = new CountDownLatch(1);
+        var cleanup = new RetentionCleanupService(
+            (cutoff, maxRows) -> {
+                cleanupStarted.countDown();
+                try {
+                    releaseCleanup.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new SQLException("Cleanup was interrupted.", e);
+                }
+                return 0;
+            },
+            failure -> {
+            },
+            Duration.ofHours(1),
+            1
+        );
+        var database = DuckDbDatabase.open(dir.resolve("close-order.duckdb"));
+
+        writer.start();
+        cleanup.start();
+        var runtime = new KansokushaRuntime(api, writer, cleanup, database);
+        Assertions.assertTrue(cleanupStarted.await(2, TimeUnit.SECONDS));
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var submit = executor.submit(() -> api.submit(submission(PAPER_SERVER, 1)));
+            Assertions.assertTrue(acceptEntered.await(2, TimeUnit.SECONDS));
+
+            var close = executor.submit(() -> {
+                runtime.close();
+                return null;
+            });
+
+            try {
+                var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                while (runtime.state() != KansokushaRuntime.State.DRAINING && System.nanoTime() < deadline) {
+                    Thread.onSpinWait();
+                }
+
+                Assertions.assertEquals(KansokushaRuntime.State.DRAINING, runtime.state());
+                Assertions.assertFalse(close.isDone());
+                releaseAccept.countDown();
+                Assertions.assertEquals(SubmissionOutcome.CLOSED, submit.get(2, TimeUnit.SECONDS));
+            } finally {
+                releaseAccept.countDown();
+                releaseCleanup.countDown();
+                close.get(2, TimeUnit.SECONDS);
+            }
+        }
+
+        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, runtime.state());
     }
 
     @Test
