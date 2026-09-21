@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -231,11 +232,10 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
-    void testDrainInterruptsPartialWaitAndFlushesWholeQueue() throws Exception {
+    void testDrainWakesPartialWaitAndFlushesWholeQueue() throws Exception {
         var intake = intake(4);
         submit(intake, 3);
         var waitingForMore = new CountDownLatch(1);
-        var neverReleased = new CountDownLatch(1);
         var batches = new CopyOnWriteArrayList<List<AcceptedEvent>>();
         var service = new AsyncBatchWriterService(
             intake,
@@ -249,8 +249,7 @@ class AsyncBatchWriterServiceTest {
             System::nanoTime,
             (source, timeoutNanos) -> {
                 waitingForMore.countDown();
-                neverReleased.await();
-                return source.poll();
+                return source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS);
             }
         );
 
@@ -274,17 +273,17 @@ class AsyncBatchWriterServiceTest {
         var releaseFirstWrite = new CountDownLatch(1);
         var persisted = new AtomicInteger();
         var writeCalls = new AtomicInteger();
+        var writerInterrupted = new AtomicBoolean();
         var service = new AsyncBatchWriterService(
             intake,
             events -> {
                 if (writeCalls.getAndIncrement() == 0) {
                     firstWriteStarted.countDown();
-                    while (true) {
-                        try {
-                            releaseFirstWrite.await();
-                            break;
-                        } catch (InterruptedException ignored) {
-                        }
+                    try {
+                        releaseFirstWrite.await();
+                    } catch (InterruptedException e) {
+                        writerInterrupted.set(true);
+                        throw new SQLException("Writer was interrupted during graceful drain.", e);
                     }
                 }
                 persisted.addAndGet(events.size());
@@ -318,8 +317,53 @@ class AsyncBatchWriterServiceTest {
             drain.get();
         }
 
+        Assertions.assertFalse(writerInterrupted.get());
         Assertions.assertEquals(2, persisted.get());
         Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+    }
+
+    @Test
+    void testDrainCompletesBeforeRestoringCallerInterrupt() throws Exception {
+        var intake = intake(1);
+        submit(intake, 1);
+        var writeStarted = new CountDownLatch(1);
+        var releaseWrite = new CountDownLatch(1);
+        var returnedInterrupted = new AtomicBoolean();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                writeStarted.countDown();
+                releaseWrite.await();
+                return events.size();
+            },
+            NOOP_REPORTER,
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        Assertions.assertTrue(writeStarted.await(2, TimeUnit.SECONDS));
+
+        var shutdown = Thread.ofPlatform().start(() -> {
+            service.drainAndStop();
+            returnedInterrupted.set(Thread.currentThread().isInterrupted());
+        });
+
+        while (intake.state() == BoundedEventIntake.State.RUNNING) {
+            Thread.onSpinWait();
+        }
+
+        shutdown.interrupt();
+        shutdown.join(50);
+        Assertions.assertTrue(shutdown.isAlive());
+
+        releaseWrite.countDown();
+        shutdown.join(2_000);
+
+        Assertions.assertFalse(shutdown.isAlive());
+        Assertions.assertTrue(returnedInterrupted.get());
         Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
         Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
     }
@@ -329,7 +373,6 @@ class AsyncBatchWriterServiceTest {
         var intake = intake(3);
         submit(intake, 2);
         var waitingForMore = new CountDownLatch(1);
-        var neverReleased = new CountDownLatch(1);
         var failure = new SQLException("final flush failed");
         var reports = new AtomicInteger();
         var reported = new AtomicReference<Throwable>();
@@ -347,8 +390,7 @@ class AsyncBatchWriterServiceTest {
             System::nanoTime,
             (source, timeoutNanos) -> {
                 waitingForMore.countDown();
-                neverReleased.await();
-                return source.poll();
+                return source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS);
             }
         );
 
