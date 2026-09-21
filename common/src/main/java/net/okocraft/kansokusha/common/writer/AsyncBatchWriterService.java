@@ -172,6 +172,10 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
     }
 
+    private boolean isDrainRequested() {
+        return this.drainRequested || this.intake.state() == BoundedEventIntake.State.DRAINING;
+    }
+
     private static boolean joinUninterruptibly(@Nullable Thread thread) {
         if (thread == null) {
             return false;
@@ -215,11 +219,11 @@ public final class AsyncBatchWriterService implements AutoCloseable {
                 var batch = new ArrayList<AcceptedEvent>();
                 batch.add(first);
 
-                if (this.drainRequested) {
+                if (this.isDrainRequested()) {
                     this.fillDrainBatch(batch);
                 } else {
                     this.fillTimedBatch(batch);
-                    if (this.drainRequested) {
+                    if (this.isDrainRequested()) {
                         this.fillDrainBatch(batch);
                     }
                 }
@@ -245,17 +249,17 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     @Nullable
     private AcceptedEvent awaitFirstEvent() {
         while (true) {
-            if (this.stopRequested && !this.drainRequested) {
+            if (this.stopRequested && !this.isDrainRequested()) {
                 return null;
             }
-            if (this.drainRequested) {
+            if (this.isDrainRequested()) {
                 return this.intake.poll();
             }
 
             try {
                 return this.intake.awaitNext();
             } catch (InterruptedException e) {
-                if (this.stopRequested && !this.drainRequested) {
+                if (this.stopRequested && !this.isDrainRequested()) {
                     return null;
                 }
             }
@@ -265,7 +269,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     private void fillTimedBatch(List<AcceptedEvent> batch) {
         var batchStartedAt = this.clock.nanoTime();
 
-        while (batch.size() < this.maxBatchSize && !this.stopRequested && !this.drainRequested) {
+        while (batch.size() < this.maxBatchSize && !this.stopRequested && !this.isDrainRequested()) {
             var elapsed = this.clock.nanoTime() - batchStartedAt;
             var remaining = this.maxBatchDelayNanos - elapsed;
             if (remaining <= 0) {
@@ -276,7 +280,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             try {
                 next = this.poller.poll(this.intake, remaining);
             } catch (InterruptedException e) {
-                if (this.stopRequested || this.drainRequested) {
+                if (this.stopRequested || this.isDrainRequested()) {
                     break;
                 }
                 continue;
