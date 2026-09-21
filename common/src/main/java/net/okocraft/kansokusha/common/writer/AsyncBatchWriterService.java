@@ -2,7 +2,6 @@ package net.okocraft.kansokusha.common.writer;
 
 import net.okocraft.kansokusha.common.api.BoundedEventIntake;
 import net.okocraft.kansokusha.common.event.AcceptedEvent;
-import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.storage.EventBatchWriter;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -20,12 +19,9 @@ import java.util.concurrent.TimeUnit;
 @NotNullByDefault
 public final class AsyncBatchWriterService implements AutoCloseable {
 
-    private static final String FAILURE_MESSAGE =
-        "Kansokusha event writer failed; event recording is unavailable.";
-
     private final BoundedEventIntake intake;
     private final EventBatchWriter writer;
-    private final AdministratorReporter failureReporter;
+    private final PipelineFailureReporter failureReporter;
     private final int maxBatchSize;
     private final long maxBatchDelayNanos;
     private final NanoClock clock;
@@ -43,7 +39,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     public AsyncBatchWriterService(
         BoundedEventIntake intake,
         EventBatchWriter writer,
-        AdministratorReporter failureReporter,
+        PipelineFailureReporter failureReporter,
         int maxBatchSize,
         Duration maxBatchDelay
     ) {
@@ -62,7 +58,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     AsyncBatchWriterService(
         BoundedEventIntake intake,
         EventBatchWriter writer,
-        AdministratorReporter failureReporter,
+        PipelineFailureReporter failureReporter,
         int maxBatchSize,
         Duration maxBatchDelay,
         NanoClock clock,
@@ -83,7 +79,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     AsyncBatchWriterService(
         BoundedEventIntake intake,
         EventBatchWriter writer,
-        AdministratorReporter failureReporter,
+        PipelineFailureReporter failureReporter,
         int maxBatchSize,
         Duration maxBatchDelay,
         NanoClock clock,
@@ -366,7 +362,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
 
         try {
-            this.failureReporter.report(FAILURE_MESSAGE, failure);
+            this.failureReporter.report(failure);
         } catch (Throwable reportingFailure) {
             if (reportingFailure != failure) {
                 failure.addSuppressed(reportingFailure);
