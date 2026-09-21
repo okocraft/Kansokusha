@@ -78,7 +78,60 @@ class KansokushaConfigTest {
         var error = Assertions.assertThrows(IOException.class, holder::reload);
 
         Assertions.assertTrue(error.getMessage().contains("retention.policies"));
-        Assertions.assertTrue(Files.exists(dir.resolve("config.yml")));
+        var generatedConfig = dir.resolve("config.yml");
+        Assertions.assertTrue(Files.exists(generatedConfig));
+
+        var skeleton = Files.readString(generatedConfig);
+        Assertions.assertFalse(skeleton.contains("kansokusha:audit"));
+        Assertions.assertFalse(skeleton.contains("kansokusha:session"));
+        Assertions.assertFalse(skeleton.contains("kansokusha:default"));
+    }
+
+    @Test
+    void testBuiltInRetentionExampleLoads(@TempDir Path dir) throws Exception {
+        var example = Files.readString(findRepositoryFile("docs/examples/v1-built-in-retention.yml"));
+        writeConfig(
+            dir,
+            """
+                ingestion:
+                  queue-capacity: 16
+                  max-batch-size: 8
+                  max-batch-delay: PT0.1S
+                """ + example
+        );
+
+        var holder = new KansokushaConfig.Holder(dir);
+        holder.reload();
+
+        var retention = holder.get().retentionSettings();
+        Assertions.assertEquals(
+            Duration.ofDays(180),
+            retention.policies().get(Key.key("kansokusha", "audit"))
+        );
+        Assertions.assertEquals(
+            Duration.ofDays(30),
+            retention.policies().get(Key.key("kansokusha", "session"))
+        );
+        Assertions.assertEquals(
+            Duration.ofDays(30),
+            retention.policies().get(Key.key("kansokusha", "default"))
+        );
+        Assertions.assertEquals(
+            Key.key("kansokusha", "audit"),
+            retention.eventTypeMappings().get(Key.key("kansokusha", "block_break"))
+        );
+        Assertions.assertEquals(
+            Key.key("kansokusha", "audit"),
+            retention.eventTypeMappings().get(Key.key("kansokusha", "block_place"))
+        );
+        Assertions.assertEquals(
+            Key.key("kansokusha", "session"),
+            retention.eventTypeMappings().get(Key.key("kansokusha", "server_connected"))
+        );
+        Assertions.assertEquals(
+            Key.key("kansokusha", "default"),
+            retention.fallbackPolicy()
+        );
     }
 
     @Test
@@ -363,6 +416,20 @@ class KansokushaConfigTest {
             error.getMessage().contains(expectedMessage),
             () -> "Expected message containing '" + expectedMessage + "' but was: " + error.getMessage()
         );
+    }
+
+    private static Path findRepositoryFile(String relativePath) {
+        for (
+            Path directory = Path.of("").toAbsolutePath();
+            directory != null;
+            directory = directory.getParent()
+        ) {
+            var candidate = directory.resolve(relativePath);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Could not locate repository file: " + relativePath);
     }
 
     private static void writeConfig(Path dir, String content) throws IOException {
