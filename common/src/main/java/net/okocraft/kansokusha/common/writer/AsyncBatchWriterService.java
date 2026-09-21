@@ -185,6 +185,9 @@ public final class AsyncBatchWriterService {
             }
         } catch (SQLException | RuntimeException e) {
             failure = e;
+        } catch (Error e) {
+            failure = e;
+            throw e;
         } finally {
             synchronized (this.lifecycleMonitor) {
                 if (failure != null) {
