@@ -149,34 +149,31 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
     }
 
-    public void drainAndStop() {
-        Thread threadToJoin;
+    public void beginDraining() {
+        this.intake.beginDraining();
 
         synchronized (this.lifecycleMonitor) {
-            threadToJoin = switch (this.state) {
-                case NEW -> {
+            switch (this.state) {
+                case NEW, STOPPED -> {
                     this.stopRequested = false;
                     this.state = State.DRAINING;
                     this.worker = this.newWorker();
                     this.worker.start();
-                    yield this.worker;
                 }
-                case RUNNING -> {
-                    this.state = State.DRAINING;
-                    yield this.worker;
+                case RUNNING -> this.state = State.DRAINING;
+                case DRAINING, STOPPING, FAILED -> {
                 }
-                case STOPPED -> {
-                    this.stopRequested = false;
-                    this.state = State.DRAINING;
-                    this.worker = this.newWorker();
-                    this.worker.start();
-                    yield this.worker;
-                }
-                case DRAINING, STOPPING, FAILED -> this.worker;
-            };
+            }
         }
+    }
 
-        this.intake.beginDraining();
+    public void drainAndStop() {
+        this.beginDraining();
+
+        final Thread threadToJoin;
+        synchronized (this.lifecycleMonitor) {
+            threadToJoin = this.worker;
+        }
 
         var interrupted = joinUninterruptibly(threadToJoin);
         threadToJoin = this.resumeDrainAfterForceStop();
