@@ -126,7 +126,9 @@ cleanup は recording caller thread では実行せず、event writer と同じ 
 
 failure 時は cleanup transaction を rollback し、administrator-visible reporting path に渡す。failure を success や deleted-row-count 0 として扱わない。
 
-1回の failure で scheduler を恒久停止せず、runtime が稼働中なら configured interval 後に再試行する。shutdown 開始後は新しい cleanup pass を開始しない。
+1回の recoverable failure で scheduler を恒久停止せず、runtime が稼働中なら configured interval 後に再試行する。shutdown 開始後は新しい cleanup pass を開始しない。
+
+ただし JVM/runtime 自体の継続を信頼できない `VirtualMachineError`、`LinkageError`、`ThreadDeath` は terminal failure とする。これらも可能な範囲で administrator-visible reporting path に渡した後、cleanup lifecycle を failed として停止し、元の fatal error を再送出する。
 
 ## 検討した選択肢
 
