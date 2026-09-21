@@ -1,5 +1,12 @@
 package net.okocraft.kansokusha.velocity.plugin;
 
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.proxy.server.ServerInfo;
+import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.RegistrationOutcome;
+import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
 import org.junit.jupiter.api.Assertions;
@@ -8,9 +15,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +33,10 @@ class KansokushaVelocityPluginTest {
         writeConfig(dir);
         var logger = Mockito.mock(Logger.class);
         var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
+        Mockito.when(api.registerEventType(Mockito.any()))
+            .thenReturn(RegistrationOutcome.REGISTERED);
         var publication = Mockito.mock(VelocityRuntimeLifecycle.ApiPublication.class);
         var startEntered = new CountDownLatch(1);
         var releaseStart = new CountDownLatch(1);
@@ -109,6 +122,84 @@ class KansokushaVelocityPluginTest {
         try (var reopened = DuckDbDatabase.open(databasePath)) {
             Assertions.assertNotNull(reopened);
         }
+    }
+
+    @Test
+    void testServerConnectedEventsDelegateOnlyWhileRuntimeIsActive(@TempDir Path dir)
+        throws Exception {
+        writeConfig(dir);
+        var logger = Mockito.mock(Logger.class);
+        var lifecycle = Mockito.mock(VelocityRuntimeLifecycle.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(lifecycle.api()).thenReturn(api);
+        Mockito.when(api.registerEventType(Mockito.any()))
+            .thenReturn(RegistrationOutcome.REGISTERED);
+        Mockito.when(api.submit(Mockito.any())).thenReturn(SubmissionOutcome.ACCEPTED);
+        var plugin = new KansokushaVelocityPlugin(
+            logger,
+            dir,
+            (dataDirectory, reporter) -> lifecycle
+        );
+
+        plugin.onProxyInitialize(null);
+        plugin.onServerConnected(serverConnectedEvent("game", "lobby"));
+
+        Mockito.verify(lifecycle).start();
+        Mockito.verify(api).registerEventType(Mockito.any());
+        Mockito.verify(api).submit(Mockito.any());
+
+        plugin.onProxyShutdown(null);
+        plugin.onServerConnected(serverConnectedEvent("ignored", null));
+
+        Mockito.verify(lifecycle).close();
+        Mockito.verify(api, Mockito.times(1)).submit(Mockito.any());
+    }
+
+    @Test
+    void testBuiltInRegistrationConflictClosesStartedLifecycle(@TempDir Path dir)
+        throws Exception {
+        writeConfig(dir);
+        var logger = Mockito.mock(Logger.class);
+        var lifecycle = Mockito.mock(VelocityRuntimeLifecycle.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(lifecycle.api()).thenReturn(api);
+        Mockito.when(api.registerEventType(Mockito.any()))
+            .thenReturn(RegistrationOutcome.CONFLICT);
+        var plugin = new KansokushaVelocityPlugin(
+            logger,
+            dir,
+            (dataDirectory, reporter) -> lifecycle
+        );
+
+        Assertions.assertThrows(
+            IllegalStateException.class,
+            () -> plugin.onProxyInitialize(null)
+        );
+
+        Mockito.verify(lifecycle).start();
+        Mockito.verify(lifecycle).close();
+        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
+    }
+
+    private static ServerConnectedEvent serverConnectedEvent(
+        String targetName,
+        String previousName
+    ) {
+        var player = Mockito.mock(Player.class);
+        Mockito.when(player.getUniqueId()).thenReturn(
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        );
+        var target = server(targetName);
+        var previous = previousName == null ? null : server(previousName);
+        return new ServerConnectedEvent(player, target, previous);
+    }
+
+    private static RegisteredServer server(String name) {
+        var server = Mockito.mock(RegisteredServer.class);
+        Mockito.when(server.getServerInfo()).thenReturn(
+            new ServerInfo(name, new InetSocketAddress("127.0.0.1", 25565))
+        );
+        return server;
     }
 
     private static void writeConfig(Path dir) throws Exception {
