@@ -65,6 +65,13 @@ tasks {
             "kansokusha.external-api-fixture.result",
             externalApiTestDirectory.get().file("fixture-result.txt").asFile.absolutePath
         )
+        systemProperty(
+            "kansokusha.external-api-fixture.database",
+            externalApiTestDirectory.get()
+                .file("plugins/Kansokusha/kansokusha.duckdb")
+                .asFile
+                .absolutePath
+        )
 
         doFirst {
             val runDirectory = externalApiTestDirectory.get().asFile
@@ -85,7 +92,7 @@ tasks {
                 retention:
                   policies:
                     - key: example:default
-                      duration: P1D
+                      duration: P3650D
                   fallback-policy: example:default
                   cleanup-interval: PT1H
                   max-rows-per-pass: 100
