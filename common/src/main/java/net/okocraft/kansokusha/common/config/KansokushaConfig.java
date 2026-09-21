@@ -29,6 +29,7 @@ public class KansokushaConfig {
     private Retention retention = new Retention();
 
     private transient RetentionSettings retentionSettings;
+    private transient RetentionCleanupSettings retentionCleanupSettings;
 
     public boolean debug() {
         return this.debug;
@@ -42,8 +43,18 @@ public class KansokushaConfig {
         return settings;
     }
 
+    public RetentionCleanupSettings retentionCleanupSettings() {
+        var settings = this.retentionCleanupSettings;
+        if (settings == null) {
+            throw new IllegalStateException("Retention cleanup configuration has not been validated.");
+        }
+        return settings;
+    }
+
     private void validate() throws IOException {
-        this.retentionSettings = Objects.requireNonNull(this.retention, "retention").validate();
+        var validated = Objects.requireNonNull(this.retention, "retention").validate();
+        this.retentionSettings = validated.retentionSettings();
+        this.retentionCleanupSettings = validated.cleanupSettings();
     }
 
     @ConfigSerializable
@@ -58,7 +69,13 @@ public class KansokushaConfig {
         @Comment("Fallback retention policy key for event types without an exact mapping.")
         private String fallbackPolicy = "";
 
-        private RetentionSettings validate() throws IOException {
+        @Comment("Fixed delay between automatic retention cleanup passes.")
+        private String cleanupInterval = "";
+
+        @Comment("Maximum number of expired event rows deleted by one cleanup pass.")
+        private int maxRowsPerPass = 0;
+
+        private ValidatedRetention validate() throws IOException {
             var policiesByKey = new LinkedHashMap<Key, Duration>();
             var configuredPolicies = requireList(this.policies, "retention.policies");
 
@@ -105,7 +122,15 @@ public class KansokushaConfig {
             var fallback = parseKey(this.fallbackPolicy, "retention.fallback-policy");
             requireKnownPolicy(policiesByKey, fallback, "fallback policy");
 
-            return new RetentionSettings(policiesByKey, mappingsByEventType, fallback);
+            var interval = parseDuration(this.cleanupInterval, "retention.cleanup-interval");
+            if (this.maxRowsPerPass <= 0) {
+                throw invalid("retention.max-rows-per-pass must be positive");
+            }
+
+            return new ValidatedRetention(
+                new RetentionSettings(policiesByKey, mappingsByEventType, fallback),
+                new RetentionCleanupSettings(interval, this.maxRowsPerPass)
+            );
         }
 
         private static Duration parseDuration(String value, String path) throws IOException {
@@ -176,6 +201,13 @@ public class KansokushaConfig {
         }
     }
 
+
+    private record ValidatedRetention(
+        RetentionSettings retentionSettings,
+        RetentionCleanupSettings cleanupSettings
+    ) {
+    }
+
     @ConfigSerializable
     public static final class Policy {
 
@@ -188,6 +220,30 @@ public class KansokushaConfig {
 
         private String eventType = "";
         private String policy = "";
+    }
+
+    public record RetentionCleanupSettings(
+        Duration interval,
+        int maxRowsPerPass
+    ) {
+
+        public RetentionCleanupSettings {
+            Objects.requireNonNull(interval, "interval");
+            if (interval.isZero() || interval.isNegative()) {
+                throw new IllegalArgumentException("interval must be positive.");
+            }
+            if (interval.getNano() % 1_000_000 != 0) {
+                throw new IllegalArgumentException("interval must use whole milliseconds.");
+            }
+            try {
+                interval.toMillis();
+            } catch (ArithmeticException e) {
+                throw new IllegalArgumentException("interval exceeds the supported millisecond range.", e);
+            }
+            if (maxRowsPerPass <= 0) {
+                throw new IllegalArgumentException("maxRowsPerPass must be positive.");
+            }
+        }
     }
 
     public record RetentionSettings(

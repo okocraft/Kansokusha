@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Objects;
 
 @NotNullByDefault
-public final class DuckDbRetentionCleaner {
+public final class DuckDbRetentionCleaner implements RetentionCleaner {
 
     private static final long MIN_FINITE_TIMESTAMP_MILLIS = -Long.MAX_VALUE + 1;
     private static final long MAX_FINITE_TIMESTAMP_MILLIS = Long.MAX_VALUE - 1;
@@ -29,6 +29,7 @@ public final class DuckDbRetentionCleaner {
         this.afterDelete = Objects.requireNonNull(afterDelete, "afterDelete");
     }
 
+    @Override
     public int deleteExpired(Instant cutoff, int maxRowsPerPass) throws SQLException {
         Objects.requireNonNull(cutoff, "cutoff");
         if (maxRowsPerPass <= 0) {
