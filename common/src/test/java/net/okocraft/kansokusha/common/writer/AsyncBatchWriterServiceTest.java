@@ -313,11 +313,58 @@ class AsyncBatchWriterServiceTest {
                 intake.accept(submission(OCCURRED_AT.plusSeconds(1)))
             );
 
+            service.requestStop();
             releaseFirstWrite.countDown();
             drain.get();
         }
 
         Assertions.assertFalse(writerInterrupted.get());
+        Assertions.assertEquals(2, persisted.get());
+        Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+    }
+
+    @Test
+    void testDrainAfterForceStopPersistsRemainingAcceptedEvents() throws Exception {
+        var intake = intake(3);
+        submit(intake, 2);
+        var firstWriteStarted = new CountDownLatch(1);
+        var persisted = new AtomicInteger();
+        var interruptedWrite = new AtomicBoolean();
+        var writes = new AtomicInteger();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                if (writes.getAndIncrement() == 0) {
+                    firstWriteStarted.countDown();
+                    try {
+                        Thread.sleep(Duration.ofHours(1));
+                    } catch (InterruptedException e) {
+                        interruptedWrite.set(true);
+                    }
+                }
+                persisted.addAndGet(events.size());
+                return events.size();
+            },
+            NOOP_REPORTER,
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        Assertions.assertTrue(firstWriteStarted.await(2, TimeUnit.SECONDS));
+
+        service.requestStop();
+        service.awaitStopped();
+
+        Assertions.assertTrue(interruptedWrite.get());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+        Assertions.assertEquals(1, persisted.get());
+        Assertions.assertEquals(1, intake.size());
+
+        service.drainAndStop();
+
         Assertions.assertEquals(2, persisted.get());
         Assertions.assertEquals(0, intake.size());
         Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
