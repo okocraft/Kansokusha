@@ -208,7 +208,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
                     break;
                 }
 
-                var batch = new ArrayList<AcceptedEvent>(this.maxBatchSize);
+                var batch = new ArrayList<AcceptedEvent>();
                 batch.add(first);
 
                 if (this.drainRequested) {
