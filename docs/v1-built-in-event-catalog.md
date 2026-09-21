@@ -38,13 +38,9 @@ player-driven event の subject は `PlayerSubject(player UUID)` とする。
 
 ### Payload encoding
 
-payload generation 1 は次を共通規約とする。
+payload は ADR-0001 どおり provider-defined opaque bytes とし、platform 固有の built-in event を common codec へ抽象化しない。
 
-- integer は network byte order (big-endian)
-- string は UTF-8
-- string field は signed 32-bit byte length + UTF-8 bytes
-- nullable string は length `-1`、non-null empty string は length `0`
-- common fields（event type、generation、occurredAt、server、world、position、subject）は payload に重複保存しない
+common fields（event type、generation、occurredAt、server、world、position、subject）は payload に重複保存しない。
 
 ### Paper / Folia capture semantics
 
@@ -84,7 +80,7 @@ fallback policy は `kansokusha:default` とする。
 
 LOWEST で次を snapshot する。
 
-- target block の complete block-data string
+- target block の Paper/Minecraft block state payload
 - server / world / position / subject
 - `occurredAt`
 
@@ -101,11 +97,11 @@ common fields:
 - position: broken block の integer block coordinates
 - subject: breaking player UUID
 
-payload generation 1:
+payload generation 1 は Paper module で paperweight-userdev を利用して生成する binary NBT とする。
 
-1. `blockData`: LOWEST で取得した complete block-data string
+LOWEST で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を `NbtIo.write` で payload bytes にする。
 
-item drops、experience、tool durability 等は payload に含めない。
+これにより block identity と全 block-state properties を Minecraft の block-state serialization で保持する。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
 
 ## `kansokusha:block_place`
 
@@ -133,10 +129,12 @@ common fields:
 - position: changed block の integer block coordinates
 - subject: placing player UUID
 
-payload generation 1:
+payload generation 1 は Paper module で生成する binary NBT compound とし、次の2 child compounds を持つ。
 
-1. `replacedBlockData`: LOWEST で取得した earliest-available replaced state
-2. `placedBlockData`: LOWEST で取得した earliest-available tentative placed state
+1. `replaced`: LOWEST で取得した earliest-available replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
+2. `placed`: LOWEST で取得した earliest-available tentative placed Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
+
+outer compound は `NbtIo.write` で payload bytes にする。block entity NBT は generation 1 payload に含めない。
 
 ### Multi-place granularity
 
@@ -173,9 +171,12 @@ Velocity server name の Java UTF-16 code units を各4桁の lowercase hex に�
 
 ### Payload generation 1
 
-1. `previousServerKey`: nullable string
+payload は nullable `previousServerKey` 1 field を持つ Velocity-specific binary encoding とする。
 
-`previousServerKey` は previous backend server name に同じ encoding を適用した canonical Adventure key string とする。初回 backend connection では null とする。
+- null: signed 32-bit big-endian length `-1`
+- non-null: signed 32-bit big-endian UTF-8 byte length + canonical Adventure key string の UTF-8 bytes
+
+`previousServerKey` は previous backend server name に同じ server-key encoding を適用した canonical Adventure key string とする。初回 backend connection では null とする。
 
 target backend name は common `server` field から復元可能なため payload に重複保存しない。
 
