@@ -17,7 +17,7 @@ v1 built-in event は次の3種とする。
 | Platform | Event type key | Capture point | Retention |
 | --- | --- | --- | --- |
 | Paper / Folia | `kansokusha:block_break` | non-cancelled `BlockBreakEvent` with earliest-available pre-state snapshot | `kansokusha:audit` |
-| Paper / Folia | `kansokusha:block_place` | successful `BlockPlaceEvent` / `BlockMultiPlaceEvent` | `kansokusha:audit` |
+| Paper / Folia | `kansokusha:block_place` | non-cancelled/buildable `BlockPlaceEvent` / `BlockMultiPlaceEvent` with LOWEST snapshots | `kansokusha:audit` |
 | Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` |
 
 この3種により、次を最低限検証できる。
@@ -131,22 +131,30 @@ item drops、experience、tool durability などの副作用はこの event の 
 
 #### Capture point
 
-- Bukkit/Paper `BlockPlaceEvent`
-- `EventPriority.MONITOR`
-- `ignoreCancelled = true`
-- `event.canBuild() == true` の場合だけ記録する
-- `BlockMultiPlaceEvent` を含む
-- listener は world state を変更しない
+`BlockPlaceEvent` / `BlockMultiPlaceEvent` も MONITOR だけでは before / tentative-after state を安定して保持できないため、同一 event instance に対して二段階で capture する。
 
-`BlockPlaceEvent` は cancellation と `canBuild` が独立しているため、cancelled でなくても `canBuild() == false` なら successful placement とみなさず記録しない。`BlockMultiPlaceEvent` も同じ条件を適用する。
+1. `EventPriority.LOWEST` で、callback 冒頭に `occurredAt` を1回だけ取得する。
+2. 同じ LOWEST stage で、各 changed block について common fields、`replacedBlockData`、およびその時点の tentative `placedBlockData` を immutable value として snapshot する。listener は world state や event state を変更しない。
+3. `EventPriority.MONITOR` で同じ event instance を finalization する。`event.isCancelled() == true` または `event.canBuild() == false` なら snapshot を破棄して記録しない。それ以外の場合だけ LOWEST snapshot を submit する。
+4. MONITOR stage は cancelled event でも cleanup できるよう event を受信し、`ignoreCancelled = true` だけに cleanup を依存させない。
+
+single-place の `replacedBlockData` は LOWEST で `getBlockReplacedState()` から直ちに value snapshot へ変換する。`placedBlockData` は LOWEST で `getBlockPlaced()` の live block から直ちに value snapshot へ変換する。
+
+multi-place では LOWEST で `getReplacedBlockStates()` の各 element から replaced state を value snapshot へ変換し、各 element が指す block location の live block から対応する tentative placed state を value snapshot へ変換する。mutable な `BlockState` や live `Block` reference 自体を MONITOR stage まで保持して payload source にしてはならない。
+
+この event type が表すのは **Kansokusha が LOWEST で before / tentative-after snapshot を取得し、MONITOR で non-cancelled かつ `canBuild() == true` と確認した player placement event** である。Paper が event handler 完了後に行う block entity installation、`onPlace`、physics update 等を反映した final world state までを保証するものではない。
+
+また、`block_break` と同様に、同じ `LOWEST` priority に登録された他 plugin との絶対的な先行順序は保証できない。他 plugin が Kansokusha より先に同 priority で replaced state、event state、または live block を変更した場合、その変更前 value を復元できるとは保証しない。
+
+`BlockPlaceEvent` は cancellation と `canBuild` が独立しているため、MONITOR で cancelled でなくても `canBuild() == false` なら記録しない。`BlockMultiPlaceEvent` も同じ条件を適用する。
 
 #### Common fields
 
 各 changed block について次を記録する。
 
 - server: Paper runtime の configured local server key
-- world: changed block の Bukkit world key を Adventure `Key` へ lossless conversion
-- position: changed block の integer block coordinates
+- world: LOWEST で snapshot した changed block の Bukkit world key を Adventure `Key` へ lossless conversion
+- position: LOWEST で snapshot した changed block の integer block coordinates
 - subject: placing player UUID
 
 #### Payload generation 1
@@ -156,15 +164,15 @@ field order:
 1. `replacedBlockData`: non-null string
 2. `placedBlockData`: non-null string
 
-`replacedBlockData` は placement 前 state、`placedBlockData` は successful placement 後 state の complete block-data string とする。
+`replacedBlockData` は LOWEST で取得できた earliest-available replaced state、`placedBlockData` は LOWEST で取得できた earliest-available tentative placed state の complete block-data string とする。いずれも event handler 後の final world state を表さない。
 
 #### Granularity
 
 通常の `BlockPlaceEvent` は1 changed block = 1 row とする。
 
-`BlockMultiPlaceEvent` は event 全体を1 row にまとめず、replaced-state list の各 changed block について厳密に1 row を submit する。replaced-state list が N blocks なら出力も厳密に N rows とし、base `BlockPlaceEvent` 分の追加 row を作らない。
+`BlockMultiPlaceEvent` は event 全体を1 row にまとめず、LOWEST で snapshot した replaced-state list の各 changed block について厳密に1 row を submit する。replaced-state list が N blocks なら出力も厳密に N rows とし、base `BlockPlaceEvent` 分の追加 row を作らない。
 
-同一 `BlockMultiPlaceEvent` から生成する全 row は callback 冒頭で1回だけ取得した同一 `occurredAt` を共有する。subclass と base class の listener を別々に登録して二重記録してはならない。
+同一 `BlockMultiPlaceEvent` から生成する全 row は LOWEST callback 冒頭で1回だけ取得した同一 `occurredAt` を共有する。subclass と base class の listener を別々に登録して二重記録してはならない。
 
 #### Coalescing
 
@@ -234,7 +242,11 @@ E6-T2 では少なくとも次の独立 task に分ける。
 
 各 task は event registration、listener capture、payload codec verification、submission outcome handling を testable boundary とする。
 
-Paper/Folia listener tests は、`BlockBreakEvent` の LOWEST snapshot が後続 listener の block mutation より前に取得できた場合にその snapshot を MONITOR submit へ引き継ぐこと、cancelled break では snapshot を破棄して記録しないこと、MONITOR 時点の live block state を payload source にしないことを確認する。また `BlockPlaceEvent` / `BlockMultiPlaceEvent` の `canBuild() == false` を記録しないこと、multi-place の replaced-state list が N blocks なら厳密に N rows だけ生成すること、その全 row が同一 `occurredAt` を共有すること、base/subclass の二重記録がないこと、common fields と payload が catalog と一致することを確認する。
+Paper/Folia listener tests は、`BlockBreakEvent` の LOWEST snapshot が後続 listener の block mutation より前に取得できた場合にその snapshot を MONITOR submit へ引き継ぐこと、cancelled break では snapshot を破棄して記録しないこと、MONITOR 時点の live block state を payload source にしないことを確認する。
+
+`BlockPlaceEvent` / `BlockMultiPlaceEvent` については、LOWEST と MONITOR の間で別 listener が mutable replaced `BlockState` または live placed block を変更しても LOWEST で value snapshot した before / tentative-after state を submit すること、cancelled または `canBuild() == false` なら snapshot を破棄して記録しないことを確認する。multi-place の replaced-state list が N blocks なら厳密に N rows だけ生成すること、その全 row が LOWEST 冒頭で取得した同一 `occurredAt` を共有すること、base/subclass の二重記録がないこと、common fields と payload が catalog と一致することも確認する。
+
+Paper/Folia の二段階 snapshot storage は in-flight event instance を複数 region thread から同時に扱える必要がある。Folia 上で共有され得る storage に unsynchronized な `HashMap` 等を使用してはならず、thread-safe な ownership / synchronization を持たせ、MONITOR finalization 時に対応 snapshot を必ず remove する。
 
 Velocity listener tests は target server の common `server` mapping、previous server payload、initial connection の nullable previous server、server key encoding、target server name が payload に重複しないこと、caller が storage completion を待たないことを確認する。
 
