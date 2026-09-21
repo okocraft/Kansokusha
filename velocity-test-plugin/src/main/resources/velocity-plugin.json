@@ -1,0 +1,12 @@
+{
+  "id": "kansokusha-external-api-fixture",
+  "name": "KansokushaExternalApiFixture",
+  "version": "1.0.0",
+  "dependencies": [
+    {
+      "id": "kansokusha",
+      "optional": false
+    }
+  ],
+  "main": "net.okocraft.kansokusha.testplugin.ExternalVelocityPlugin"
+}
