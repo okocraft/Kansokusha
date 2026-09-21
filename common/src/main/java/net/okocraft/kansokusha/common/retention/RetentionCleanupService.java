@@ -91,7 +91,9 @@ public final class RetentionCleanupService implements AutoCloseable {
                 return;
             }
 
-            this.state = State.STOPPING;
+            if (this.state != State.FAILED) {
+                this.state = State.STOPPING;
+            }
             calledFromCleanupThread = Thread.currentThread() == this.cleanupThread;
             this.scheduler.shutdown();
         }
@@ -125,14 +127,11 @@ public final class RetentionCleanupService implements AutoCloseable {
 
         try {
             this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
-        } catch (VirtualMachineError e) {
-            synchronized (this.lifecycleMonitor) {
-                this.state = State.FAILED;
-                this.scheduler.shutdown();
-            }
-            throw e;
-        } catch (SQLException | RuntimeException | Error e) {
+        } catch (SQLException | RuntimeException | AssertionError e) {
             this.reportFailure(e);
+        } catch (Error e) {
+            this.failFatally(e);
+            throw e;
         } finally {
             synchronized (this.lifecycleMonitor) {
                 this.cleanupThread = null;
@@ -146,10 +145,20 @@ public final class RetentionCleanupService implements AutoCloseable {
     private void reportFailure(Throwable failure) {
         try {
             this.failureReporter.report(failure);
+        } catch (VirtualMachineError | LinkageError | ThreadDeath fatalReportingFailure) {
+            this.failFatally(fatalReportingFailure);
+            throw fatalReportingFailure;
         } catch (Throwable reportingFailure) {
             if (reportingFailure != failure) {
                 failure.addSuppressed(reportingFailure);
             }
+        }
+    }
+
+    private void failFatally(Error failure) {
+        synchronized (this.lifecycleMonitor) {
+            this.state = State.FAILED;
+            this.scheduler.shutdown();
         }
     }
 
