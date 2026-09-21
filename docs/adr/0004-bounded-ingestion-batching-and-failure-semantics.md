@@ -127,9 +127,15 @@ pipeline の主要 state transition は次とする。
 
 ```text
 NEW -> RUNNING -> DRAINING -> CLOSED
+          |           |
+          v           v
+        FAILED <------+
           |
-          +------> FAILED -> CLOSED
+          v
+        CLOSED
 ```
+
+`FAILED` には通常運用中の `RUNNING` と shutdown drain 中の `DRAINING` のどちらからも遷移し得る。
 
 - `NEW`: queue / writer はまだ submission を受けない。
 - `RUNNING`: non-blocking intake と writer persistence が有効。
