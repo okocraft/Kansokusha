@@ -50,7 +50,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             maxBatchSize,
             maxBatchDelay,
             System::nanoTime,
-            (source, timeoutNanos) -> source.poll(timeoutNanos, TimeUnit.NANOSECONDS)
+            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS)
         );
     }
 
@@ -126,11 +126,10 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
     }
 
-    public void drainAndStop() throws InterruptedException {
+    public void drainAndStop() {
         this.intake.beginDraining();
 
         Thread threadToJoin = null;
-        boolean interruptWorker = false;
 
         synchronized (this.lifecycleMonitor) {
             switch (this.state) {
@@ -140,37 +139,26 @@ public final class AsyncBatchWriterService implements AutoCloseable {
                     this.worker = this.newWorker();
                     this.worker.start();
                     threadToJoin = this.worker;
-                    interruptWorker = false;
                 }
                 case RUNNING -> {
                     this.drainRequested = true;
                     this.state = State.DRAINING;
                     threadToJoin = this.worker;
-                    interruptWorker = true;
                 }
-                case DRAINING -> {
-                    threadToJoin = this.worker;
-                    interruptWorker = true;
-                }
-                case STOPPING, STOPPED, FAILED -> {
-                    threadToJoin = this.worker;
-                    interruptWorker = false;
-                }
+                case DRAINING, STOPPING, STOPPED, FAILED -> threadToJoin = this.worker;
             }
         }
 
-        if (interruptWorker && threadToJoin != null) {
-            threadToJoin.interrupt();
-        }
-        if (threadToJoin != null) {
-            threadToJoin.join();
-        }
-
+        var interrupted = joinUninterruptibly(threadToJoin);
         this.intake.close();
+
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
-    public void close() throws InterruptedException {
+    public void close() {
         this.drainAndStop();
     }
 
@@ -181,6 +169,22 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
         if (currentWorker != null) {
             currentWorker.join();
+        }
+    }
+
+    private static boolean joinUninterruptibly(@Nullable Thread thread) {
+        if (thread == null) {
+            return false;
+        }
+
+        var interrupted = false;
+        while (true) {
+            try {
+                thread.join();
+                return interrupted;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
         }
     }
 
@@ -249,7 +253,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             }
 
             try {
-                return this.intake.take();
+                return this.intake.awaitNext();
             } catch (InterruptedException e) {
                 if (this.stopRequested && !this.drainRequested) {
                     return null;
