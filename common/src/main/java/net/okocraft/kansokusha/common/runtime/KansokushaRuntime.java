@@ -7,13 +7,13 @@ import net.okocraft.kansokusha.common.api.DefaultKansokushaApi;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.event.RetentionPolicySet;
 import net.okocraft.kansokusha.common.event.registry.InMemoryRuntimeEventTypeRegistry;
+import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.retention.RetentionCleanupService;
 import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
 import net.okocraft.kansokusha.common.storage.DuckDbEventWriter;
 import net.okocraft.kansokusha.common.storage.DuckDbMigrations;
 import net.okocraft.kansokusha.common.storage.DuckDbRetentionCleaner;
 import net.okocraft.kansokusha.common.writer.AsyncBatchWriterService;
-import net.okocraft.kansokusha.common.writer.PipelineFailureReporter;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.io.IOException;
@@ -27,6 +27,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class KansokushaRuntime implements AutoCloseable {
 
     static final String DATABASE_FILENAME = "kansokusha.duckdb";
+    private static final String STARTUP_FAILURE_MESSAGE = "Kansokusha runtime failed to start.";
+    private static final String WRITER_FAILURE_MESSAGE =
+        "Kansokusha event writer failed; event recording is unavailable.";
+    private static final String CLEANUP_FAILURE_MESSAGE =
+        "Kansokusha retention cleanup failed; automatic expiry will retry.";
 
     private final DefaultKansokushaApi api;
     private final AsyncBatchWriterService writer;
@@ -49,7 +54,7 @@ public final class KansokushaRuntime implements AutoCloseable {
     public static KansokushaRuntime start(
         Path dataDirectory,
         Key localServerKey,
-        PipelineFailureReporter failureReporter
+        AdministratorReporter failureReporter
     ) throws IOException, SQLException {
         return start(
             dataDirectory,
@@ -60,7 +65,7 @@ public final class KansokushaRuntime implements AutoCloseable {
 
     public static KansokushaRuntime start(
         Path dataDirectory,
-        PipelineFailureReporter failureReporter
+        AdministratorReporter failureReporter
     ) throws IOException, SQLException {
         return start(dataDirectory, Optional.empty(), failureReporter);
     }
@@ -68,7 +73,7 @@ public final class KansokushaRuntime implements AutoCloseable {
     private static KansokushaRuntime start(
         Path dataDirectory,
         Optional<Key> localServerKey,
-        PipelineFailureReporter failureReporter
+        AdministratorReporter failureReporter
     ) throws IOException, SQLException {
         Objects.requireNonNull(dataDirectory, "dataDirectory");
         Objects.requireNonNull(localServerKey, "localServerKey");
@@ -98,7 +103,7 @@ public final class KansokushaRuntime implements AutoCloseable {
             writer = new AsyncBatchWriterService(
                 intake,
                 new DuckDbEventWriter(database),
-                failureReporter,
+                failure -> failureReporter.report(WRITER_FAILURE_MESSAGE, failure),
                 ingestion.maxBatchSize(),
                 ingestion.maxBatchDelay()
             );
@@ -106,7 +111,7 @@ public final class KansokushaRuntime implements AutoCloseable {
             var cleanupSettings = config.retentionCleanupSettings();
             cleanup = new RetentionCleanupService(
                 new DuckDbRetentionCleaner(database),
-                failureReporter::report,
+                failure -> failureReporter.report(CLEANUP_FAILURE_MESSAGE, failure),
                 cleanupSettings.interval(),
                 cleanupSettings.maxRowsPerPass()
             );
@@ -168,7 +173,7 @@ public final class KansokushaRuntime implements AutoCloseable {
         RetentionCleanupService cleanup,
         AsyncBatchWriterService writer,
         DuckDbDatabase database,
-        PipelineFailureReporter failureReporter,
+        AdministratorReporter failureReporter,
         Throwable failure
     ) {
         if (api != null) {
@@ -200,7 +205,7 @@ public final class KansokushaRuntime implements AutoCloseable {
         }
 
         try {
-            failureReporter.report(failure);
+            failureReporter.report(STARTUP_FAILURE_MESSAGE, failure);
         } catch (Throwable reportingFailure) {
             addSuppressed(failure, reportingFailure);
         }
