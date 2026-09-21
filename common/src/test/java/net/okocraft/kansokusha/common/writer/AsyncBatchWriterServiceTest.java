@@ -275,7 +275,12 @@ class AsyncBatchWriterServiceTest {
             intake,
             events -> {
                 writeStarted.countDown();
-                releaseWrite.await();
+                try {
+                    releaseWrite.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new SQLException("Writer was interrupted.", e);
+                }
                 return events.size();
             },
             NOOP_REPORTER,
