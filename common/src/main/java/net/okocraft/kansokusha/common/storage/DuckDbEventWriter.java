@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @NotNullByDefault
-public final class DuckDbEventWriter {
+public final class DuckDbEventWriter implements EventBatchWriter {
 
     private static final long MIN_FINITE_TIMESTAMP_MILLIS = -Long.MAX_VALUE + 1;
     private static final long MAX_FINITE_TIMESTAMP_MILLIS = Long.MAX_VALUE - 1;
@@ -37,6 +37,7 @@ public final class DuckDbEventWriter {
         this.afterBatchInsert = Objects.requireNonNull(afterBatchInsert, "afterBatchInsert");
     }
 
+    @Override
     public int append(List<AcceptedEvent> events) throws SQLException {
         var batch = List.copyOf(Objects.requireNonNull(events, "events"));
         if (batch.isEmpty()) {
