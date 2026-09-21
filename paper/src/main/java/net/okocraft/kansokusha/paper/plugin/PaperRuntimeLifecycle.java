@@ -68,6 +68,9 @@ final class PaperRuntimeLifecycle implements AutoCloseable {
             current.close();
         } catch (SQLException | RuntimeException failure) {
             this.reporter.report(SHUTDOWN_FAILURE_MESSAGE, failure);
+        } catch (Error failure) {
+            this.reporter.report(SHUTDOWN_FAILURE_MESSAGE, failure);
+            throw failure;
         }
     }
 
