@@ -30,10 +30,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     private Thread cleanupThread;
 
     public RetentionCleanupService(
-        RetentionCleaner cleaner,
-        CleanupFailureReporter failureReporter,
-        Duration interval,
-        int maxRowsPerPass
+        RetentionCleaner cleaner, CleanupFailureReporter failureReporter, Duration interval, int maxRowsPerPass
     ) {
         this(
             cleaner,
@@ -48,12 +45,8 @@ public final class RetentionCleanupService implements AutoCloseable {
     }
 
     RetentionCleanupService(
-        RetentionCleaner cleaner,
-        CleanupFailureReporter failureReporter,
-        Duration interval,
-        int maxRowsPerPass,
-        Clock clock,
-        ScheduledExecutorService executor
+        RetentionCleaner cleaner, CleanupFailureReporter failureReporter, Duration interval, int maxRowsPerPass,
+        Clock clock, ScheduledExecutorService executor
     ) {
         this.cleaner = Objects.requireNonNull(cleaner, "cleaner");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
@@ -84,12 +77,7 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
 
             this.state = State.RUNNING;
-            this.executor.scheduleWithFixedDelay(
-                this::runPass,
-                0,
-                this.intervalMillis,
-                TimeUnit.MILLISECONDS
-            );
+            this.executor.scheduleWithFixedDelay(this::runPass, 0, this.intervalMillis, TimeUnit.MILLISECONDS);
         }
     }
 
