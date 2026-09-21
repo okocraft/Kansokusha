@@ -9,6 +9,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -21,6 +22,8 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     private final ArrayBlockingQueue<AcceptedEvent> queue;
     private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
     private volatile State state = State.RUNNING;
+    @Nullable
+    private volatile Throwable failureCause;
 
     public BoundedEventIntake(int capacity, RetentionPolicySet retentionPolicies) {
         if (capacity <= 0) {
@@ -38,6 +41,9 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         var lock = this.lifecycleLock.readLock();
         lock.lock();
         try {
+            if (this.state == State.FAILED) {
+                return Admission.UNAVAILABLE;
+            }
             if (this.state != State.RUNNING) {
                 return Admission.CLOSED;
             }
@@ -74,12 +80,31 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         return this.state;
     }
 
+    public Optional<Throwable> failureCause() {
+        return Optional.ofNullable(this.failureCause);
+    }
+
     public void beginDraining() {
         var lock = this.lifecycleLock.writeLock();
         lock.lock();
         try {
             if (this.state == State.RUNNING) {
                 this.state = State.DRAINING;
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void fail(Throwable cause) {
+        Objects.requireNonNull(cause, "cause");
+
+        var lock = this.lifecycleLock.writeLock();
+        lock.lock();
+        try {
+            if (this.state == State.RUNNING || this.state == State.DRAINING) {
+                this.failureCause = cause;
+                this.state = State.FAILED;
             }
         } finally {
             lock.unlock();
@@ -100,6 +125,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     public enum State {
         RUNNING,
         DRAINING,
+        FAILED,
         CLOSED
     }
 }
