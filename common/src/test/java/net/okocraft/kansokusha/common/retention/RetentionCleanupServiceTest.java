@@ -63,7 +63,11 @@ class RetentionCleanupServiceTest {
                 var call = calls.incrementAndGet();
                 if (call == 1) {
                     firstStarted.countDown();
-                    releaseFirst.await();
+                    try {
+                        releaseFirst.await();
+                    } catch (InterruptedException e) {
+                        throw new SQLException("cleanup pass interrupted", e);
+                    }
                 } else if (call == 2) {
                     secondStarted.countDown();
                 }
@@ -128,7 +132,11 @@ class RetentionCleanupServiceTest {
             (cutoff, bound) -> {
                 calls.incrementAndGet();
                 passStarted.countDown();
-                releasePass.await();
+                try {
+                    releasePass.await();
+                } catch (InterruptedException e) {
+                    throw new SQLException("cleanup pass interrupted", e);
+                }
                 return 0;
             },
             failure -> Assertions.fail(failure),
