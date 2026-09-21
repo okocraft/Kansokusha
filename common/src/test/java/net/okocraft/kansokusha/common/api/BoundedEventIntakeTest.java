@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -129,6 +131,98 @@ class BoundedEventIntakeTest {
         Assertions.assertEquals(
             EventIntake.Admission.CLOSED,
             intake.accept(submission(OCCURRED_AT.plusMillis(2)))
+        );
+    }
+
+    @Test
+    void testFailedIntakeIsUnavailableAndRetainsFirstCause() {
+        var intake = new BoundedEventIntake(1, policies(Duration.ofHours(1)));
+        var first = new IllegalStateException("first failure");
+        var second = new IllegalArgumentException("second failure");
+
+        intake.fail(first);
+
+        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
+        Assertions.assertSame(first, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(
+            EventIntake.Admission.UNAVAILABLE,
+            intake.accept(submission(OCCURRED_AT))
+        );
+
+        intake.fail(second);
+        intake.beginDraining();
+
+        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
+        Assertions.assertSame(first, intake.failureCause().orElseThrow());
+
+        intake.close();
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertSame(first, intake.failureCause().orElseThrow());
+    }
+
+    @Test
+    void testFailureTransitionLinearizesWithConcurrentAdmission() throws Exception {
+        int producers = 8;
+        var intake = new BoundedEventIntake(producers, policies(Duration.ofHours(1)));
+        var ready = new CountDownLatch(producers);
+        var start = new CountDownLatch(1);
+        var failureComplete = new CountDownLatch(1);
+        var failure = new IllegalStateException("writer failed");
+        var results = new ArrayList<List<EventIntake.Admission>>();
+
+        try (var executor = Executors.newFixedThreadPool(producers + 1)) {
+            var futures = java.util.stream.IntStream.range(0, producers)
+                .mapToObj(producer -> executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+
+                    var beforeOrDuringFailure = intake.accept(
+                        submission(OCCURRED_AT.plusMillis(producer))
+                    );
+                    failureComplete.await();
+                    var afterFailure = intake.accept(
+                        submission(OCCURRED_AT.plusMillis(100 + producer))
+                    );
+                    return List.of(beforeOrDuringFailure, afterFailure);
+                }))
+                .toList();
+
+            ready.await();
+            var failureFuture = executor.submit(() -> {
+                start.await();
+                try {
+                    intake.fail(failure);
+                } finally {
+                    failureComplete.countDown();
+                }
+                return null;
+            });
+
+            start.countDown();
+            failureFuture.get();
+            for (var future : futures) {
+                results.add(future.get());
+            }
+        }
+
+        var acceptedBeforeFailure = results.stream()
+            .map(result -> result.getFirst())
+            .filter(EventIntake.Admission.ACCEPTED::equals)
+            .count();
+
+        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
+        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(acceptedBeforeFailure, intake.size());
+        Assertions.assertTrue(
+            results.stream().allMatch(
+                result -> result.get(1) == EventIntake.Admission.UNAVAILABLE
+            )
+        );
+        Assertions.assertTrue(
+            results.stream().allMatch(
+                result -> result.getFirst() == EventIntake.Admission.ACCEPTED
+                    || result.getFirst() == EventIntake.Admission.UNAVAILABLE
+            )
         );
     }
 
