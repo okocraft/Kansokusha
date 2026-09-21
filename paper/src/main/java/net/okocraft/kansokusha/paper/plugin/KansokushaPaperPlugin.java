@@ -5,6 +5,7 @@ import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.SQLException;
 
 public final class KansokushaPaperPlugin extends JavaPlugin {
@@ -23,9 +24,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
         }
 
         var loaded = config.get();
-        this.serverKey = loaded.localServerKey().orElseThrow(
-            () -> new IllegalStateException("Paper/Folia requires server-key in config.yml.")
-        );
+        this.serverKey = PaperServerIdentity.resolve(loaded.localServerKey(), Path.of("."));
 
         if (loaded.debug()) {
             this.getLogger().info("Debug mode enabled");
