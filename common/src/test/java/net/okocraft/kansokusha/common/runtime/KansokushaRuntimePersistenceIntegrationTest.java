@@ -19,7 +19,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 class KansokushaRuntimePersistenceIntegrationTest {
@@ -36,6 +38,10 @@ class KansokushaRuntimePersistenceIntegrationTest {
         @TempDir Path dir
     ) throws Exception {
         writeConfig(dir);
+        var firstOccurredAt = Instant.now()
+            .plus(Duration.ofDays(1))
+            .truncatedTo(ChronoUnit.MILLIS);
+        var secondOccurredAt = firstOccurredAt.plus(Duration.ofHours(1));
         var failures = new java.util.concurrent.CopyOnWriteArrayList<Throwable>();
 
         var generationOne = new EventTypeDefinition(
@@ -58,7 +64,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 runtime.api().submit(
                     submission(
                         PayloadGeneration.FIRST,
-                        Instant.parse("2026-09-21T00:00:00.123456Z"),
+                        firstOccurredAt,
                         new byte[]{1, 2, 3, 4}
                     )
                 )
@@ -67,7 +73,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
 
         Assertions.assertTrue(failures.isEmpty(), failures::toString);
         var databasePath = dir.resolve(KansokushaRuntime.DATABASE_FILENAME);
-        var firstIdentity = inspectFirstRestart(databasePath);
+        var firstIdentity = inspectFirstRestart(databasePath, firstOccurredAt);
 
         var generationTwo = new EventTypeDefinition(
             EVENT_TYPE,
@@ -89,7 +95,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 runtime.api().submit(
                     submission(
                         new PayloadGeneration(2),
-                        Instant.parse("2026-09-22T01:02:03.456789Z"),
+                        secondOccurredAt,
                         new byte[]{9, 8, 7}
                     )
                 )
@@ -100,8 +106,10 @@ class KansokushaRuntimePersistenceIntegrationTest {
         inspectSecondRestart(databasePath, firstIdentity);
     }
 
-    private static PersistentIdentity inspectFirstRestart(Path databasePath)
-        throws Exception {
+    private static PersistentIdentity inspectFirstRestart(
+        Path databasePath,
+        Instant occurredAt
+    ) throws Exception {
         try (var database = DuckDbDatabase.open(databasePath)) {
             DuckDbMigrations.migrate(database);
             var registry = new DuckDbEventTypeRegistry(database);
@@ -154,7 +162,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 Assertions.assertEquals(EVENT_TYPE.asString(), rows.getString("event_type_key"));
                 Assertions.assertEquals(1, rows.getInt("generation"));
                 Assertions.assertEquals(
-                    Instant.parse("2026-09-21T00:00:00.123Z").toEpochMilli(),
+                    occurredAt.toEpochMilli(),
                     rows.getLong("occurred_ms")
                 );
                 Assertions.assertEquals(SERVER.asString(), rows.getString("server_key"));
@@ -165,7 +173,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 Assertions.assertEquals(PLAYER.toString(), rows.getString("player_uuid"));
                 Assertions.assertEquals(RETENTION.asString(), rows.getString("retention_policy_key"));
                 Assertions.assertEquals(
-                    Instant.parse("2026-09-23T00:00:00.123456Z").toEpochMilli(),
+                    occurredAt.plus(Duration.ofDays(2)).toEpochMilli(),
                     rows.getLong("expires_ms")
                 );
                 Assertions.assertEquals("01020304", rows.getString("payload_hex"));
