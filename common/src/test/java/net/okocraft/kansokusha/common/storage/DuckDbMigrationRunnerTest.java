@@ -49,6 +49,48 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
+    void testOlderEventFixtureUpgradesWithoutLosingValidEventData(@TempDir Path dir)
+        throws Exception {
+        var eventV1 = DuckDbMigration.of(
+            1,
+            "event_fixture_v1",
+            "CREATE TABLE fixture_events (event_type VARCHAR NOT NULL, payload BLOB NOT NULL)"
+        );
+        var eventV2 = DuckDbMigration.of(
+            2,
+            "event_fixture_v2",
+            "ALTER TABLE fixture_events ADD COLUMN generation INTEGER DEFAULT 1 NOT NULL"
+        );
+        var filepath = dir.resolve("event-fixture-upgrade.duckdb");
+
+        try (var database = DuckDbDatabase.open(filepath)) {
+            DuckDbMigrationRunner.of(eventV1).migrate(database.connection());
+            try (var statement = database.connection().prepareStatement(
+                "INSERT INTO fixture_events (event_type, payload) VALUES (?, ?)"
+            )) {
+                statement.setString(1, "example:legacy");
+                statement.setBytes(2, new byte[]{1, 2, 3});
+                Assertions.assertEquals(1, statement.executeUpdate());
+            }
+        }
+
+        try (var database = DuckDbDatabase.open(filepath)) {
+            DuckDbMigrationRunner.of(eventV1, eventV2).migrate(database.connection());
+            try (var statement = database.connection().createStatement();
+                 var rows = statement.executeQuery(
+                     "SELECT event_type, hex(payload) payload_hex, generation FROM fixture_events"
+                 )) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals("example:legacy", rows.getString("event_type"));
+                Assertions.assertEquals("010203", rows.getString("payload_hex"));
+                Assertions.assertEquals(1, rows.getInt("generation"));
+                Assertions.assertFalse(rows.next());
+            }
+            Assertions.assertEquals(2, migrationCount(database.connection()));
+        }
+    }
+
+    @Test
     void testOlderDatabaseUpgradesWithoutLosingData(@TempDir Path dir) throws Exception {
         var filepath = dir.resolve("upgrade.duckdb");
 
