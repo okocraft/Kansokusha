@@ -203,6 +203,169 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
+    void testDrainAndStopClosesEmptyIntake() throws Exception {
+        var intake = intake(1);
+        var writes = new AtomicInteger();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                writes.incrementAndGet();
+                return events.size();
+            },
+            NOOP_REPORTER,
+            2,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        service.drainAndStop();
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(0, writes.get());
+        Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(
+            EventIntake.Admission.CLOSED,
+            intake.accept(submission(OCCURRED_AT))
+        );
+    }
+
+    @Test
+    void testDrainInterruptsPartialWaitAndFlushesWholeQueue() throws Exception {
+        var intake = intake(4);
+        submit(intake, 3);
+        var waitingForMore = new CountDownLatch(1);
+        var neverReleased = new CountDownLatch(1);
+        var batches = new CopyOnWriteArrayList<List<AcceptedEvent>>();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                batches.add(List.copyOf(events));
+                return events.size();
+            },
+            NOOP_REPORTER,
+            4,
+            Duration.ofHours(1),
+            System::nanoTime,
+            (source, timeoutNanos) -> {
+                waitingForMore.countDown();
+                neverReleased.await();
+                return source.poll();
+            }
+        );
+
+        service.start();
+        Assertions.assertTrue(waitingForMore.await(2, TimeUnit.SECONDS));
+
+        service.drainAndStop();
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(1, batches.size());
+        Assertions.assertEquals(3, batches.getFirst().size());
+    }
+
+    @Test
+    void testDrainWaitsForActiveWriteThenPersistsRemainingAcceptedEvents() throws Exception {
+        var intake = intake(4);
+        submit(intake, 2);
+        var firstWriteStarted = new CountDownLatch(1);
+        var releaseFirstWrite = new CountDownLatch(1);
+        var persisted = new AtomicInteger();
+        var writeCalls = new AtomicInteger();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                if (writeCalls.getAndIncrement() == 0) {
+                    firstWriteStarted.countDown();
+                    while (true) {
+                        try {
+                            releaseFirstWrite.await();
+                            break;
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+                }
+                persisted.addAndGet(events.size());
+                return events.size();
+            },
+            NOOP_REPORTER,
+            1,
+            Duration.ofSeconds(1)
+        );
+
+        service.start();
+        Assertions.assertTrue(firstWriteStarted.await(2, TimeUnit.SECONDS));
+
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var drain = executor.submit(() -> {
+                service.drainAndStop();
+                return null;
+            });
+
+            while (intake.state() == BoundedEventIntake.State.RUNNING) {
+                Thread.onSpinWait();
+            }
+
+            Assertions.assertEquals(BoundedEventIntake.State.DRAINING, intake.state());
+            Assertions.assertEquals(
+                EventIntake.Admission.CLOSED,
+                intake.accept(submission(OCCURRED_AT.plusSeconds(1)))
+            );
+
+            releaseFirstWrite.countDown();
+            drain.get();
+        }
+
+        Assertions.assertEquals(2, persisted.get());
+        Assertions.assertEquals(0, intake.size());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, service.state());
+    }
+
+    @Test
+    void testFinalDrainFailureIsReportedAndShutdownCompletes() throws Exception {
+        var intake = intake(3);
+        submit(intake, 2);
+        var waitingForMore = new CountDownLatch(1);
+        var neverReleased = new CountDownLatch(1);
+        var failure = new SQLException("final flush failed");
+        var reports = new AtomicInteger();
+        var reported = new AtomicReference<Throwable>();
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                throw failure;
+            },
+            cause -> {
+                reports.incrementAndGet();
+                reported.set(cause);
+            },
+            3,
+            Duration.ofHours(1),
+            System::nanoTime,
+            (source, timeoutNanos) -> {
+                waitingForMore.countDown();
+                neverReleased.await();
+                return source.poll();
+            }
+        );
+
+        service.start();
+        Assertions.assertTrue(waitingForMore.await(2, TimeUnit.SECONDS));
+
+        service.drainAndStop();
+
+        Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
+        Assertions.assertSame(failure, service.failureCause().orElseThrow());
+        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
+        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
+        Assertions.assertEquals(1, reports.get());
+        Assertions.assertSame(failure, reported.get());
+    }
+
+    @Test
     void testStorageFailureTransitionsPipelineAndReportsOnce() throws Exception {
         var intake = intake(2);
         submit(intake, 2);
