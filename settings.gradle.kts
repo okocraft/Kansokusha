@@ -18,6 +18,7 @@ addProject("common")
 addProject("paper")
 addProject("paper-test-plugin")
 addProject("velocity")
+addProject("velocity-test-plugin")
 
 fun addProject(name: String) {
     include("${rootProject.name}-$name")
