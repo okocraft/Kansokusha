@@ -2,7 +2,7 @@
 
 - 日付: 2026-09-22
 - 関連 Issue: #10, #37
-- 前提: ADR-0001, ADR-0003
+- 前提: ADR-0001, ADR-0003, ADR-0004
 
 ## 目的
 
@@ -170,9 +170,11 @@ field order:
 
 通常の `BlockPlaceEvent` は1 changed block = 1 row とする。
 
-`BlockMultiPlaceEvent` は event 全体を1 row にまとめず、LOWEST で snapshot した replaced-state list の各 changed block について厳密に1 row を submit する。replaced-state list が N blocks なら出力も厳密に N rows とし、base `BlockPlaceEvent` 分の追加 row を作らない。
+`BlockMultiPlaceEvent` は event 全体を1 submission にまとめず、LOWEST で snapshot した replaced-state list の各 changed block について厳密に1つの `EventSubmission` を生成し、それぞれ `KansokushaApi.submit` を試行する。replaced-state list が N blocks なら厳密に N submissions を生成・試行し、base `BlockPlaceEvent` 分の追加 submission を作らない。
 
-同一 `BlockMultiPlaceEvent` から生成する全 row は LOWEST callback 冒頭で1回だけ取得した同一 `occurredAt` を共有する。subclass と base class の listener を別々に登録して二重記録してはならない。
+ADR-0004 の admission は submission ごとに独立しているため、N submissions の all-or-none acceptance / persistence は保証しない。queue saturation、shutdown、writer failure 等により一部だけ `ACCEPTED` となる partial acceptance を許容し、各 submission の結果は通常の `SubmissionOutcome` に従う。v1 built-in catalog は batch reservation / atomic multi-event admission を要求しない。
+
+同一 `BlockMultiPlaceEvent` から生成する全 submission は LOWEST callback 冒頭で1回だけ取得した同一 `occurredAt` を共有する。subclass と base class の listener を別々に登録して二重 submission を作ってはならない。
 
 #### Coalescing
 
@@ -197,23 +199,23 @@ field order:
 - position: なし
 - subject: connected player UUID
 
-backend server key は Velocity server name の UTF-8 bytes を lowercase hexadecimal に変換し、
+backend server key は Velocity server name の Java UTF-16 code units を順序どおり、それぞれ4桁の lowercase hexadecimal (`0000`–`ffff`) に変換して連結し、
 
-`kansokusha:velocity-server/<hex>`
+`kansokusha:velocity-server/<utf16-hex>`
 
 とする。
 
-この encoding は Velocity server name の文字種に依存せず deterministic / lossless とする。network-wide storage identity の統一は v1 scope 外であり、Paper local server key と一致させることは要求しない。
+この encoding は Unicode normalization や UTF-8 replacement semantics を介さず、Java `String` の全 code unit sequence（unpaired surrogate を含む）に対して deterministic / lossless とする。decode 時は suffix を4桁ごとに UTF-16 code unit へ戻し、元の Java `String` を復元する。network-wide storage identity の統一は v1 scope 外であり、Paper local server key と一致させることは要求しない。
 
 #### Payload generation 1
 
 field order:
 
-1. `previousServerName`: nullable string
+1. `previousServerKey`: nullable string
 
-target backend は common `server` field の lossless backend server key から復元できるため、`targetServerName` を payload に重複保存しない。
+target backend は common `server` field の lossless backend server key から元の Velocity server name を復元できるため、`targetServerName` を payload に重複保存しない。
 
-`previousServerName` は初回 backend connection では null とする。previous backend は current event の common `server` field では表せないため、transition-specific payload として保持する。
+`previousServerKey` は previous backend server name に同じ UTF-16 code-unit hex encoding を適用した canonical Adventure `Key#asString()` とする。初回 backend connection では null とする。raw `previousServerName` は payload に保存せず、必要な場合は `previousServerKey` から復元する。これにより ill-formed UTF-16 を含む任意の Java `String` でも UTF-8 payload string の replacement semantics による identity loss を避ける。
 
 address、IP、player username は generation 1 payload に含めない。
 
@@ -244,11 +246,11 @@ E6-T2 では少なくとも次の独立 task に分ける。
 
 Paper/Folia listener tests は、`BlockBreakEvent` の LOWEST snapshot が後続 listener の block mutation より前に取得できた場合にその snapshot を MONITOR submit へ引き継ぐこと、cancelled break では snapshot を破棄して記録しないこと、MONITOR 時点の live block state を payload source にしないことを確認する。
 
-`BlockPlaceEvent` / `BlockMultiPlaceEvent` については、LOWEST と MONITOR の間で別 listener が mutable replaced `BlockState` または live placed block を変更しても LOWEST で value snapshot した before / tentative-after state を submit すること、cancelled または `canBuild() == false` なら snapshot を破棄して記録しないことを確認する。multi-place の replaced-state list が N blocks なら厳密に N rows だけ生成すること、その全 row が LOWEST 冒頭で取得した同一 `occurredAt` を共有すること、base/subclass の二重記録がないこと、common fields と payload が catalog と一致することも確認する。
+`BlockPlaceEvent` / `BlockMultiPlaceEvent` については、LOWEST と MONITOR の間で別 listener が mutable replaced `BlockState` または live placed block を変更しても LOWEST で value snapshot した before / tentative-after state を submit すること、cancelled または `canBuild() == false` なら snapshot を破棄して記録しないことを確認する。multi-place の replaced-state list が N blocks なら厳密に N `EventSubmission` を生成・試行すること、その全 submission が LOWEST 冒頭で取得した同一 `occurredAt` を共有すること、base/subclass の二重 submission がないことを確認する。queue capacity や lifecycle transition を制御した test では partial acceptance が起こり得ることも ADR-0004 に沿って固定し、all-or-none を期待しない。common fields と payload が catalog と一致することも確認する。
 
 Paper/Folia の二段階 snapshot storage は in-flight event instance を複数 region thread から同時に扱える必要がある。Folia 上で共有され得る storage に unsynchronized な `HashMap` 等を使用してはならず、thread-safe な ownership / synchronization を持たせ、MONITOR finalization 時に対応 snapshot を必ず remove する。
 
-Velocity listener tests は target server の common `server` mapping、previous server payload、initial connection の nullable previous server、server key encoding、target server name が payload に重複しないこと、caller が storage completion を待たないことを確認する。
+Velocity listener tests は target server の common `server` mapping、nullable `previousServerKey` payload、initial connection の null previous backend、UTF-16 code-unit hex server-key encoding、target server name が payload に重複しないこと、caller が storage completion を待たないことを確認する。server-key codec は ASCII、BMP、surrogate pair、unpaired high surrogate、unpaired low surrogate、empty string を round-trip し、異なる Java `String` が同じ key に衝突しないことを確認する。
 
 ## 要件への対応
 
@@ -266,3 +268,4 @@ Velocity listener tests は target server の common `server` mapping、previous
 - `docs/initial-requirements.md`
 - `docs/adr/0001-v1-event-contract-and-api-boundaries.md`
 - `docs/adr/0003-retention-resolution-and-expiry-deletion-semantics.md`
+- `docs/adr/0004-bounded-ingestion-batching-and-failure-semantics.md`
