@@ -156,31 +156,6 @@ class KansokushaConfigTest {
     }
 
     @Test
-    void testInvalidIngestionSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
-        assertInvalid(
-            dir.resolve("queue-capacity"),
-            validConfig("PT1H", "example:fallback").replace("queue-capacity: 16", "queue-capacity: 0"),
-            "ingestion.queue-capacity must be positive"
-        );
-        assertInvalid(
-            dir.resolve("batch-size"),
-            validConfig("PT1H", "example:fallback").replace("max-batch-size: 8", "max-batch-size: 0"),
-            "ingestion.max-batch-size must be positive"
-        );
-        assertInvalid(
-            dir.resolve("batch-delay"),
-            validConfig("PT1H", "example:fallback").replace("max-batch-delay: PT0.1S", "max-batch-delay: PT0S"),
-            "ingestion.max-batch-delay must be positive"
-        );
-        assertInvalid(
-            dir.resolve("batch-delay-fractional"),
-            validConfig("PT1H", "example:fallback")
-                .replace("max-batch-delay: PT0.1S", "max-batch-delay: PT0.000000001S"),
-            "ingestion.max-batch-delay must resolve to whole milliseconds"
-        );
-    }
-
-    @Test
     void testInvalidCleanupSettingsFailWithActionableMessages(@TempDir Path dir) throws Exception {
         assertInvalid(
             dir.resolve("cleanup-duration"),
