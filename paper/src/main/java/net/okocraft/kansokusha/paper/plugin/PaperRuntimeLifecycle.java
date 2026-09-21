@@ -89,6 +89,14 @@ final class PaperRuntimeLifecycle implements AutoCloseable {
         return this.runtime;
     }
 
+    KansokushaApi api() {
+        var current = this.runtime;
+        if (current == null) {
+            throw new IllegalStateException("Paper runtime lifecycle is not started.");
+        }
+        return current.api();
+    }
+
     @Override
     public void close() {
         var current = this.runtime;
