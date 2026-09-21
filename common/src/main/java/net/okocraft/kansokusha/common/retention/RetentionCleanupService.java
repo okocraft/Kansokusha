@@ -22,11 +22,12 @@ public final class RetentionCleanupService implements AutoCloseable {
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
+    private final CleanupScheduler scheduler;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
     @Nullable
-    private ScheduledExecutorService executor;
+    private Thread cleanupThread;
 
     public RetentionCleanupService(
         RetentionCleaner cleaner,
@@ -34,7 +35,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         Duration interval,
         int maxRowsPerPass
     ) {
-        this(cleaner, failureReporter, interval, maxRowsPerPass, Clock.systemUTC());
+        this(cleaner, failureReporter, interval, maxRowsPerPass, Clock.systemUTC(), new ExecutorCleanupScheduler());
     }
 
     RetentionCleanupService(
@@ -42,7 +43,8 @@ public final class RetentionCleanupService implements AutoCloseable {
         CleanupFailureReporter failureReporter,
         Duration interval,
         int maxRowsPerPass,
-        Clock clock
+        Clock clock,
+        CleanupScheduler scheduler
     ) {
         this.cleaner = Objects.requireNonNull(cleaner, "cleaner");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
@@ -63,6 +65,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
         this.maxRowsPerPass = maxRowsPerPass;
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     }
 
     public void start() {
@@ -71,24 +74,14 @@ public final class RetentionCleanupService implements AutoCloseable {
                 throw new IllegalStateException("Retention cleanup service can only be started once.");
             }
 
-            this.executor = Executors.newSingleThreadScheduledExecutor(
-                Thread.ofPlatform()
-                    .name("kansokusha-retention-cleanup")
-                    .factory()
-            );
             this.state = State.RUNNING;
-            this.executor.scheduleWithFixedDelay(
-                this::runPass,
-                0,
-                this.intervalMillis,
-                TimeUnit.MILLISECONDS
-            );
+            this.scheduler.scheduleWithFixedDelay(this::runPass, 0, this.intervalMillis);
         }
     }
 
     @Override
     public void close() {
-        final ScheduledExecutorService executorToClose;
+        final boolean calledFromCleanupThread;
         synchronized (this.lifecycleMonitor) {
             if (this.state == State.NEW) {
                 this.state = State.STOPPED;
@@ -98,20 +91,23 @@ public final class RetentionCleanupService implements AutoCloseable {
                 return;
             }
 
-            executorToClose = this.executor;
             this.state = State.STOPPING;
+            calledFromCleanupThread = Thread.currentThread() == this.cleanupThread;
+            this.scheduler.shutdown();
         }
 
-        if (executorToClose != null) {
-            executorToClose.shutdown();
-            var interrupted = awaitTerminationUninterruptibly(executorToClose);
-            if (interrupted) {
-                Thread.currentThread().interrupt();
+        if (calledFromCleanupThread) {
+            return;
+        }
+
+        var interrupted = awaitTerminationUninterruptibly(this.scheduler);
+        synchronized (this.lifecycleMonitor) {
+            if (this.state != State.FAILED) {
+                this.state = State.STOPPED;
             }
         }
-
-        synchronized (this.lifecycleMonitor) {
-            this.state = State.STOPPED;
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -124,12 +120,26 @@ public final class RetentionCleanupService implements AutoCloseable {
             if (this.state != State.RUNNING) {
                 return;
             }
+            this.cleanupThread = Thread.currentThread();
         }
 
         try {
             this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
+        } catch (VirtualMachineError e) {
+            synchronized (this.lifecycleMonitor) {
+                this.state = State.FAILED;
+                this.scheduler.shutdown();
+            }
+            throw e;
         } catch (SQLException | RuntimeException | Error e) {
             this.reportFailure(e);
+        } finally {
+            synchronized (this.lifecycleMonitor) {
+                this.cleanupThread = null;
+                if (this.state == State.STOPPING) {
+                    this.state = State.STOPPED;
+                }
+            }
         }
     }
 
@@ -143,16 +153,17 @@ public final class RetentionCleanupService implements AutoCloseable {
         }
     }
 
-    private static boolean awaitTerminationUninterruptibly(ScheduledExecutorService executor) {
+    private static boolean awaitTerminationUninterruptibly(CleanupScheduler scheduler) {
         var interrupted = false;
-        while (!executor.isTerminated()) {
+        while (true) {
             try {
-                executor.awaitTermination(1, TimeUnit.DAYS);
+                if (scheduler.awaitTermination(1, TimeUnit.DAYS)) {
+                    return interrupted;
+                }
             } catch (InterruptedException e) {
                 interrupted = true;
             }
         }
-        return interrupted;
     }
 
     @FunctionalInterface
@@ -161,10 +172,49 @@ public final class RetentionCleanupService implements AutoCloseable {
         void report(Throwable failure);
     }
 
+    interface CleanupScheduler {
+
+        void scheduleWithFixedDelay(Runnable task, long initialDelayMillis, long delayMillis);
+
+        void shutdown();
+
+        boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
+    }
+
+    private static final class ExecutorCleanupScheduler implements CleanupScheduler {
+
+        private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform()
+                .name("kansokusha-retention-cleanup")
+                .factory()
+        );
+
+        @Override
+        public void scheduleWithFixedDelay(Runnable task, long initialDelayMillis, long delayMillis) {
+            this.executor.scheduleWithFixedDelay(
+                task,
+                initialDelayMillis,
+                delayMillis,
+                TimeUnit.MILLISECONDS
+            );
+        }
+
+        @Override
+        public void shutdown() {
+            this.executor.shutdown();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            return this.executor.awaitTermination(timeout, unit);
+        }
+    }
+
     public enum State {
         NEW,
         RUNNING,
         STOPPING,
-        STOPPED
+        STOPPED,
+        FAILED
     }
 }
