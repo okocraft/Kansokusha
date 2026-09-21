@@ -35,11 +35,12 @@ class KansokushaRuntimeTest {
         writeConfig(proxyDir);
 
         var failures = new CopyOnWriteArrayList<Throwable>();
+        var paper = KansokushaRuntime.start(paperDir, PAPER_SERVER, (message, failure) -> failures.add(failure));
+        var proxy = KansokushaRuntime.start(proxyDir, (message, failure) -> failures.add(failure));
 
-        try (
-            var paper = KansokushaRuntime.start(paperDir, PAPER_SERVER, (message, failure) -> failures.add(failure));
-            var proxy = KansokushaRuntime.start(proxyDir, (message, failure) -> failures.add(failure))
-        ) {
+        try (paper; proxy) {
+            Assertions.assertEquals(KansokushaRuntime.State.RUNNING, paper.state());
+            Assertions.assertEquals(Optional.empty(), paper.failureCause());
             Assertions.assertEquals(Optional.of(PAPER_SERVER), paper.api().localServerKey());
             Assertions.assertEquals(Optional.empty(), proxy.api().localServerKey());
 
@@ -49,6 +50,8 @@ class KansokushaRuntimeTest {
             Assertions.assertEquals(SubmissionOutcome.ACCEPTED, proxy.api().submit(submission(PROXY_SERVER, 2)));
         }
 
+        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, paper.state());
+        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, proxy.state());
         Assertions.assertTrue(failures.isEmpty(), failures::toString);
 
         var paperDatabase = paperDir.resolve(KansokushaRuntime.DATABASE_FILENAME);
