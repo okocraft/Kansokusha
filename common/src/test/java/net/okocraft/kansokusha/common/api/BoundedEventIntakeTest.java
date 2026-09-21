@@ -32,7 +32,8 @@ class BoundedEventIntakeTest {
             intake.accept(submission(OCCURRED_AT))
         );
 
-        var accepted = Assertions.assertNotNull(intake.poll());
+        var accepted = intake.poll();
+        Assertions.assertNotNull(accepted);
         Assertions.assertEquals(POLICY, accepted.retentionPolicyKey());
         Assertions.assertEquals(
             Instant.parse("2026-01-01T01:00:00Z"),
