@@ -39,7 +39,7 @@ public final class KansokushaRuntime implements AutoCloseable {
     private final AtomicBoolean closeStarted = new AtomicBoolean();
     private volatile boolean closed;
 
-    private KansokushaRuntime(
+    KansokushaRuntime(
         DefaultKansokushaApi api,
         AsyncBatchWriterService writer,
         RetentionCleanupService cleanup,
