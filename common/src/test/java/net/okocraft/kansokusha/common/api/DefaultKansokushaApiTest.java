@@ -57,7 +57,7 @@ class DefaultKansokushaApiTest {
         List<EventSubmission> accepted = new ArrayList<>();
         DefaultKansokushaApi api = api(submission -> {
             accepted.add(submission);
-            return true;
+            return EventIntake.Admission.ACCEPTED;
         });
         publish(api);
         ExternalProviderFixture provider = new ExternalProviderFixture();
@@ -69,7 +69,7 @@ class DefaultKansokushaApiTest {
 
     @Test
     void testRegistrationIsIdempotentAndRejectsDifferentGeneration() {
-        DefaultKansokushaApi api = api(submission -> true);
+        DefaultKansokushaApi api = api(submission -> EventIntake.Admission.ACCEPTED);
         EventTypeDefinition first = definition(1);
 
         assertEquals(RegistrationOutcome.REGISTERED, api.registerEventType(first));
@@ -82,7 +82,7 @@ class DefaultKansokushaApiTest {
         List<EventSubmission> accepted = new ArrayList<>();
         DefaultKansokushaApi api = api(submission -> {
             accepted.add(submission);
-            return true;
+            return EventIntake.Admission.ACCEPTED;
         });
 
         assertEquals(SubmissionOutcome.UNREGISTERED_EVENT_TYPE, api.submit(submission(1)));
@@ -94,7 +94,7 @@ class DefaultKansokushaApiTest {
         List<EventSubmission> accepted = new ArrayList<>();
         DefaultKansokushaApi api = api(submission -> {
             accepted.add(submission);
-            return true;
+            return EventIntake.Admission.ACCEPTED;
         });
         api.registerEventType(definition(1));
 
@@ -104,16 +104,24 @@ class DefaultKansokushaApiTest {
 
     @Test
     void testIngestionUnavailableIsReportedAfterValidation() {
-        DefaultKansokushaApi api = api(submission -> false);
+        DefaultKansokushaApi api = api(submission -> EventIntake.Admission.UNAVAILABLE);
         api.registerEventType(definition(1));
 
         assertEquals(SubmissionOutcome.INGESTION_UNAVAILABLE, api.submit(submission(1)));
     }
 
     @Test
+    void testClosedIntakeIsReportedAfterValidation() {
+        DefaultKansokushaApi api = api(submission -> EventIntake.Admission.CLOSED);
+        api.registerEventType(definition(1));
+
+        assertEquals(SubmissionOutcome.CLOSED, api.submit(submission(1)));
+    }
+
+    @Test
     void testLocalServerKeyIsPresentForSingleServerAndEmptyForProxy() {
-        DefaultKansokushaApi singleServerApi = api(submission -> true, SERVER_KEY);
-        DefaultKansokushaApi proxyApi = api(submission -> true);
+        DefaultKansokushaApi singleServerApi = api(submission -> EventIntake.Admission.ACCEPTED, SERVER_KEY);
+        DefaultKansokushaApi proxyApi = api(submission -> EventIntake.Admission.ACCEPTED);
 
         assertEquals(Optional.of(SERVER_KEY), singleServerApi.localServerKey());
         assertEquals(Optional.empty(), proxyApi.localServerKey());
@@ -124,7 +132,7 @@ class DefaultKansokushaApiTest {
         List<EventSubmission> accepted = new ArrayList<>();
         DefaultKansokushaApi api = api(submission -> {
             accepted.add(submission);
-            return true;
+            return EventIntake.Admission.ACCEPTED;
         });
         api.close();
 
@@ -136,8 +144,8 @@ class DefaultKansokushaApiTest {
     @Test
     void testApiEntryPointPublishesAndUnpublishesOnlyCurrentApi() {
         assertThrows(IllegalStateException.class, Kansokusha::api);
-        DefaultKansokushaApi api = api(submission -> true);
-        DefaultKansokushaApi other = api(submission -> true);
+        DefaultKansokushaApi api = api(submission -> EventIntake.Admission.ACCEPTED);
+        DefaultKansokushaApi other = api(submission -> EventIntake.Admission.ACCEPTED);
         publish(api);
 
         assertSame(api, Kansokusha.api());
@@ -152,7 +160,7 @@ class DefaultKansokushaApiTest {
 
     @Test
     void testRetrievedApiReturnsClosedOutcomesAfterImplementationCloses() {
-        DefaultKansokushaApi implementation = api(submission -> true);
+        DefaultKansokushaApi implementation = api(submission -> EventIntake.Admission.ACCEPTED);
         publish(implementation);
         KansokushaApi retrievedApi = Kansokusha.api();
 

@@ -12,5 +12,11 @@ import org.jetbrains.annotations.NotNullByDefault;
 @NotNullByDefault
 public interface EventIntake {
 
-    boolean accept(EventSubmission submission);
+    Admission accept(EventSubmission submission);
+
+    enum Admission {
+        ACCEPTED,
+        UNAVAILABLE,
+        CLOSED
+    }
 }
