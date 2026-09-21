@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 public final class RetentionCleanupService implements AutoCloseable {
 
     private final RetentionCleaner cleaner;
-    private final RetentionCleanupFailureReporter failureReporter;
+    private final CleanupFailureReporter failureReporter;
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
@@ -33,7 +33,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     public RetentionCleanupService(
         RetentionCleaner cleaner,
-        RetentionCleanupFailureReporter failureReporter,
+        CleanupFailureReporter failureReporter,
         Duration interval,
         int maxRowsPerPass
     ) {
@@ -42,7 +42,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     RetentionCleanupService(
         RetentionCleaner cleaner,
-        RetentionCleanupFailureReporter failureReporter,
+        CleanupFailureReporter failureReporter,
         Duration interval,
         int maxRowsPerPass,
         Clock clock
@@ -170,6 +170,12 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
         }
         return interrupted;
+    }
+
+    @FunctionalInterface
+    public interface CleanupFailureReporter {
+
+        void report(Throwable failure);
     }
 
     public enum State {
