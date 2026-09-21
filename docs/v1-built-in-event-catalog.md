@@ -196,10 +196,11 @@ backend server key は Velocity server name の UTF-8 bytes を lowercase hexade
 
 field order:
 
-1. `targetServerName`: non-null string
-2. `previousServerName`: nullable string
+1. `previousServerName`: nullable string
 
-`previousServerName` は初回 backend connection では null とする。
+target backend は common `server` field の lossless backend server key から復元できるため、`targetServerName` を payload に重複保存しない。
+
+`previousServerName` は初回 backend connection では null とする。previous backend は current event の common `server` field では表せないため、transition-specific payload として保持する。
 
 address、IP、player username は generation 1 payload に含めない。
 
