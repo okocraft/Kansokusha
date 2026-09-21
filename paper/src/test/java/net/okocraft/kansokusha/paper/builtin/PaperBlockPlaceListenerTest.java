@@ -222,8 +222,9 @@ class PaperBlockPlaceListenerTest {
         var world = world();
         var placedBlock = block(placed);
         var replacedState = state(world, placedBlock, replaced, x, y, z);
+        var player = player();
         var event = Mockito.mock(BlockPlaceEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player());
+        Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getBlockReplacedState()).thenReturn(replacedState);
         Mockito.when(event.isCancelled()).thenReturn(cancelled);
         Mockito.when(event.canBuild()).thenReturn(canBuild);
@@ -240,8 +241,9 @@ class PaperBlockPlaceListenerTest {
             var block = block(placed.get(i));
             states.add(state(world, block, replaced.get(i), 100 + i, 70, -i));
         }
+        var player = player();
         var event = Mockito.mock(BlockMultiPlaceEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player());
+        Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getReplacedBlockStates()).thenReturn(states);
         Mockito.when(event.canBuild()).thenReturn(true);
         return event;
