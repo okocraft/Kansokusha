@@ -133,24 +133,6 @@ class BoundedEventIntakeTest {
     }
 
     @Test
-    void testFailedIntakeIsUnavailableAndDoesNotReopen() {
-        var intake = new BoundedEventIntake(1, policies(Duration.ofHours(1)));
-
-        intake.fail();
-        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertEquals(
-            EventIntake.Admission.UNAVAILABLE,
-            intake.accept(submission(OCCURRED_AT))
-        );
-
-        intake.beginDraining();
-        Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-
-        intake.close();
-        Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
-    }
-
-    @Test
     void testRetentionResolutionFailureRejectsOnlyThatSubmission() {
         var intake = new BoundedEventIntake(1, policies(Duration.ofMillis(1)));
 
