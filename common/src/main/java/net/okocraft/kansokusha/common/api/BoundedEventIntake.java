@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @ApiStatus.Internal
@@ -66,6 +67,16 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     @Nullable
     public AcceptedEvent poll() {
         return this.queue.poll();
+    }
+
+    public AcceptedEvent take() throws InterruptedException {
+        return this.queue.take();
+    }
+
+    @Nullable
+    public AcceptedEvent poll(long timeout, TimeUnit unit) throws InterruptedException {
+        Objects.requireNonNull(unit, "unit");
+        return this.queue.poll(timeout, unit);
     }
 
     public int size() {
