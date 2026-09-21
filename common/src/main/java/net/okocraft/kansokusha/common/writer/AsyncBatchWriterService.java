@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class AsyncBatchWriterService {
+public final class AsyncBatchWriterService implements AutoCloseable {
 
     private final BoundedEventIntake intake;
     private final EventBatchWriter writer;
@@ -30,6 +30,7 @@ public final class AsyncBatchWriterService {
 
     private volatile State state = State.NEW;
     private volatile boolean stopRequested;
+    private volatile boolean drainRequested;
     @Nullable
     private volatile Throwable failureCause;
     @Nullable
@@ -95,9 +96,7 @@ public final class AsyncBatchWriterService {
                 throw new IllegalStateException("Writer service can only be started once.");
             }
 
-            this.worker = Thread.ofPlatform()
-                .name("kansokusha-event-writer")
-                .unstarted(this::runLoop);
+            this.worker = this.newWorker();
             this.state = State.RUNNING;
             this.worker.start();
         }
@@ -112,10 +111,11 @@ public final class AsyncBatchWriterService {
                 this.state = State.STOPPED;
                 return;
             }
-            if (this.state != State.RUNNING) {
+            if (this.state != State.RUNNING && this.state != State.DRAINING) {
                 return;
             }
 
+            this.drainRequested = false;
             this.stopRequested = true;
             this.state = State.STOPPING;
             threadToInterrupt = this.worker;
@@ -124,6 +124,54 @@ public final class AsyncBatchWriterService {
         if (threadToInterrupt != null) {
             threadToInterrupt.interrupt();
         }
+    }
+
+    public void drainAndStop() throws InterruptedException {
+        this.intake.beginDraining();
+
+        final Thread threadToJoin;
+        final boolean interruptWorker;
+
+        synchronized (this.lifecycleMonitor) {
+            switch (this.state) {
+                case NEW -> {
+                    this.drainRequested = true;
+                    this.state = State.DRAINING;
+                    this.worker = this.newWorker();
+                    this.worker.start();
+                    threadToJoin = this.worker;
+                    interruptWorker = false;
+                }
+                case RUNNING -> {
+                    this.drainRequested = true;
+                    this.state = State.DRAINING;
+                    threadToJoin = this.worker;
+                    interruptWorker = true;
+                }
+                case DRAINING -> {
+                    threadToJoin = this.worker;
+                    interruptWorker = true;
+                }
+                case STOPPING, STOPPED, FAILED -> {
+                    threadToJoin = this.worker;
+                    interruptWorker = false;
+                }
+            }
+        }
+
+        if (interruptWorker && threadToJoin != null) {
+            threadToJoin.interrupt();
+        }
+        if (threadToJoin != null) {
+            threadToJoin.join();
+        }
+
+        this.intake.close();
+    }
+
+    @Override
+    public void close() throws InterruptedException {
+        this.drainAndStop();
     }
 
     public void awaitStopped() throws InterruptedException {
@@ -144,46 +192,32 @@ public final class AsyncBatchWriterService {
         return Optional.ofNullable(this.failureCause);
     }
 
+    private Thread newWorker() {
+        return Thread.ofPlatform()
+            .name("kansokusha-event-writer")
+            .unstarted(this::runLoop);
+    }
+
     private void runLoop() {
         Throwable failure = null;
 
         try {
-            while (!this.stopRequested) {
-                AcceptedEvent first;
-                try {
-                    first = this.intake.take();
-                } catch (InterruptedException e) {
-                    if (this.stopRequested) {
-                        break;
-                    }
-                    continue;
+            while (true) {
+                var first = this.awaitFirstEvent();
+                if (first == null) {
+                    break;
                 }
 
-                var batch = new ArrayList<AcceptedEvent>();
+                var batch = new ArrayList<AcceptedEvent>(this.maxBatchSize);
                 batch.add(first);
-                var batchStartedAt = this.clock.nanoTime();
 
-                while (batch.size() < this.maxBatchSize && !this.stopRequested) {
-                    var elapsed = this.clock.nanoTime() - batchStartedAt;
-                    var remaining = this.maxBatchDelayNanos - elapsed;
-                    if (remaining <= 0) {
-                        break;
+                if (this.drainRequested) {
+                    this.fillDrainBatch(batch);
+                } else {
+                    this.fillTimedBatch(batch);
+                    if (this.drainRequested) {
+                        this.fillDrainBatch(batch);
                     }
-
-                    final AcceptedEvent next;
-                    try {
-                        next = this.poller.poll(this.intake, remaining);
-                    } catch (InterruptedException e) {
-                        if (this.stopRequested) {
-                            break;
-                        }
-                        continue;
-                    }
-
-                    if (next == null) {
-                        break;
-                    }
-                    batch.add(next);
                 }
 
                 this.writeBatch(batch);
@@ -201,6 +235,63 @@ public final class AsyncBatchWriterService {
                     this.state = State.STOPPED;
                 }
             }
+        }
+    }
+
+    @Nullable
+    private AcceptedEvent awaitFirstEvent() {
+        while (true) {
+            if (this.stopRequested && !this.drainRequested) {
+                return null;
+            }
+            if (this.drainRequested) {
+                return this.intake.poll();
+            }
+
+            try {
+                return this.intake.take();
+            } catch (InterruptedException e) {
+                if (this.stopRequested && !this.drainRequested) {
+                    return null;
+                }
+            }
+        }
+    }
+
+    private void fillTimedBatch(List<AcceptedEvent> batch) {
+        var batchStartedAt = this.clock.nanoTime();
+
+        while (batch.size() < this.maxBatchSize && !this.stopRequested && !this.drainRequested) {
+            var elapsed = this.clock.nanoTime() - batchStartedAt;
+            var remaining = this.maxBatchDelayNanos - elapsed;
+            if (remaining <= 0) {
+                break;
+            }
+
+            final AcceptedEvent next;
+            try {
+                next = this.poller.poll(this.intake, remaining);
+            } catch (InterruptedException e) {
+                if (this.stopRequested || this.drainRequested) {
+                    break;
+                }
+                continue;
+            }
+
+            if (next == null) {
+                break;
+            }
+            batch.add(next);
+        }
+    }
+
+    private void fillDrainBatch(List<AcceptedEvent> batch) {
+        while (batch.size() < this.maxBatchSize) {
+            var next = this.intake.poll();
+            if (next == null) {
+                return;
+            }
+            batch.add(next);
         }
     }
 
@@ -234,6 +325,7 @@ public final class AsyncBatchWriterService {
     public enum State {
         NEW,
         RUNNING,
+        DRAINING,
         STOPPING,
         STOPPED,
         FAILED
