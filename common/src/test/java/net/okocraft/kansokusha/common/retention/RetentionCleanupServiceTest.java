@@ -3,6 +3,8 @@ package net.okocraft.kansokusha.common.retention;
 import net.okocraft.kansokusha.common.storage.RetentionCleaner;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 import java.sql.SQLException;
 import java.time.Clock;
@@ -11,6 +13,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,11 +23,12 @@ class RetentionCleanupServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-21T00:00:00Z");
 
     @Test
-    void testStartSchedulesImmediateFixedDelayPass() {
-        var scheduler = new TestScheduler();
+    void testStartSchedulesImmediateFixedDelayPass() throws Exception {
+        var executor = executor();
         var failure = new AtomicReference<Throwable>();
         var cutoff = new AtomicReference<Instant>();
         var maxRows = new AtomicInteger();
+        var interval = Duration.ofMinutes(5);
         var service = service(
             (instant, bound) -> {
                 cutoff.set(instant);
@@ -32,33 +36,33 @@ class RetentionCleanupServiceTest {
                 return 0;
             },
             failure::set,
-            Duration.ofMinutes(5),
+            interval,
             37,
-            scheduler
+            executor
         );
 
-        service.start();
-
-        Assertions.assertEquals(0, scheduler.initialDelayMillis);
-        Assertions.assertEquals(Duration.ofMinutes(5).toMillis(), scheduler.delayMillis);
+        var task = scheduledTask(service, executor, interval);
         Assertions.assertNull(cutoff.get());
 
-        scheduler.runPass();
+        task.run();
 
         Assertions.assertEquals(NOW, cutoff.get());
         Assertions.assertEquals(37, maxRows.get());
         Assertions.assertNull(failure.get());
 
         service.close();
+        Mockito.verify(executor).shutdown();
+        Mockito.verify(executor).awaitTermination(Mockito.anyLong(), Mockito.eq(TimeUnit.DAYS));
     }
 
     @Test
-    void testCleanupFailuresAreReportedAndNextPassStillRuns() {
+    void testCleanupFailuresAreReportedAndNextPassStillRuns() throws Exception {
         for (var expected : List.<Throwable>of(
             new SQLException("cleanup failed"),
-            new AssertionError("cleanup error")
+            new IllegalStateException("cleanup runtime failure"),
+            new AssertionError("cleanup assertion failure")
         )) {
-            var scheduler = new TestScheduler();
+            var executor = executor();
             var reports = new CopyOnWriteArrayList<Throwable>();
             var calls = new AtomicInteger();
             RetentionCleaner cleaner = (cutoff, bound) -> {
@@ -66,15 +70,19 @@ class RetentionCleanupServiceTest {
                     if (expected instanceof SQLException sqlException) {
                         throw sqlException;
                     }
-                    throw (Error) expected;
+                    if (expected instanceof RuntimeException runtimeException) {
+                        throw runtimeException;
+                    }
+                    throw (AssertionError) expected;
                 }
                 return 0;
             };
-            var service = service(cleaner, reports::add, Duration.ofMinutes(1), 5, scheduler);
+            var interval = Duration.ofMinutes(1);
+            var service = service(cleaner, reports::add, interval, 5, executor);
+            var task = scheduledTask(service, executor, interval);
 
-            service.start();
-            scheduler.runPass();
-            scheduler.runPass();
+            task.run();
+            task.run();
 
             Assertions.assertEquals(List.of(expected), reports);
             Assertions.assertEquals(2, calls.get());
@@ -85,38 +93,40 @@ class RetentionCleanupServiceTest {
     }
 
     @Test
-    void testVirtualMachineErrorStopsSchedulingAndIsRethrown() {
-        var scheduler = new TestScheduler();
+    void testVirtualMachineErrorStopsSchedulingAndIsRethrown() throws Exception {
+        var executor = executor();
         var reported = new AtomicReference<Throwable>();
         var failure = new OutOfMemoryError("fatal cleanup failure");
+        var interval = Duration.ofMinutes(1);
         var service = service(
             (cutoff, bound) -> {
                 throw failure;
             },
             reported::set,
-            Duration.ofMinutes(1),
+            interval,
             5,
-            scheduler
+            executor
         );
+        var task = scheduledTask(service, executor, interval);
 
-        service.start();
-
-        var thrown = Assertions.assertThrows(OutOfMemoryError.class, scheduler::runPass);
+        var thrown = Assertions.assertThrows(OutOfMemoryError.class, task::run);
 
         Assertions.assertSame(failure, thrown);
         Assertions.assertNull(reported.get());
-        Assertions.assertTrue(scheduler.shutdown);
         Assertions.assertEquals(RetentionCleanupService.State.FAILED, service.state());
+        Mockito.verify(executor).shutdown();
 
         service.close();
+        Assertions.assertEquals(RetentionCleanupService.State.FAILED, service.state());
     }
 
     @Test
-    void testCloseFromCleanupReporterDoesNotAwaitOwnTermination() {
-        var scheduler = new TestScheduler();
+    void testCloseFromCleanupReporterDoesNotAwaitOwnTermination() throws Exception {
+        var executor = executor();
         var serviceRef = new AtomicReference<RetentionCleanupService>();
         var reported = new AtomicReference<Throwable>();
         var failure = new SQLException("cleanup failed");
+        var interval = Duration.ofMinutes(1);
         var service = service(
             (cutoff, bound) -> {
                 throw failure;
@@ -125,62 +135,67 @@ class RetentionCleanupServiceTest {
                 reported.set(cause);
                 serviceRef.get().close();
             },
-            Duration.ofMinutes(1),
+            interval,
             5,
-            scheduler
+            executor
         );
         serviceRef.set(service);
+        var task = scheduledTask(service, executor, interval);
 
-        service.start();
-        scheduler.runPass();
+        task.run();
 
         Assertions.assertSame(failure, reported.get());
-        Assertions.assertTrue(scheduler.shutdown);
-        Assertions.assertEquals(0, scheduler.awaitTerminationCalls);
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
-    }
-
-    @Test
-    void testCloseStopsSchedulerAndAwaitsTermination() {
-        var scheduler = new TestScheduler();
-        var failure = new AtomicReference<Throwable>();
-        var service = service(
-            (cutoff, bound) -> 0,
-            failure::set,
-            Duration.ofMinutes(1),
-            5,
-            scheduler
-        );
-
-        service.start();
-        service.close();
-
-        Assertions.assertTrue(scheduler.shutdown);
-        Assertions.assertEquals(1, scheduler.awaitTerminationCalls);
-        Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
-        Assertions.assertNull(failure.get());
+        Mockito.verify(executor).shutdown();
+        Mockito.verify(executor, Mockito.never())
+            .awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class));
     }
 
     @Test
     void testInvalidSettingsAreRejected() {
         RetentionCleaner cleaner = (cutoff, bound) -> 0;
-        var scheduler = new TestScheduler();
+        var executor = Mockito.mock(ScheduledExecutorService.class);
 
         Assertions.assertThrows(
             IllegalArgumentException.class,
             () -> service(cleaner, failure -> {
-            }, Duration.ZERO, 1, scheduler)
+            }, Duration.ZERO, 1, executor)
         );
         Assertions.assertThrows(
             IllegalArgumentException.class,
             () -> service(cleaner, failure -> {
-            }, Duration.ofNanos(1), 1, scheduler)
+            }, Duration.ofNanos(1), 1, executor)
         );
         Assertions.assertThrows(
             IllegalArgumentException.class,
             () -> service(cleaner, failure -> {
-            }, Duration.ofSeconds(1), 0, scheduler)
+            }, Duration.ofSeconds(1), 0, executor)
         );
+    }
+
+    private static ScheduledExecutorService executor() throws InterruptedException {
+        var executor = Mockito.mock(ScheduledExecutorService.class);
+        Mockito.when(executor.awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class)))
+            .thenReturn(true);
+        return executor;
+    }
+
+    private static Runnable scheduledTask(
+        RetentionCleanupService service,
+        ScheduledExecutorService executor,
+        Duration interval
+    ) {
+        var task = ArgumentCaptor.forClass(Runnable.class);
+
+        service.start();
+
+        Mockito.verify(executor).scheduleWithFixedDelay(
+            task.capture(),
+            Mockito.eq(0L),
+            Mockito.eq(interval.toMillis()),
+            Mockito.eq(TimeUnit.MILLISECONDS)
+        );
+        return task.getValue();
     }
 
     private static RetentionCleanupService service(
@@ -188,7 +203,7 @@ class RetentionCleanupServiceTest {
         RetentionCleanupService.CleanupFailureReporter reporter,
         Duration interval,
         int maxRowsPerPass,
-        RetentionCleanupService.CleanupScheduler scheduler
+        ScheduledExecutorService executor
     ) {
         return new RetentionCleanupService(
             cleaner,
@@ -196,39 +211,7 @@ class RetentionCleanupServiceTest {
             interval,
             maxRowsPerPass,
             Clock.fixed(NOW, ZoneOffset.UTC),
-            scheduler
+            executor
         );
-    }
-
-    private static final class TestScheduler implements RetentionCleanupService.CleanupScheduler {
-
-        private Runnable task;
-        private long initialDelayMillis = -1;
-        private long delayMillis = -1;
-        private boolean shutdown;
-        private int awaitTerminationCalls;
-
-        @Override
-        public void scheduleWithFixedDelay(Runnable task, long initialDelayMillis, long delayMillis) {
-            this.task = task;
-            this.initialDelayMillis = initialDelayMillis;
-            this.delayMillis = delayMillis;
-        }
-
-        @Override
-        public void shutdown() {
-            this.shutdown = true;
-        }
-
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            this.awaitTerminationCalls++;
-            return true;
-        }
-
-        private void runPass() {
-            Assertions.assertNotNull(this.task);
-            this.task.run();
-        }
     }
 }
