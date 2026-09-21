@@ -40,7 +40,7 @@ listener は event type registration が成功して runtime が active にな�
 
 ### 発生時刻
 
-`occurredAt` は対象 platform event を Kansokusha が最初に capture した時点の current instant とする。同一 platform event から複数 row を生成する場合は、callback / capture の冒頭で1回だけ取得した同一 `occurredAt` を全 row で共有する。
+`occurredAt` は対象 platform event を Kansokusha が最初に capture した時点の current instant とする。同一 platform event から複数の `EventSubmission` を生成する場合は、callback / capture の冒頭で1回だけ取得した同一 `occurredAt` を全 submission で共有する。
 
 Minecraft/Paper/Velocity が event occurrence timestamp を提供しない場合に、別 thread で後から timestamp を生成してはならない。`kansokusha:block_break` のように二段階 capture を行う event では、最初の capture stage で取得した timestamp を finalization stage まで保持する。
 
@@ -95,7 +95,7 @@ operator は duration を変更できる。既に accepted/persisted な event �
 `BlockBreakEvent` は1本の MONITOR listener だけでは pre-state を保持できないため、同一 event instance に対して二段階で capture する。
 
 1. `EventPriority.LOWEST` で、対象 block の complete block-data string、common fields、および `occurredAt` を ephemeral snapshot として取得する。この stage では cancellation の有無にかかわらず snapshot を取得し、world state を変更しない。
-2. `EventPriority.MONITOR` で同じ event instance を finalization する。`event.isCancelled() == true` なら snapshot を破棄して記録しない。non-cancelled なら LOWEST で取得した snapshot を使って1 row を submit する。
+2. `EventPriority.MONITOR` で同じ event instance を finalization する。`event.isCancelled() == true` なら snapshot を破棄して記録しない。non-cancelled なら LOWEST で取得した snapshot から1つの `EventSubmission` を生成して `KansokushaApi.submit` を試行する。
 3. MONITOR stage は cancelled event でも cleanup できるよう event を受信し、`ignoreCancelled = true` だけに cleanup を依存させない。
 
 この event type が表すのは **Kansokusha が LOWEST で pre-state snapshot を取得し、MONITOR で non-cancelled と確認した player break event** である。後続の Paper/vanilla destroy 処理が実際に block を破壊したことまでを保証するものではない。
