@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 
 class KansokushaConfigTest {
 
@@ -18,6 +19,7 @@ class KansokushaConfigTest {
             dir,
             """
                 debug: true
+                server-key: example:paper
                 ingestion:
                   queue-capacity: 1024
                   max-batch-size: 128
@@ -42,6 +44,7 @@ class KansokushaConfigTest {
 
         var config = holder.get();
         Assertions.assertTrue(config.debug());
+        Assertions.assertEquals(Optional.of(Key.key("example", "paper")), config.localServerKey());
 
         var ingestion = config.ingestionSettings();
         Assertions.assertEquals(1024, ingestion.queueCapacity());
@@ -153,6 +156,23 @@ class KansokushaConfigTest {
               fallback-policy: example:missing
             """;
         assertInvalid(dir.resolve("fallback"), unknownFallback, "fallback policy references unknown");
+    }
+
+    @Test
+    void testOptionalServerIdentityValidation(@TempDir Path dir) throws Exception {
+        writeConfig(dir.resolve("missing"), validConfig("PT1H", "example:fallback"));
+        var missing = new KansokushaConfig.Holder(dir.resolve("missing"));
+        missing.reload();
+        Assertions.assertEquals(Optional.empty(), missing.get().localServerKey());
+
+        assertInvalid(
+            dir.resolve("malformed"),
+            validConfig("PT1H", "example:fallback").replace(
+                "debug: true",
+                "debug: true\nserver-key: Invalid Key"
+            ),
+            "server-key"
+        );
     }
 
     @Test

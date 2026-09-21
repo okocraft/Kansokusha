@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 @ConfigSerializable
@@ -25,18 +26,30 @@ public class KansokushaConfig {
     @Comment("More output to the console.")
     private boolean debug = false;
 
+    @Comment("Local server identity used by single-server integrations such as Paper/Folia.")
+    private String serverKey = "";
+
     @Comment("Bounded asynchronous event ingestion and batch writing.")
     private Ingestion ingestion = new Ingestion();
 
     @Comment("Event retention policies and event-type mappings.")
     private Retention retention = new Retention();
 
+    private transient Optional<Key> localServerKey;
     private transient IngestionSettings ingestionSettings;
     private transient RetentionSettings retentionSettings;
     private transient RetentionCleanupSettings retentionCleanupSettings;
 
     public boolean debug() {
         return this.debug;
+    }
+
+    public Optional<Key> localServerKey() {
+        var key = this.localServerKey;
+        if (key == null) {
+            throw new IllegalStateException("Server identity configuration has not been validated.");
+        }
+        return key;
     }
 
     public IngestionSettings ingestionSettings() {
@@ -64,6 +77,10 @@ public class KansokushaConfig {
     }
 
     private void validate() throws IOException {
+        this.localServerKey = this.serverKey == null || this.serverKey.isBlank()
+            ? Optional.empty()
+            : Optional.of(Retention.parseKey(this.serverKey, "server-key"));
+
         var validatedRetention = Objects.requireNonNull(this.retention, "retention").validate();
         this.retentionSettings = validatedRetention.retentionSettings();
         this.retentionCleanupSettings = validatedRetention.cleanupSettings();
