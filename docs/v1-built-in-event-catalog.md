@@ -82,7 +82,7 @@ event type mapping は次とする。
 
 fallback policy は `kansokusha:default` とする。
 
-duration の runtime source は ADR-0003 の validated retention configuration であり、Java listener に duration を hard-code しない。初期 config を生成する platform integration は上記 policy definitions、mappings、fallback を明示的に書き出す。
+duration の runtime source は ADR-0003 の validated retention configuration であり、Java listener に duration を hard-code しない。上記 policy definitions、mappings、fallback は operator が設定するための catalog-defined configuration example として提示し、初期 config skeleton へ自動投入しない。runtime activation には ADR-0003 どおり operator が明示した valid retention configuration を要求する。
 
 operator は duration を変更できる。既に accepted/persisted な event の `expires_at` は config 変更で再計算しない。
 
@@ -131,8 +131,11 @@ item drops、experience、tool durability などの副作用はこの event の 
 - Bukkit/Paper `BlockPlaceEvent`
 - `EventPriority.MONITOR`
 - `ignoreCancelled = true`
+- `event.canBuild() == true` の場合だけ記録する
 - `BlockMultiPlaceEvent` を含む
 - listener は world state を変更しない
+
+`BlockPlaceEvent` は cancellation と `canBuild` が独立しているため、cancelled でなくても `canBuild() == false` なら successful placement とみなさず記録しない。`BlockMultiPlaceEvent` も同じ条件を適用する。
 
 #### Common fields
 
@@ -218,16 +221,16 @@ successful `ServerConnectedEvent` 1件につき1 row を submitする。初回 b
 
 E6-T2 では少なくとも次の独立 task に分ける。
 
-1. built-in payload generation 1 codec と retention config defaults
+1. built-in payload generation 1 codec と catalog retention configuration example
 2. Paper/Folia block break listener
 3. Paper/Folia block place / multi-place listener
 4. Velocity server connected listener
 
 各 task は event registration、listener capture、payload codec verification、submission outcome handling を testable boundary とする。
 
-Paper/Folia listener tests は cancelled event を記録しないこと、common fields と payload が catalog と一致することを確認する。
+Paper/Folia listener tests は cancelled event を記録しないこと、`BlockPlaceEvent` / `BlockMultiPlaceEvent` の `canBuild() == false` を記録しないこと、common fields と payload が catalog と一致することを確認する。
 
-Velocity listener tests は target / previous server mapping、initial connection の nullable previous server、server key encoding、caller が storage completion を待たないことを確認する。
+Velocity listener tests は target server の common `server` mapping、previous server payload、initial connection の nullable previous server、server key encoding、target server name が payload に重複しないこと、caller が storage completion を待たないことを確認する。
 
 ## 要件への対応
 
