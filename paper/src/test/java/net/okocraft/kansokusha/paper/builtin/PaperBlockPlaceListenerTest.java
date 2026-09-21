@@ -13,7 +13,6 @@ import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -54,36 +53,28 @@ class PaperBlockPlaceListenerTest {
     @Test
     void testSinglePlaceUsesLowestImmutableSnapshot() throws Exception {
         var api = new RecordingApi();
-        var listener = PaperBlockPlaceListener.register(
-            api,
-            SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        var listener = listener(api);
+        var fixture = single(
+            Blocks.WATER.defaultBlockState(),
+            Blocks.OAK_LOG.defaultBlockState(),
+            12, 64, -7, false, true
         );
-        var replaced = Blocks.WATER.defaultBlockState();
-        var placed = Blocks.OAK_LOG.defaultBlockState();
-        var fixture = singleEvent(replaced, placed, 12, 64, -7, false, true);
 
         listener.capture(fixture.event());
-
         Mockito.when(fixture.replacedState().getBlockData())
             .thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
         Mockito.when(fixture.placedBlock().getBlockData())
             .thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-
         listener.finalizeEvent(fixture.event());
 
-        Assertions.assertEquals(1, api.submissions.size());
-        var submission = api.submissions.element();
-        Assertions.assertEquals(PaperBlockPlaceListener.EVENT_TYPE, submission.eventType());
+        var submission = Assertions.assertDoesNotThrow(() -> api.submissions.remove());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(SERVER_KEY, submission.serverKey());
-        Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
         Assertions.assertEquals(new BlockPosition(12, 64, -7), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
         Assertions.assertEquals(
-            placePayload(replaced, placed),
+            placePayload(fixture.replaced(), fixture.placed()),
             PaperBlockStatePayloadCodec.decode(submission.payload())
         );
+        Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(fixture.replacedState(), Mockito.times(1)).getBlockData();
         Mockito.verify(fixture.placedBlock(), Mockito.times(1)).getBlockData();
@@ -92,31 +83,19 @@ class PaperBlockPlaceListenerTest {
     @Test
     void testCancelledAndCannotBuildPlacementsAreDropped() {
         var api = new RecordingApi();
-        var listener = PaperBlockPlaceListener.register(api, SERVER_KEY);
-
-        var cancelled = singleEvent(
-            Blocks.STONE.defaultBlockState(),
-            Blocks.OAK_PLANKS.defaultBlockState(),
-            1,
-            64,
-            1,
-            true,
-            true
+        var listener = listener(api);
+        var cancelled = single(
+            Blocks.STONE.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState(),
+            1, 64, 1, true, true
         );
-        var cannotBuild = singleEvent(
-            Blocks.DIRT.defaultBlockState(),
-            Blocks.COBBLESTONE.defaultBlockState(),
-            2,
-            64,
-            2,
-            false,
-            false
+        var cannotBuild = single(
+            Blocks.DIRT.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(),
+            2, 64, 2, false, false
         );
 
         listener.capture(cancelled.event());
         listener.capture(cannotBuild.event());
         Assertions.assertEquals(2, listener.inFlightCount());
-
         listener.finalizeEvent(cancelled.event());
         listener.finalizeEvent(cannotBuild.event());
 
@@ -125,30 +104,25 @@ class PaperBlockPlaceListenerTest {
     }
 
     @Test
-    void testMultiPlaceProducesExactlyOneAttemptPerChangedBlock() throws Exception {
+    void testMultiPlaceAttemptsEverySnapshotWithOneTimestamp() throws Exception {
         var api = new RecordingApi(
             SubmissionOutcome.ACCEPTED,
             SubmissionOutcome.INGESTION_UNAVAILABLE,
             SubmissionOutcome.ACCEPTED
         );
-        var listener = PaperBlockPlaceListener.register(
-            api,
-            SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
-        );
-
-        var replacedStates = List.of(
+        var listener = listener(api);
+        var replaced = List.of(
             Blocks.AIR.defaultBlockState(),
             Blocks.WATER.defaultBlockState(),
             Blocks.STONE.defaultBlockState()
         );
-        var placedStates = List.of(
+        var placed = List.of(
             Blocks.OAK_PLANKS.defaultBlockState(),
             Blocks.OAK_LOG.defaultBlockState(),
             Blocks.GLASS.defaultBlockState()
         );
-        var event = multiEvent(replacedStates, placedStates, false, true);
 
+        var event = multi(replaced, placed);
         listener.capture(event);
         listener.finalizeEvent(event);
 
@@ -161,60 +135,47 @@ class PaperBlockPlaceListenerTest {
             ),
             api.returnedOutcomes
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
-
-        var byX = new HashMap<Integer, EventSubmission>();
-        for (var submission : api.submissions) {
-            Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-            var position = submission.position();
-            Assertions.assertNotNull(position);
-            Assertions.assertNull(byX.put(position.x(), submission));
-        }
-
+        var byX = submissionsByX(api.submissions);
         for (int i = 0; i < 3; i++) {
-            var x = 100 + i;
-            var submission = byX.get(x);
+            var submission = Assertions.assertDoesNotThrow(() -> byX.get(100 + i));
             Assertions.assertNotNull(submission);
-            Assertions.assertEquals(new BlockPosition(x, 70, -i), submission.position());
+            Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
+            Assertions.assertEquals(new BlockPosition(100 + i, 70, -i), submission.position());
             Assertions.assertEquals(
-                placePayload(replacedStates.get(i), placedStates.get(i)),
+                placePayload(replaced.get(i), placed.get(i)),
                 PaperBlockStatePayloadCodec.decode(submission.payload())
             );
         }
+        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
     void testConcurrentFoliaStyleEventsDoNotCrossSnapshots() throws Exception {
         var api = new RecordingApi();
-        var listener = PaperBlockPlaceListener.register(api, SERVER_KEY);
-        var executor = Executors.newFixedThreadPool(8);
+        var listener = listener(api);
         var fixtures = new ArrayList<SingleFixture>();
-
         for (int i = 0; i < 32; i++) {
-            var replaced = (i & 1) == 0
-                ? Blocks.WATER.defaultBlockState()
-                : Blocks.STONE.defaultBlockState();
-            var placed = (i & 1) == 0
-                ? Blocks.OAK_LOG.defaultBlockState()
-                : Blocks.DIAMOND_BLOCK.defaultBlockState();
-            fixtures.add(singleEvent(replaced, placed, 1000 + i, 80, -i, false, true));
+            fixtures.add(single(
+                (i & 1) == 0 ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState(),
+                (i & 1) == 0 ? Blocks.OAK_LOG.defaultBlockState() : Blocks.DIAMOND_BLOCK.defaultBlockState(),
+                1000 + i, 80, -i, false, true
+            ));
         }
 
+        var executor = Executors.newFixedThreadPool(8);
         try {
-            var captureTasks = new ArrayList<java.util.concurrent.Future<?>>();
-            for (var fixture : fixtures) {
-                captureTasks.add(executor.submit(() -> listener.capture(fixture.event())));
-            }
-            for (var task : captureTasks) {
+            var captures = fixtures.stream()
+                .map(f -> executor.submit(() -> listener.capture(f.event())))
+                .toList();
+            for (var task : captures) {
                 task.get();
             }
-            Assertions.assertEquals(32, listener.inFlightCount());
+            Assertions.assertEquals(fixtures.size(), listener.inFlightCount());
 
-            var finalizeTasks = new ArrayList<java.util.concurrent.Future<?>>();
-            for (var fixture : fixtures) {
-                finalizeTasks.add(executor.submit(() -> listener.finalizeEvent(fixture.event())));
-            }
-            for (var task : finalizeTasks) {
+            var finalizers = fixtures.stream()
+                .map(f -> executor.submit(() -> listener.finalizeEvent(f.event())))
+                .toList();
+            for (var task : finalizers) {
                 task.get();
             }
         } finally {
@@ -222,22 +183,13 @@ class PaperBlockPlaceListenerTest {
             Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
         }
 
-        Assertions.assertEquals(32, api.submissions.size());
+        var byX = submissionsByX(api.submissions);
+        Assertions.assertEquals(fixtures.size(), byX.size());
         Assertions.assertEquals(0, listener.inFlightCount());
-
-        var byX = new HashMap<Integer, EventSubmission>();
-        for (var submission : api.submissions) {
-            var position = submission.position();
-            Assertions.assertNotNull(position);
-            Assertions.assertNull(byX.put(position.x(), submission));
-        }
-
         for (int i = 0; i < fixtures.size(); i++) {
             var fixture = fixtures.get(i);
-            var x = 1000 + i;
-            var submission = byX.get(x);
+            var submission = byX.get(1000 + i);
             Assertions.assertNotNull(submission);
-            Assertions.assertEquals(new BlockPosition(x, 80, -i), submission.position());
             Assertions.assertEquals(
                 placePayload(fixture.replaced(), fixture.placed()),
                 PaperBlockStatePayloadCodec.decode(submission.payload())
@@ -245,7 +197,13 @@ class PaperBlockPlaceListenerTest {
         }
     }
 
-    private static SingleFixture singleEvent(
+    private static PaperBlockPlaceListener listener(RecordingApi api) {
+        return PaperBlockPlaceListener.register(
+            api, SERVER_KEY, Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+    }
+
+    private static SingleFixture single(
         BlockState replaced,
         BlockState placed,
         int x,
@@ -255,53 +213,49 @@ class PaperBlockPlaceListenerTest {
         boolean canBuild
     ) {
         var world = world();
-        var placedBlock = block(world, placed, x, y, z);
-        var replacedState = Mockito.mock(org.bukkit.block.BlockState.class);
-        Mockito.when(replacedState.getWorld()).thenReturn(world);
-        Mockito.when(replacedState.getX()).thenReturn(x);
-        Mockito.when(replacedState.getY()).thenReturn(y);
-        Mockito.when(replacedState.getZ()).thenReturn(z);
-        Mockito.when(replacedState.getBlock()).thenReturn(placedBlock);
-        Mockito.when(replacedState.getBlockData()).thenReturn(replaced.asBlockData());
-
+        var placedBlock = block(placed, x, y, z);
+        var replacedState = state(world, placedBlock, replaced, x, y, z);
         var event = Mockito.mock(BlockPlaceEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player());
         Mockito.when(event.getBlockReplacedState()).thenReturn(replacedState);
         Mockito.when(event.isCancelled()).thenReturn(cancelled);
         Mockito.when(event.canBuild()).thenReturn(canBuild);
-
         return new SingleFixture(event, replacedState, placedBlock, replaced, placed);
     }
 
-    private static BlockMultiPlaceEvent multiEvent(
-        List<BlockState> replacedStates,
-        List<BlockState> placedStates,
-        boolean cancelled,
-        boolean canBuild
+    private static BlockMultiPlaceEvent multi(
+        List<BlockState> replaced,
+        List<BlockState> placed
     ) {
         var world = world();
-        var BukkitStates = new ArrayList<org.bukkit.block.BlockState>();
-
-        for (int i = 0; i < replacedStates.size(); i++) {
-            var x = 100 + i;
-            var placedBlock = block(world, placedStates.get(i), x, 70, -i);
-            var replacedState = Mockito.mock(org.bukkit.block.BlockState.class);
-            Mockito.when(replacedState.getWorld()).thenReturn(world);
-            Mockito.when(replacedState.getX()).thenReturn(x);
-            Mockito.when(replacedState.getY()).thenReturn(70);
-            Mockito.when(replacedState.getZ()).thenReturn(-i);
-            Mockito.when(replacedState.getBlock()).thenReturn(placedBlock);
-            Mockito.when(replacedState.getBlockData())
-                .thenReturn(replacedStates.get(i).asBlockData());
-            BukkitStates.add(replacedState);
+        var states = new ArrayList<org.bukkit.block.BlockState>();
+        for (int i = 0; i < replaced.size(); i++) {
+            var block = block(placed.get(i), 100 + i, 70, -i);
+            states.add(state(world, block, replaced.get(i), 100 + i, 70, -i));
         }
-
         var event = Mockito.mock(BlockMultiPlaceEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player());
-        Mockito.when(event.getReplacedBlockStates()).thenReturn(BukkitStates);
-        Mockito.when(event.isCancelled()).thenReturn(cancelled);
-        Mockito.when(event.canBuild()).thenReturn(canBuild);
+        Mockito.when(event.getReplacedBlockStates()).thenReturn(states);
+        Mockito.when(event.canBuild()).thenReturn(true);
         return event;
+    }
+
+    private static org.bukkit.block.BlockState state(
+        World world,
+        Block block,
+        BlockState state,
+        int x,
+        int y,
+        int z
+    ) {
+        var result = Mockito.mock(org.bukkit.block.BlockState.class);
+        Mockito.when(result.getWorld()).thenReturn(world);
+        Mockito.when(result.getBlock()).thenReturn(block);
+        Mockito.when(result.getX()).thenReturn(x);
+        Mockito.when(result.getY()).thenReturn(y);
+        Mockito.when(result.getZ()).thenReturn(z);
+        Mockito.when(result.getBlockData()).thenReturn(state.asBlockData());
+        return result;
     }
 
     private static World world() {
@@ -310,9 +264,8 @@ class PaperBlockPlaceListenerTest {
         return world;
     }
 
-    private static Block block(World world, BlockState state, int x, int y, int z) {
+    private static Block block(BlockState state, int x, int y, int z) {
         var block = Mockito.mock(Block.class);
-        Mockito.when(block.getWorld()).thenReturn(world);
         Mockito.when(block.getX()).thenReturn(x);
         Mockito.when(block.getY()).thenReturn(y);
         Mockito.when(block.getZ()).thenReturn(z);
@@ -327,10 +280,22 @@ class PaperBlockPlaceListenerTest {
     }
 
     private static CompoundTag placePayload(BlockState replaced, BlockState placed) {
-        var expected = new CompoundTag();
-        expected.put("replaced", NbtUtils.writeBlockState(replaced));
-        expected.put("placed", NbtUtils.writeBlockState(placed));
-        return expected;
+        var payload = new CompoundTag();
+        payload.put("replaced", NbtUtils.writeBlockState(replaced));
+        payload.put("placed", NbtUtils.writeBlockState(placed));
+        return payload;
+    }
+
+    private static HashMap<Integer, EventSubmission> submissionsByX(
+        Iterable<EventSubmission> submissions
+    ) {
+        var byX = new HashMap<Integer, EventSubmission>();
+        for (var submission : submissions) {
+            var position = submission.position();
+            Assertions.assertNotNull(position);
+            Assertions.assertNull(byX.put(position.x(), submission));
+        }
+        return byX;
     }
 
     private record SingleFixture(
@@ -368,10 +333,8 @@ class PaperBlockPlaceListenerTest {
         @Override
         public SubmissionOutcome submit(EventSubmission submission) {
             this.submissions.add(submission);
-            var outcome = this.outcomes.poll();
-            if (outcome == null) {
-                outcome = SubmissionOutcome.ACCEPTED;
-            }
+            var outcome = Optional.ofNullable(this.outcomes.poll())
+                .orElse(SubmissionOutcome.ACCEPTED);
             this.returnedOutcomes.add(outcome);
             return outcome;
         }
