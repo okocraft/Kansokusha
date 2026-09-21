@@ -83,6 +83,7 @@ public final class RetentionCleanupService implements AutoCloseable {
         synchronized (this.lifecycleMonitor) {
             if (this.state == State.NEW) {
                 this.state = State.STOPPED;
+                this.executor.shutdown();
                 return;
             }
             if (this.state == State.STOPPED) {
