@@ -646,14 +646,32 @@ class AsyncBatchWriterServiceTest {
     }
 
     @Test
-    void testJoinUninterruptiblyDoesNotWaitForCurrentThread() throws Exception {
-        var completed = new CountDownLatch(1);
-        Thread.ofPlatform().daemon(true).start(() -> {
-            AsyncBatchWriterService.joinUninterruptibly(Thread.currentThread());
-            completed.countDown();
-        });
+    void testFailureReporterCanDrainAndStopFromWriterThread() throws Exception {
+        var intake = intake(1);
+        submit(intake, 1);
+        var failure = new SQLException("storage failed");
+        var serviceRef = new AtomicReference<AsyncBatchWriterService>();
+        var reporterReturned = new CountDownLatch(1);
+        var service = new AsyncBatchWriterService(
+            intake,
+            events -> {
+                throw failure;
+            },
+            reported -> {
+                serviceRef.get().drainAndStop();
+                reporterReturned.countDown();
+            },
+            1,
+            Duration.ofSeconds(1)
+        );
+        serviceRef.set(service);
 
-        Assertions.assertTrue(completed.await(2, TimeUnit.SECONDS));
+        service.start();
+
+        Assertions.assertTrue(reporterReturned.await(2, TimeUnit.SECONDS));
+        service.awaitStopped();
+        Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
+        Assertions.assertSame(failure, service.failureCause().orElseThrow());
     }
 
     @Test
