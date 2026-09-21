@@ -26,6 +26,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     private final long maxBatchDelayNanos;
     private final NanoClock clock;
     private final EventPoller poller;
+    private final WorkerInterrupter workerInterrupter;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
@@ -49,7 +50,8 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             maxBatchSize,
             maxBatchDelay,
             System::nanoTime,
-            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS)
+            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS),
+            Thread::interrupt
         );
     }
 
@@ -61,6 +63,28 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         Duration maxBatchDelay,
         NanoClock clock,
         EventPoller poller
+    ) {
+        this(
+            intake,
+            writer,
+            failureReporter,
+            maxBatchSize,
+            maxBatchDelay,
+            clock,
+            poller,
+            Thread::interrupt
+        );
+    }
+
+    AsyncBatchWriterService(
+        BoundedEventIntake intake,
+        EventBatchWriter writer,
+        PipelineFailureReporter failureReporter,
+        int maxBatchSize,
+        Duration maxBatchDelay,
+        NanoClock clock,
+        EventPoller poller,
+        WorkerInterrupter workerInterrupter
     ) {
         if (maxBatchSize <= 0) {
             throw new IllegalArgumentException("maxBatchSize must be positive.");
@@ -87,6 +111,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         this.maxBatchDelayNanos = delayNanos;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.poller = Objects.requireNonNull(poller, "poller");
+        this.workerInterrupter = Objects.requireNonNull(workerInterrupter, "workerInterrupter");
     }
 
     public void start() {
@@ -120,7 +145,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
 
         if (threadToInterrupt != null) {
-            threadToInterrupt.interrupt();
+            this.workerInterrupter.interrupt(threadToInterrupt);
         }
     }
 
@@ -375,5 +400,11 @@ public final class AsyncBatchWriterService implements AutoCloseable {
 
         @Nullable
         AcceptedEvent poll(BoundedEventIntake intake, long timeoutNanos) throws InterruptedException;
+    }
+
+    @FunctionalInterface
+    interface WorkerInterrupter {
+
+        void interrupt(Thread worker);
     }
 }
