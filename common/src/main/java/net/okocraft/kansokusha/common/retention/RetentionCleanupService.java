@@ -28,7 +28,6 @@ public final class RetentionCleanupService implements AutoCloseable {
     private volatile State state = State.NEW;
     @Nullable
     private Thread cleanupThread;
-
     public RetentionCleanupService(
         RetentionCleaner cleaner, CleanupFailureReporter failureReporter, Duration interval, int maxRowsPerPass
     ) {
@@ -43,7 +42,6 @@ public final class RetentionCleanupService implements AutoCloseable {
             )
         );
     }
-
     RetentionCleanupService(
         RetentionCleaner cleaner, CleanupFailureReporter failureReporter, Duration interval, int maxRowsPerPass,
         Clock clock, ScheduledExecutorService executor
@@ -69,7 +67,6 @@ public final class RetentionCleanupService implements AutoCloseable {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.executor = Objects.requireNonNull(executor, "executor");
     }
-
     public void start() {
         synchronized (this.lifecycleMonitor) {
             if (this.state != State.NEW) {
@@ -80,7 +77,6 @@ public final class RetentionCleanupService implements AutoCloseable {
             this.executor.scheduleWithFixedDelay(this::runPass, 0, this.intervalMillis, TimeUnit.MILLISECONDS);
         }
     }
-
     @Override
     public void close() {
         final boolean calledFromCleanupThread;
@@ -114,11 +110,9 @@ public final class RetentionCleanupService implements AutoCloseable {
             Thread.currentThread().interrupt();
         }
     }
-
     public State state() {
         return this.state;
     }
-
     private void runPass() {
         synchronized (this.lifecycleMonitor) {
             if (this.state != State.RUNNING) {
@@ -144,7 +138,6 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
         }
     }
-
     private void reportFailure(Throwable failure) {
         try {
             this.failureReporter.report(failure);
@@ -157,7 +150,6 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
         }
     }
-
     private void reportFatalFailure(Error failure) {
         try {
             this.failureReporter.report(failure);
@@ -167,14 +159,12 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
         }
     }
-
     private void failFatally() {
         synchronized (this.lifecycleMonitor) {
             this.state = State.FAILED;
             this.executor.shutdown();
         }
     }
-
     private static boolean awaitTerminationUninterruptibly(ScheduledExecutorService executor) {
         var interrupted = false;
         while (true) {
@@ -187,13 +177,11 @@ public final class RetentionCleanupService implements AutoCloseable {
             }
         }
     }
-
     @FunctionalInterface
     public interface CleanupFailureReporter {
 
         void report(Throwable failure);
     }
-
     public enum State {
         NEW,
         RUNNING,
