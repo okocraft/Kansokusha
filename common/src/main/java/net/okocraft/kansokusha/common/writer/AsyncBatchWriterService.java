@@ -170,7 +170,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     public void drainAndStop() {
         this.beginDraining();
 
-        final Thread threadToJoin;
+        Thread threadToJoin;
         synchronized (this.lifecycleMonitor) {
             threadToJoin = this.worker;
         }
