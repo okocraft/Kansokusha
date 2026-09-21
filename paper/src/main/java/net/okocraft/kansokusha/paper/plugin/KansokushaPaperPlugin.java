@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.plugin;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener;
+import net.okocraft.kansokusha.paper.builtin.PaperBlockPlaceListener;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -14,6 +15,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     private Key serverKey;
     private PaperBlockBreakListener blockBreakListener;
+    private PaperBlockPlaceListener blockPlaceListener;
     private PaperRuntimeLifecycle runtimeLifecycle;
 
     @Override
@@ -43,22 +45,34 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             serverKey,
             reporter
         );
+        PaperBlockBreakListener blockBreakListener = null;
+        PaperBlockPlaceListener blockPlaceListener = null;
 
         try {
             lifecycle.start();
 
-            var blockBreakListener = PaperBlockBreakListener.register(
+            blockBreakListener = PaperBlockBreakListener.register(
                 lifecycle.api(),
                 serverKey
             );
-            this.getServer().getPluginManager().registerEvents(blockBreakListener, this);
+            blockPlaceListener = PaperBlockPlaceListener.register(
+                lifecycle.api(),
+                serverKey
+            );
+
+            var pluginManager = this.getServer().getPluginManager();
+            pluginManager.registerEvents(blockBreakListener, this);
+            pluginManager.registerEvents(blockPlaceListener, this);
 
             this.blockBreakListener = blockBreakListener;
+            this.blockPlaceListener = blockPlaceListener;
             this.runtimeLifecycle = lifecycle;
         } catch (IOException | SQLException e) {
+            cleanupListeners(blockPlaceListener, blockBreakListener);
             lifecycle.close();
             throw new IllegalStateException("Failed to start Kansokusha runtime.", e);
         } catch (RuntimeException | Error failure) {
+            cleanupListeners(blockPlaceListener, blockBreakListener);
             lifecycle.close();
             throw failure;
         }
@@ -66,17 +80,30 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        var blockPlaceListener = this.blockPlaceListener;
+        this.blockPlaceListener = null;
         var blockBreakListener = this.blockBreakListener;
         this.blockBreakListener = null;
-        if (blockBreakListener != null) {
-            HandlerList.unregisterAll(blockBreakListener);
-            blockBreakListener.clear();
-        }
+        cleanupListeners(blockPlaceListener, blockBreakListener);
 
         var lifecycle = this.runtimeLifecycle;
         this.runtimeLifecycle = null;
         if (lifecycle != null) {
             lifecycle.close();
+        }
+    }
+
+    private static void cleanupListeners(
+        PaperBlockPlaceListener blockPlaceListener,
+        PaperBlockBreakListener blockBreakListener
+    ) {
+        if (blockPlaceListener != null) {
+            HandlerList.unregisterAll(blockPlaceListener);
+            blockPlaceListener.clear();
+        }
+        if (blockBreakListener != null) {
+            HandlerList.unregisterAll(blockBreakListener);
+            blockBreakListener.clear();
         }
     }
 
