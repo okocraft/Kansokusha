@@ -24,6 +24,7 @@ class KansokushaVelocityPluginTest {
         writeConfig(dir);
         var logger = Mockito.mock(Logger.class);
         var runtime = Mockito.mock(KansokushaRuntime.class);
+        var publication = Mockito.mock(VelocityRuntimeLifecycle.ApiPublication.class);
         var startEntered = new CountDownLatch(1);
         var releaseStart = new CountDownLatch(1);
         var plugin = new KansokushaVelocityPlugin(
@@ -41,7 +42,8 @@ class KansokushaVelocityPluginTest {
                         throw new SQLException("Interrupted while starting runtime.", e);
                     }
                     return runtime;
-                }
+                },
+                publication
             )
         );
 
@@ -67,6 +69,8 @@ class KansokushaVelocityPluginTest {
         }
 
         Mockito.verify(runtime).close();
+        Mockito.verify(publication).publish(Mockito.any());
+        Mockito.verify(publication).unpublish(Mockito.any());
     }
 
     @Test
