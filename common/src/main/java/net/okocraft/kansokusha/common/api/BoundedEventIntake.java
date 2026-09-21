@@ -22,6 +22,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     private final RetentionPolicySet retentionPolicies;
     private final ArrayBlockingQueue<AcceptedEvent> queue;
     private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
+    private final Object availabilityMonitor = new Object();
     private volatile State state = State.RUNNING;
     @Nullable
     private volatile Throwable failureCause;
@@ -56,9 +57,11 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
                 return Admission.UNAVAILABLE;
             }
 
-            return this.queue.offer(acceptedEvent)
-                ? Admission.ACCEPTED
-                : Admission.UNAVAILABLE;
+            if (!this.queue.offer(acceptedEvent)) {
+                return Admission.UNAVAILABLE;
+            }
+            this.signalAvailabilityChange();
+            return Admission.ACCEPTED;
         } finally {
             lock.unlock();
         }
@@ -78,6 +81,52 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         Objects.requireNonNull(unit, "unit");
         return this.queue.poll(timeout, unit);
     }
+
+    @Nullable
+    public AcceptedEvent awaitNext() throws InterruptedException {
+        synchronized (this.availabilityMonitor) {
+            while (true) {
+                var event = this.queue.poll();
+                if (event != null) {
+                    return event;
+                }
+                if (this.state != State.RUNNING) {
+                    return null;
+                }
+                this.availabilityMonitor.wait();
+            }
+        }
+    }
+
+    @Nullable
+    public AcceptedEvent awaitNext(long timeout, TimeUnit unit) throws InterruptedException {
+        Objects.requireNonNull(unit, "unit");
+        if (timeout <= 0) {
+            return this.queue.poll();
+        }
+
+        var remainingNanos = unit.toNanos(timeout);
+        var deadline = System.nanoTime() + remainingNanos;
+
+        synchronized (this.availabilityMonitor) {
+            while (true) {
+                var event = this.queue.poll();
+                if (event != null) {
+                    return event;
+                }
+                if (this.state != State.RUNNING) {
+                    return null;
+                }
+                if (remainingNanos <= 0) {
+                    return null;
+                }
+
+                TimeUnit.NANOSECONDS.timedWait(this.availabilityMonitor, remainingNanos);
+                remainingNanos = deadline - System.nanoTime();
+            }
+        }
+    }
+
 
     public int size() {
         return this.queue.size();
@@ -105,6 +154,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         } finally {
             lock.unlock();
         }
+        this.signalAvailabilityChange();
     }
 
     public void fail(Throwable cause) {
@@ -120,6 +170,7 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         } finally {
             lock.unlock();
         }
+        this.signalAvailabilityChange();
     }
 
     @Override
@@ -130,6 +181,13 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
             this.state = State.CLOSED;
         } finally {
             lock.unlock();
+        }
+        this.signalAvailabilityChange();
+    }
+
+    private void signalAvailabilityChange() {
+        synchronized (this.availabilityMonitor) {
+            this.availabilityMonitor.notifyAll();
         }
     }
 
