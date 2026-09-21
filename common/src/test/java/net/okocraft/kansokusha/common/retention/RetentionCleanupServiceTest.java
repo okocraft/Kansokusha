@@ -95,7 +95,7 @@ class RetentionCleanupServiceTest {
         var task = scheduledTask(service, executor, INTERVAL);
 
         Assertions.assertSame(failure, Assertions.assertThrows(OutOfMemoryError.class, task::run));
-        Assertions.assertNull(reported.get());
+        Assertions.assertSame(failure, reported.get());
         Assertions.assertEquals(RetentionCleanupService.State.FAILED, service.state());
         Mockito.verify(executor).shutdown();
 
