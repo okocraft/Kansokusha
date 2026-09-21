@@ -1,7 +1,7 @@
 package net.okocraft.kansokusha.common.retention;
 
+import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.storage.RetentionCleaner;
-import net.okocraft.kansokusha.common.writer.PipelineFailureReporter;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -19,8 +19,11 @@ import java.util.concurrent.TimeUnit;
 @NotNullByDefault
 public final class RetentionCleanupService implements AutoCloseable {
 
+    private static final String FAILURE_MESSAGE =
+        "Kansokusha retention cleanup failed; automatic expiry deletion will retry on the next scheduled pass.";
+
     private final RetentionCleaner cleaner;
-    private final PipelineFailureReporter failureReporter;
+    private final AdministratorReporter failureReporter;
     private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
@@ -34,7 +37,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     public RetentionCleanupService(
         RetentionCleaner cleaner,
-        PipelineFailureReporter failureReporter,
+        AdministratorReporter failureReporter,
         Duration interval,
         int maxRowsPerPass
     ) {
@@ -43,7 +46,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     RetentionCleanupService(
         RetentionCleaner cleaner,
-        PipelineFailureReporter failureReporter,
+        AdministratorReporter failureReporter,
         Duration interval,
         int maxRowsPerPass,
         Clock clock
@@ -153,7 +156,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     private void reportFailure(Throwable failure) {
         try {
-            this.failureReporter.report(failure);
+            this.failureReporter.report(FAILURE_MESSAGE, failure);
         } catch (Throwable reportingFailure) {
             if (reportingFailure != failure) {
                 failure.addSuppressed(reportingFailure);
