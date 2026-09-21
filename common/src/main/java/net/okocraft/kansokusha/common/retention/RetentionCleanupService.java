@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -18,15 +19,15 @@ public final class RetentionCleanupService implements AutoCloseable {
 
     private final RetentionCleaner cleaner;
     private final PipelineFailureReporter failureReporter;
-    private final Duration interval;
-    private final long intervalNanos;
+    private static final long MAX_WAIT_CHUNK_MILLIS = TimeUnit.DAYS.toMillis(1);
+
+    private final long intervalMillis;
     private final int maxRowsPerPass;
     private final Clock clock;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
     private boolean stopRequested;
-    private boolean passRunning;
     @Nullable
     private volatile Throwable failureCause;
     @Nullable
@@ -50,7 +51,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     ) {
         this.cleaner = Objects.requireNonNull(cleaner, "cleaner");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
-        this.interval = Objects.requireNonNull(interval, "interval");
+        Objects.requireNonNull(interval, "interval");
         if (interval.isZero() || interval.isNegative()) {
             throw new IllegalArgumentException("interval must be positive.");
         }
@@ -58,9 +59,9 @@ public final class RetentionCleanupService implements AutoCloseable {
             throw new IllegalArgumentException("interval must use whole milliseconds.");
         }
         try {
-            this.intervalNanos = interval.toNanos();
+            this.intervalMillis = interval.toMillis();
         } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("interval exceeds the supported nanosecond range.", e);
+            throw new IllegalArgumentException("interval exceeds the supported millisecond range.", e);
         }
         if (maxRowsPerPass <= 0) {
             throw new IllegalArgumentException("maxRowsPerPass must be positive.");
@@ -129,8 +130,6 @@ public final class RetentionCleanupService implements AutoCloseable {
                     this.reportFailure(e);
                     fatalFailure = e;
                     throw e;
-                } finally {
-                    this.endPass();
                 }
 
                 if (!this.awaitNextPass()) {
@@ -155,37 +154,40 @@ public final class RetentionCleanupService implements AutoCloseable {
             if (this.stopRequested) {
                 return false;
             }
-            this.passRunning = true;
             return true;
         }
     }
 
-    private void endPass() {
-        synchronized (this.lifecycleMonitor) {
-            this.passRunning = false;
-            this.lifecycleMonitor.notifyAll();
-        }
-    }
-
     private boolean awaitNextPass() {
-        var deadline = System.nanoTime() + this.intervalNanos;
+        var remainingMillis = this.intervalMillis;
 
-        synchronized (this.lifecycleMonitor) {
-            while (!this.stopRequested) {
-                var remaining = deadline - System.nanoTime();
-                if (remaining <= 0) {
-                    return true;
+        while (remainingMillis > 0) {
+            var chunkMillis = Math.min(remainingMillis, MAX_WAIT_CHUNK_MILLIS);
+            var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(chunkMillis);
+
+            synchronized (this.lifecycleMonitor) {
+                while (!this.stopRequested) {
+                    var remainingNanos = deadline - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        break;
+                    }
+
+                    try {
+                        var millis = remainingNanos / 1_000_000;
+                        var nanos = (int) (remainingNanos % 1_000_000);
+                        this.lifecycleMonitor.wait(millis, nanos);
+                    } catch (InterruptedException ignored) {
+                    }
                 }
-
-                try {
-                    var millis = remaining / 1_000_000;
-                    var nanos = (int) (remaining % 1_000_000);
-                    this.lifecycleMonitor.wait(millis, nanos);
-                } catch (InterruptedException ignored) {
+                if (this.stopRequested) {
+                    return false;
                 }
             }
-            return false;
+
+            remainingMillis -= chunkMillis;
         }
+
+        return true;
     }
 
     private void reportFailure(Throwable failure) {
