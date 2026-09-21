@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.velocity.plugin;
 
+import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -9,8 +10,80 @@ import org.slf4j.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 class KansokushaVelocityPluginTest {
+
+    @Test
+    void testShutdownWaitsForInitializationAndClosesPublishedRuntime(@TempDir Path dir)
+        throws Exception {
+        writeConfig(dir);
+        var logger = Mockito.mock(Logger.class);
+        var runtime = Mockito.mock(KansokushaRuntime.class);
+        var startEntered = new CountDownLatch(1);
+        var releaseStart = new CountDownLatch(1);
+        var plugin = new KansokushaVelocityPlugin(
+            logger,
+            dir,
+            (dataDirectory, reporter) -> new VelocityRuntimeLifecycle(
+                dataDirectory,
+                reporter,
+                (actualDirectory, actualReporter) -> {
+                    startEntered.countDown();
+                    try {
+                        releaseStart.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new SQLException("Interrupted while starting runtime.", e);
+                    }
+                    return runtime;
+                }
+            )
+        );
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var initialize = executor.submit(() -> {
+                plugin.onProxyInitialize(null);
+                return null;
+            });
+            Assertions.assertTrue(startEntered.await(2, TimeUnit.SECONDS));
+
+            var shutdown = executor.submit(() -> {
+                plugin.onProxyShutdown(null);
+                return null;
+            });
+
+            Assertions.assertFalse(shutdown.isDone());
+            releaseStart.countDown();
+            initialize.get(2, TimeUnit.SECONDS);
+            shutdown.get(2, TimeUnit.SECONDS);
+        }
+
+        Mockito.verify(runtime).close();
+    }
+
+    @Test
+    void testInitializationDoesNotStartAfterShutdownBegins(@TempDir Path dir) {
+        var logger = Mockito.mock(Logger.class);
+        var lifecycleCreated = new AtomicBoolean();
+        var plugin = new KansokushaVelocityPlugin(
+            logger,
+            dir,
+            (dataDirectory, reporter) -> {
+                lifecycleCreated.set(true);
+                return Mockito.mock(VelocityRuntimeLifecycle.class);
+            }
+        );
+
+        plugin.onProxyShutdown(null);
+        plugin.onProxyInitialize(null);
+
+        Assertions.assertFalse(lifecycleCreated.get());
+    }
 
     @Test
     void testProxyLifecycleStartsAndClosesRuntime(@TempDir Path dir) throws Exception {
