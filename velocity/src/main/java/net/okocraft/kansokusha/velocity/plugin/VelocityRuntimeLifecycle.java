@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.velocity.plugin;
 
+import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import org.jetbrains.annotations.Nullable;
@@ -14,9 +15,22 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
     private static final String SHUTDOWN_FAILURE_MESSAGE =
         "Kansokusha runtime failed to shut down cleanly.";
 
+    private static final ApiPublication SERVICE_PUBLICATION = new ApiPublication() {
+        @Override
+        public void publish(KansokushaApi api) {
+            VelocityKansokushaApiProvider.publish(api);
+        }
+
+        @Override
+        public void unpublish(KansokushaApi api) {
+            VelocityKansokushaApiProvider.unpublish(api);
+        }
+    };
+
     private final Path dataDirectory;
     private final AdministratorReporter reporter;
     private final RuntimeFactory runtimeFactory;
+    private final ApiPublication apiPublication;
 
     @Nullable
     private KansokushaRuntime runtime;
@@ -25,7 +39,7 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
         Path dataDirectory,
         AdministratorReporter reporter
     ) {
-        this(dataDirectory, reporter, KansokushaRuntime::start);
+        this(dataDirectory, reporter, KansokushaRuntime::start, SERVICE_PUBLICATION);
     }
 
     VelocityRuntimeLifecycle(
@@ -33,9 +47,19 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
         AdministratorReporter reporter,
         RuntimeFactory runtimeFactory
     ) {
+        this(dataDirectory, reporter, runtimeFactory, SERVICE_PUBLICATION);
+    }
+
+    VelocityRuntimeLifecycle(
+        Path dataDirectory,
+        AdministratorReporter reporter,
+        RuntimeFactory runtimeFactory,
+        ApiPublication apiPublication
+    ) {
         this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
         this.reporter = Objects.requireNonNull(reporter, "reporter");
         this.runtimeFactory = Objects.requireNonNull(runtimeFactory, "runtimeFactory");
+        this.apiPublication = Objects.requireNonNull(apiPublication, "apiPublication");
     }
 
     void start() throws IOException, SQLException {
@@ -43,7 +67,15 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
             throw new IllegalStateException("Velocity runtime lifecycle has already been started.");
         }
 
-        this.runtime = this.runtimeFactory.start(this.dataDirectory, this.reporter);
+        var started = this.runtimeFactory.start(this.dataDirectory, this.reporter);
+        try {
+            this.apiPublication.publish(started.api());
+        } catch (RuntimeException | Error failure) {
+            closeAfterPublicationFailure(started, failure);
+            throw failure;
+        }
+
+        this.runtime = started;
     }
 
     @Nullable
@@ -58,6 +90,8 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
         if (current == null) {
             return;
         }
+
+        this.apiPublication.unpublish(current.api());
 
         try {
             current.close();
@@ -75,6 +109,19 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
         }
     }
 
+    private static void closeAfterPublicationFailure(
+        KansokushaRuntime runtime,
+        Throwable failure
+    ) {
+        try {
+            runtime.close();
+        } catch (SQLException | RuntimeException | Error closeFailure) {
+            if (closeFailure != failure) {
+                failure.addSuppressed(closeFailure);
+            }
+        }
+    }
+
     @FunctionalInterface
     interface RuntimeFactory {
 
@@ -82,5 +129,12 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
             Path dataDirectory,
             AdministratorReporter reporter
         ) throws IOException, SQLException;
+    }
+
+    interface ApiPublication {
+
+        void publish(KansokushaApi api);
+
+        void unpublish(KansokushaApi api);
     }
 }
