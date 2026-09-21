@@ -131,9 +131,7 @@ class RetentionCleanupServiceTest {
     void testCloseBeforeStartShutsDownOwnedExecutor() {
         var executor = Mockito.mock(ScheduledExecutorService.class);
         var service = service((cutoff, bound) -> 0, failure -> { }, INTERVAL, 1, executor);
-
         service.close();
-
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
         Mockito.verify(executor).shutdown();
     }
