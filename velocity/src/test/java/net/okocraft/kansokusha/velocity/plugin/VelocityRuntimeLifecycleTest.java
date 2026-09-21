@@ -2,15 +2,41 @@ package net.okocraft.kansokusha.velocity.plugin;
 
 import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
+import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 
 class VelocityRuntimeLifecycleTest {
+
+    @Test
+    void testRealRuntimeUsesIndependentProxyStorageWithoutLocalServerIdentity(@TempDir Path dir)
+        throws Exception {
+        writeConfig(dir);
+        var reporter = Mockito.mock(AdministratorReporter.class);
+        var lifecycle = new VelocityRuntimeLifecycle(dir, reporter);
+
+        lifecycle.start();
+
+        var runtime = lifecycle.runtime();
+        Assertions.assertNotNull(runtime);
+        Assertions.assertTrue(runtime.api().localServerKey().isEmpty());
+        var databasePath = dir.resolve("kansokusha.duckdb");
+        Assertions.assertTrue(Files.isRegularFile(databasePath));
+
+        lifecycle.close();
+        Assertions.assertNull(lifecycle.runtime());
+        Mockito.verifyNoInteractions(reporter);
+
+        try (var reopened = DuckDbDatabase.open(databasePath)) {
+            Assertions.assertNotNull(reopened);
+        }
+    }
 
     @Test
     void testStartMapsVelocityDataDirectoryAndCloseStopsRuntime(@TempDir Path dir) throws Exception {
@@ -99,5 +125,25 @@ class VelocityRuntimeLifecycleTest {
             Assertions.assertThrows(SQLException.class, lifecycle::start)
         );
         Assertions.assertNull(lifecycle.runtime());
+    }
+
+    private static void writeConfig(Path dir) throws Exception {
+        Files.createDirectories(dir);
+        Files.writeString(
+            dir.resolve("config.yml"),
+            """
+                ingestion:
+                  queue-capacity: 4
+                  max-batch-size: 4
+                  max-batch-delay: PT1H
+                retention:
+                  policies:
+                    - key: example:default
+                      duration: P1D
+                  fallback-policy: example:default
+                  cleanup-interval: PT1H
+                  max-rows-per-pass: 100
+                """
+        );
     }
 }
