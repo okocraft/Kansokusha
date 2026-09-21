@@ -78,16 +78,16 @@ public final class BuiltInEventPayloadCodec {
         void encode(Writer writer) throws IOException;
     }
 
-    private record BlockBreakPayload(String blockData) {
+    record BlockBreakPayload(String blockData) {
     }
 
-    private record BlockPlacePayload(
+    record BlockPlacePayload(
         String replacedBlockData,
         String placedBlockData
     ) {
     }
 
-    private record ServerConnectedPayload(@Nullable String previousServerKey) {
+    record ServerConnectedPayload(@Nullable String previousServerKey) {
     }
 
     private record Writer(DataOutputStream output) {
