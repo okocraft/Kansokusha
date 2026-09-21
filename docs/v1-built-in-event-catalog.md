@@ -16,7 +16,7 @@ v1 built-in event は次の3種とする。
 
 | Platform | Event type key | Capture point | Retention |
 | --- | --- | --- | --- |
-| Paper / Folia | `kansokusha:block_break` | successful `BlockBreakEvent` | `kansokusha:audit` |
+| Paper / Folia | `kansokusha:block_break` | non-cancelled `BlockBreakEvent` with earliest-available pre-state snapshot | `kansokusha:audit` |
 | Paper / Folia | `kansokusha:block_place` | successful `BlockPlaceEvent` / `BlockMultiPlaceEvent` | `kansokusha:audit` |
 | Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` |
 
@@ -40,9 +40,9 @@ listener は event type registration が成功して runtime が active にな�
 
 ### 発生時刻
 
-`occurredAt` は対象 platform event を listener が受信した時点の current instant とする。
+`occurredAt` は対象 platform event を Kansokusha が最初に capture した時点の current instant とする。同一 platform event から複数 row を生成する場合は、callback / capture の冒頭で1回だけ取得した同一 `occurredAt` を全 row で共有する。
 
-Minecraft/Paper/Velocity が event occurrence timestamp を提供しない場合に、別 thread で後から timestamp を生成してはならない。
+Minecraft/Paper/Velocity が event occurrence timestamp を提供しない場合に、別 thread で後から timestamp を生成してはならない。`kansokusha:block_break` のように二段階 capture を行う event では、最初の capture stage で取得した timestamp を finalization stage まで保持する。
 
 ### Subject
 
@@ -92,12 +92,15 @@ operator は duration を変更できる。既に accepted/persisted な event �
 
 #### Capture point
 
-- Bukkit/Paper `BlockBreakEvent`
-- `EventPriority.MONITOR`
-- `ignoreCancelled = true`
-- listener は world state を変更しない
+`BlockBreakEvent` は1本の MONITOR listener だけでは pre-state を保持できないため、同一 event instance に対して二段階で capture する。
 
-event callback 時点の block state を break 前 state として取得する。
+1. `EventPriority.LOWEST` で、対象 block の complete block-data string、common fields、および `occurredAt` を ephemeral snapshot として取得する。この stage では cancellation の有無にかかわらず snapshot を取得し、world state を変更しない。
+2. `EventPriority.MONITOR` で同じ event instance を finalization する。`event.isCancelled() == true` なら snapshot を破棄して記録しない。non-cancelled なら LOWEST で取得した snapshot を使って1 row を submit する。
+3. MONITOR stage は cancelled event でも cleanup できるよう event を受信し、`ignoreCancelled = true` だけに cleanup を依存させない。
+
+この event type が表すのは **Kansokusha が LOWEST で pre-state snapshot を取得し、MONITOR で non-cancelled と確認した player break event** である。後続の Paper/vanilla destroy 処理が実際に block を破壊したことまでを保証するものではない。
+
+また、Bukkit/Paper の priority model では同じ `LOWEST` priority に登録された他 plugin との絶対的な先行順序は保証できない。そのため `blockData` は「event 発火直前の immutable state」ではなく、**Kansokusha が LOWEST stage で取得できた earliest-available state** と定義する。他 plugin が Kansokusha より先に同 priority で block を変更した場合、その変更前 state を復元できるとは保証しない。
 
 #### Common fields
 
@@ -112,11 +115,11 @@ field order:
 
 1. `blockData`: non-null string
 
-`blockData` は break 前 block の complete block-data string とし、material identity と state properties を復元可能な表現を使う。
+`blockData` は LOWEST capture stage で取得した block の complete block-data string とし、material identity と state properties を復元可能な表現を使う。これは上記の priority limitation を持つ earliest-available pre-state である。
 
 #### Granularity
 
-successful `BlockBreakEvent` 1件につき1 row を submit する。
+LOWEST snapshot が存在し、MONITOR で non-cancelled と確認できた `BlockBreakEvent` 1件につき1 row を submit する。MONITOR 到達後の vanilla destroy 成功を row の意味には含めない。
 
 item drops、experience、tool durability などの副作用はこの event の payload に含めない。
 
@@ -159,7 +162,9 @@ field order:
 
 通常の `BlockPlaceEvent` は1 changed block = 1 row とする。
 
-`BlockMultiPlaceEvent` は event 全体を1 row にまとめず、event が変更した block ごとに1 row を submit する。同一 player action で複数 row になることを許容する。
+`BlockMultiPlaceEvent` は event 全体を1 row にまとめず、replaced-state list の各 changed block について厳密に1 row を submit する。replaced-state list が N blocks なら出力も厳密に N rows とし、base `BlockPlaceEvent` 分の追加 row を作らない。
+
+同一 `BlockMultiPlaceEvent` から生成する全 row は callback 冒頭で1回だけ取得した同一 `occurredAt` を共有する。subclass と base class の listener を別々に登録して二重記録してはならない。
 
 #### Coalescing
 
@@ -229,7 +234,7 @@ E6-T2 では少なくとも次の独立 task に分ける。
 
 各 task は event registration、listener capture、payload codec verification、submission outcome handling を testable boundary とする。
 
-Paper/Folia listener tests は cancelled event を記録しないこと、`BlockPlaceEvent` / `BlockMultiPlaceEvent` の `canBuild() == false` を記録しないこと、common fields と payload が catalog と一致することを確認する。
+Paper/Folia listener tests は、`BlockBreakEvent` の LOWEST snapshot が後続 listener の block mutation より前に取得できた場合にその snapshot を MONITOR submit へ引き継ぐこと、cancelled break では snapshot を破棄して記録しないこと、MONITOR 時点の live block state を payload source にしないことを確認する。また `BlockPlaceEvent` / `BlockMultiPlaceEvent` の `canBuild() == false` を記録しないこと、multi-place の replaced-state list が N blocks なら厳密に N rows だけ生成すること、その全 row が同一 `occurredAt` を共有すること、base/subclass の二重記録がないこと、common fields と payload が catalog と一致することを確認する。
 
 Velocity listener tests は target server の common `server` mapping、previous server payload、initial connection の nullable previous server、server key encoding、target server name が payload に重複しないこと、caller が storage completion を待たないことを確認する。
 
