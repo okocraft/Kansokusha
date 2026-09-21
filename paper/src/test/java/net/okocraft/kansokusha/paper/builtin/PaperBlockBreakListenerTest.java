@@ -161,7 +161,8 @@ class PaperBlockBreakListenerTest {
 
         var submissionsByX = new HashMap<Integer, EventSubmission>();
         for (var submission : api.submissions) {
-            var position = Assertions.assertNotNull(submission.position());
+            var position = submission.position();
+            Assertions.assertNotNull(position);
             Assertions.assertNull(
                 submissionsByX.put(position.x(), submission),
                 "Duplicate submission for x=" + position.x()
@@ -170,10 +171,8 @@ class PaperBlockBreakListenerTest {
 
         for (int i = 0; i < 64; i++) {
             var x = 1000 + i;
-            var submission = Assertions.assertNotNull(
-                submissionsByX.get(x),
-                "Missing submission for x=" + x
-            );
+            var submission = submissionsByX.get(x);
+            Assertions.assertNotNull(submission, "Missing submission for x=" + x);
             Assertions.assertEquals(new BlockPosition(x, 64, -i), submission.position());
             Assertions.assertEquals(
                 NbtUtils.writeBlockState(expectedStates.get(x)),
