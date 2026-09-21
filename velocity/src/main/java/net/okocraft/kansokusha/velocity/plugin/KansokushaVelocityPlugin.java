@@ -41,7 +41,7 @@ public final class KansokushaVelocityPlugin {
         this.config = new KansokushaConfig.Holder(dataDirectory);
     }
 
-    @Subscribe
+    @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyInitialize(ProxyInitializeEvent event) {
         synchronized (this.lifecycleMonitor) {
             if (this.shutdownStarted || this.runtimeLifecycle != null) {
@@ -75,7 +75,7 @@ public final class KansokushaVelocityPlugin {
         }
     }
 
-    @Subscribe
+    @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyShutdown(ProxyShutdownEvent event) {
         final VelocityRuntimeLifecycle lifecycle;
         synchronized (this.lifecycleMonitor) {
