@@ -30,7 +30,7 @@ public final class AsyncBatchWriterService {
     private volatile State state = State.NEW;
     private volatile boolean stopRequested;
     @Nullable
-    private volatile SQLException failureCause;
+    private volatile Throwable failureCause;
     @Nullable
     private Thread worker;
 
@@ -135,12 +135,12 @@ public final class AsyncBatchWriterService {
         return this.state;
     }
 
-    public Optional<SQLException> failureCause() {
+    public Optional<Throwable> failureCause() {
         return Optional.ofNullable(this.failureCause);
     }
 
     private void runLoop() {
-        SQLException failure = null;
+        Throwable failure = null;
 
         try {
             while (!this.stopRequested) {
@@ -183,7 +183,7 @@ public final class AsyncBatchWriterService {
 
                 this.writeBatch(batch);
             }
-        } catch (SQLException e) {
+        } catch (SQLException | RuntimeException e) {
             failure = e;
         } finally {
             synchronized (this.lifecycleMonitor) {
