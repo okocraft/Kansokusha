@@ -1,0 +1,10 @@
+name: KansokushaExternalApiFixture
+version: '1.0.0'
+main: net.okocraft.kansokusha.testplugin.ExternalPaperPlugin
+api-version: '1.21'
+dependencies:
+  server:
+    Kansokusha:
+      load: BEFORE
+      required: true
+      join-classpath: true

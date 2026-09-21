@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.plugin;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import org.junit.jupiter.api.Assertions;
@@ -18,7 +19,10 @@ class PaperRuntimeLifecycleTest {
     @Test
     void testStartMapsPaperInputsAndCloseStopsRuntime(@TempDir Path dir) throws Exception {
         var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
         var reporter = Mockito.mock(AdministratorReporter.class);
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
         var lifecycle = new PaperRuntimeLifecycle(
             dir,
             SERVER_KEY,
@@ -28,24 +32,58 @@ class PaperRuntimeLifecycleTest {
                 Assertions.assertEquals(SERVER_KEY, serverKey);
                 Assertions.assertSame(reporter, actualReporter);
                 return runtime;
-            }
+            },
+            publication
         );
 
         lifecycle.start();
 
         Assertions.assertSame(runtime, lifecycle.runtime());
+        Mockito.verify(publication).publish(api);
         lifecycle.close();
         Assertions.assertNull(lifecycle.runtime());
-        Mockito.verify(runtime).close();
+        var shutdownOrder = Mockito.inOrder(publication, runtime);
+        shutdownOrder.verify(publication).unpublish(api);
+        shutdownOrder.verify(runtime).close();
 
         lifecycle.close();
+        Mockito.verify(runtime, Mockito.times(2)).api();
         Mockito.verifyNoMoreInteractions(runtime);
+    }
+
+    @Test
+    void testPublicationFailureClosesStartedRuntime(@TempDir Path dir) throws Exception {
+        var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
+        var reporter = Mockito.mock(AdministratorReporter.class);
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
+        var failure = new IllegalStateException("already published");
+        Mockito.doThrow(failure).when(publication).publish(api);
+
+        var lifecycle = new PaperRuntimeLifecycle(
+            dir,
+            SERVER_KEY,
+            reporter,
+            (dataDirectory, serverKey, actualReporter) -> runtime,
+            publication
+        );
+
+        Assertions.assertSame(
+            failure,
+            Assertions.assertThrows(IllegalStateException.class, lifecycle::start)
+        );
+        Mockito.verify(runtime).close();
+        Assertions.assertNull(lifecycle.runtime());
     }
 
     @Test
     void testShutdownFailureIsReported(@TempDir Path dir) throws Exception {
         var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
         var reporter = Mockito.mock(AdministratorReporter.class);
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
         var failure = new SQLException("close failed");
         Mockito.doThrow(failure).when(runtime).close();
 
@@ -53,12 +91,14 @@ class PaperRuntimeLifecycleTest {
             dir,
             SERVER_KEY,
             reporter,
-            (dataDirectory, serverKey, actualReporter) -> runtime
+            (dataDirectory, serverKey, actualReporter) -> runtime,
+            publication
         );
         lifecycle.start();
 
         lifecycle.close();
 
+        Mockito.verify(publication).unpublish(api);
         Mockito.verify(reporter).report(
             "Kansokusha runtime failed to shut down cleanly.",
             failure
@@ -69,7 +109,10 @@ class PaperRuntimeLifecycleTest {
     @Test
     void testFatalShutdownFailureIsReportedAndRethrown(@TempDir Path dir) throws Exception {
         var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
         var reporter = Mockito.mock(AdministratorReporter.class);
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
         var failure = new AssertionError("fatal close failure");
         Mockito.doThrow(failure).when(runtime).close();
 
@@ -77,13 +120,15 @@ class PaperRuntimeLifecycleTest {
             dir,
             SERVER_KEY,
             reporter,
-            (dataDirectory, serverKey, actualReporter) -> runtime
+            (dataDirectory, serverKey, actualReporter) -> runtime,
+            publication
         );
         lifecycle.start();
 
         var thrown = Assertions.assertThrows(AssertionError.class, lifecycle::close);
 
         Assertions.assertSame(failure, thrown);
+        Mockito.verify(publication).unpublish(api);
         Mockito.verify(reporter).report(
             "Kansokusha runtime failed to shut down cleanly.",
             failure
@@ -95,13 +140,15 @@ class PaperRuntimeLifecycleTest {
     void testStartupFailureDoesNotInstallRuntime(@TempDir Path dir) {
         var reporter = Mockito.mock(AdministratorReporter.class);
         var failure = new SQLException("startup failed");
+        var publication = Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class);
         var lifecycle = new PaperRuntimeLifecycle(
             dir,
             SERVER_KEY,
             reporter,
             (dataDirectory, serverKey, actualReporter) -> {
                 throw failure;
-            }
+            },
+            publication
         );
 
         Assertions.assertSame(
@@ -109,5 +156,6 @@ class PaperRuntimeLifecycleTest {
             Assertions.assertThrows(SQLException.class, lifecycle::start)
         );
         Assertions.assertNull(lifecycle.runtime());
+        Mockito.verifyNoInteractions(publication);
     }
 }

@@ -20,8 +20,12 @@ public final class Kansokusha {
      * @throws IllegalStateException if the API has not been published or has already shut down
      */
     public static KansokushaApi api() {
-        KansokushaApiProvider provider = ServiceLoader.load(KansokushaApiProvider.class).findFirst()
-            .orElseThrow(() -> new IllegalStateException("Kansokusha API provider is not available"));
+        KansokushaApiProvider provider = ServiceLoader.load(
+            KansokushaApiProvider.class,
+            Kansokusha.class.getClassLoader()
+        ).findFirst().orElseThrow(
+            () -> new IllegalStateException("Kansokusha API provider is not available")
+        );
         return provider.api();
     }
 }

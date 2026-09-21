@@ -16,6 +16,7 @@ rootProject.name = "kansokusha"
 addProject("api")
 addProject("common")
 addProject("paper")
+addProject("paper-test-plugin")
 addProject("velocity")
 
 fun addProject(name: String) {
