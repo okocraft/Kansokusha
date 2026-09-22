@@ -45,6 +45,34 @@ class BoundedEventIntakeTest {
     }
 
     @Test
+    void testReplacingRetentionPoliciesOnlyAffectsFutureAdmissions() {
+        var intake = new BoundedEventIntake(2, policies(Duration.ofHours(1)));
+
+        Assertions.assertEquals(
+            EventIntake.Admission.ACCEPTED,
+            intake.accept(submission(OCCURRED_AT))
+        );
+        intake.replaceRetentionPolicies(policies(Duration.ofHours(2)));
+        Assertions.assertEquals(
+            EventIntake.Admission.ACCEPTED,
+            intake.accept(submission(OCCURRED_AT))
+        );
+
+        var beforeReload = intake.poll();
+        var afterReload = intake.poll();
+        Assertions.assertNotNull(beforeReload);
+        Assertions.assertNotNull(afterReload);
+        Assertions.assertEquals(
+            OCCURRED_AT.plus(Duration.ofHours(1)),
+            beforeReload.expiresAt()
+        );
+        Assertions.assertEquals(
+            OCCURRED_AT.plus(Duration.ofHours(2)),
+            afterReload.expiresAt()
+        );
+    }
+
+    @Test
     void testCapacityIsStrictlyBoundedAndRecoversAfterPoll() {
         var intake = new BoundedEventIntake(2, policies(Duration.ofHours(1)));
 
