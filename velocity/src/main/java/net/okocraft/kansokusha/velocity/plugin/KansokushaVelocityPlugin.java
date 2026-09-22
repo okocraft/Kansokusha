@@ -84,6 +84,31 @@ public final class KansokushaVelocityPlugin {
         }
     }
 
+    public boolean reloadRetentionPolicies() {
+        final VelocityRuntimeLifecycle lifecycle;
+        synchronized (this.lifecycleMonitor) {
+            if (this.shutdownStarted) {
+                return false;
+            }
+            lifecycle = this.runtimeLifecycle;
+        }
+        if (lifecycle == null) {
+            return false;
+        }
+
+        try {
+            lifecycle.reloadRetentionPolicies();
+            this.logger.info("Reloaded retention policies.");
+            return true;
+        } catch (IOException | RuntimeException failure) {
+            this.logger.error(
+                "Failed to reload retention policies; the active policies were kept.",
+                failure
+            );
+            return false;
+        }
+    }
+
     @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyShutdown(ProxyShutdownEvent event) {
         final VelocityRuntimeLifecycle lifecycle;
