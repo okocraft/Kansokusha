@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.logging.Level;
 
 public final class KansokushaPaperPlugin extends JavaPlugin {
 
@@ -75,6 +76,26 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             cleanupListeners(blockPlaceListener, blockBreakListener);
             lifecycle.close();
             throw failure;
+        }
+    }
+
+    public boolean reloadRetentionPolicies() {
+        var lifecycle = this.runtimeLifecycle;
+        if (lifecycle == null) {
+            return false;
+        }
+
+        try {
+            lifecycle.reloadRetentionPolicies();
+            this.getLogger().info("Reloaded retention policies.");
+            return true;
+        } catch (IOException | RuntimeException failure) {
+            this.getLogger().log(
+                Level.SEVERE,
+                "Failed to reload retention policies; the active policies were kept.",
+                failure
+            );
+            return false;
         }
     }
 
