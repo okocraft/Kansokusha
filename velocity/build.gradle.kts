@@ -1,7 +1,9 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.bundling.Jar
 import xyz.jpenilla.runvelocity.task.RunVelocity
+import java.net.URLClassLoader
 import java.nio.file.Files
+import java.util.Properties
 import java.util.zip.ZipFile
 
 plugins {
@@ -81,7 +83,7 @@ tasks {
                 retention:
                   policies:
                     - key: example:default
-                      duration: P1D
+                      duration: P3650D
                   fallback-policy: example:default
                   cleanup-interval: PT1H
                   max-rows-per-pass: 100
@@ -96,6 +98,63 @@ tasks {
             }
             check(result.readText() == "success") {
                 "External Velocity API fixture failed:\n" + result.readText()
+            }
+
+            val database = externalApiTestDirectory.get()
+                .file("plugins/kansokusha/kansokusha.duckdb")
+                .asFile
+            check(database.isFile) {
+                "Kansokusha did not create its instance-local DuckDB file."
+            }
+
+            val packagedJar = velocityShadowJar.get().archiveFile.get().asFile
+            URLClassLoader(
+                arrayOf(packagedJar.toURI().toURL()),
+                ClassLoader.getPlatformClassLoader()
+            ).use { loader ->
+                val driver = loader
+                    .loadClass("org.duckdb.DuckDBDriver")
+                    .getDeclaredConstructor()
+                    .newInstance() as java.sql.Driver
+                driver.connect(
+                    "jdbc:duckdb:" + database.absolutePath,
+                    Properties()
+                ).use { connection ->
+                    connection.prepareStatement(
+                        """
+                        SELECT
+                            count(*) AS event_count,
+                            min(pg.generation) AS generation,
+                            min(s.server_key) AS server_key,
+                            min(hex(e.payload)) AS payload_hex
+                        FROM events e
+                        JOIN payload_generations pg ON pg.id = e.payload_generation_id
+                        JOIN event_types et ON et.id = pg.event_type_id
+                        JOIN servers s ON s.id = e.server_id
+                        WHERE et.event_type_key = ?
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, "fixture:custom_event")
+                        statement.executeQuery().use { rows ->
+                            check(rows.next()) {
+                                "Packaged Velocity smoke query returned no aggregate row."
+                            }
+                            check(rows.getInt("event_count") == 1) {
+                                "Expected one flushed fixture event, found " +
+                                    rows.getInt("event_count") + "."
+                            }
+                            check(rows.getInt("generation") == 1) {
+                                "Persisted fixture generation did not match."
+                            }
+                            check(rows.getString("server_key") == "fixture:backend") {
+                                "Persisted fixture server key did not match."
+                            }
+                            check(rows.getString("payload_hex") == "010203") {
+                                "Persisted fixture payload did not match."
+                            }
+                        }
+                    }
+                }
             }
         }
     }
