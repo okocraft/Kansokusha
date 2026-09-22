@@ -109,6 +109,7 @@ public final class ThroughputMeasurement {
             var cpuFinishedAt = processCpuTime();
             var peakHeapUsed = peakHeapUsedBytes(heapPools);
             var heapUsedAfter = heapUsedBytes();
+            var duckDbDiskBytes = duckDbDiskBytes(databasePath);
 
             var failure = reportedFailure.get();
             if (failure != null) {
@@ -131,7 +132,6 @@ public final class ThroughputMeasurement {
                 persisted,
                 (long) options.payloadSize()
             );
-            var duckDbDiskBytes = duckDbDiskBytes(databasePath);
 
             printEnvironment(options);
             print("submission_attempts", attempts);
