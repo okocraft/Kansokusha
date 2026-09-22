@@ -16,7 +16,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 public final class ExternalPaperPlugin extends JavaPlugin {
 
@@ -51,7 +53,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         var submission = new EventSubmission(
             PaperKansokusha.key(EVENT_TYPE),
             PayloadGeneration.FIRST,
-            Instant.parse("2026-09-21T00:00:00Z"),
+            Instant.now().plus(Duration.ofDays(1)).truncatedTo(ChronoUnit.MILLIS),
             api.localServerKey().orElseThrow(),
             null,
             null,
