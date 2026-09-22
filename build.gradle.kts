@@ -40,7 +40,14 @@ tasks.register("verifyV1") {
     group = "verification"
     description = "Run the v1 build and inspect final platform artifacts."
 
-    dependsOn("build")
+    dependsOn(
+        ":kansokusha-api:build",
+        ":kansokusha-common:build",
+        ":kansokusha-paper:build",
+        ":kansokusha-paper-test-plugin:build",
+        ":kansokusha-velocity:build",
+        ":kansokusha-velocity-test-plugin:build"
+    )
     inputs.files(paperArtifact, velocityArtifact)
 
     doLast {
