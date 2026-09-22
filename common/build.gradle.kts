@@ -2,9 +2,9 @@ import org.gradle.api.tasks.JavaExec
 
 val measurement = sourceSets.create("measurement") {
     compileClasspath += sourceSets.main.get().output
-    compileClasspath += configurations["testRuntimeClasspath"]
+    compileClasspath += sourceSets.main.get().compileClasspath
     runtimeClasspath += output
-    runtimeClasspath += compileClasspath
+    runtimeClasspath += sourceSets.main.get().runtimeClasspath
 }
 val throughputMeasurementDirectory = layout.buildDirectory.dir("measurements/throughput")
 
@@ -17,6 +17,10 @@ dependencies {
 
 tasks.test {
     inputs.file(rootProject.file("docs/examples/v1-built-in-retention.yml"))
+}
+
+tasks.named("check") {
+    dependsOn(measurement.classesTaskName)
 }
 
 tasks.register<JavaExec>("measureThroughput") {
