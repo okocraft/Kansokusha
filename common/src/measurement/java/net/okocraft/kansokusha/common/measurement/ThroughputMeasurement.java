@@ -8,11 +8,10 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
-import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
-import net.okocraft.kansokusha.common.storage.DuckDbMigrations;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -161,9 +160,11 @@ public final class ThroughputMeasurement {
     }
 
     private static long countPersisted(Path databasePath) throws Exception {
-        try (var database = DuckDbDatabase.open(databasePath)) {
-            DuckDbMigrations.migrate(database);
-            try (var statement = database.connection().prepareStatement(
+        try (
+            var connection = DriverManager.getConnection(
+                "jdbc:duckdb:" + databasePath.toAbsolutePath()
+            );
+            var statement = connection.prepareStatement(
                 """
                     SELECT count(*)
                     FROM events e
@@ -171,12 +172,12 @@ public final class ThroughputMeasurement {
                     JOIN event_types et ON et.id = pg.event_type_id
                     WHERE et.event_type_key = ?
                     """
-            )) {
-                statement.setString(1, EVENT_TYPE.asString());
-                try (var rows = statement.executeQuery()) {
-                    rows.next();
-                    return rows.getLong(1);
-                }
+            )
+        ) {
+            statement.setString(1, EVENT_TYPE.asString());
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
             }
         }
     }
