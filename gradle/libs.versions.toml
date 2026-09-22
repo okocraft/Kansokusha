@@ -6,7 +6,7 @@ configurate = "4.2.0"
 duckdb = "1.5.5.1"
 
 # platform api
-paper = "26.2.build.125-stable"
+paper = "26.2.build.127-stable"
 velocity = "4.2.0"
 
 # testing tool
