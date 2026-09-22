@@ -19,7 +19,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public final class BoundedEventIntake implements EventIntake, AutoCloseable {
 
     private final int capacity;
-    private final RetentionPolicySet retentionPolicies;
+    private RetentionPolicySet retentionPolicies;
     private final ArrayBlockingQueue<AcceptedEvent> queue;
     private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
     private final Object availabilityMonitor = new Object();
@@ -142,6 +142,23 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
 
     public Optional<Throwable> failureCause() {
         return Optional.ofNullable(this.failureCause);
+    }
+
+    public void replaceRetentionPolicies(RetentionPolicySet retentionPolicies) {
+        Objects.requireNonNull(retentionPolicies, "retentionPolicies");
+
+        var lock = this.lifecycleLock.writeLock();
+        lock.lock();
+        try {
+            if (this.state != State.RUNNING) {
+                throw new IllegalStateException(
+                    "Retention policies can only be replaced while intake is running."
+                );
+            }
+            this.retentionPolicies = retentionPolicies;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public void beginDraining() {
