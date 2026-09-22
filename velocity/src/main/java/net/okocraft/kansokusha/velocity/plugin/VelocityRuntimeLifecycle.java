@@ -91,6 +91,14 @@ final class VelocityRuntimeLifecycle implements AutoCloseable {
         return current.api();
     }
 
+    void reloadRetentionPolicies() throws IOException {
+        var current = this.runtime;
+        if (current == null) {
+            throw new IllegalStateException("Velocity runtime lifecycle is not started.");
+        }
+        current.reloadRetentionPolicies();
+    }
+
     @Override
     public void close() {
         var current = this.runtime;
