@@ -41,6 +41,14 @@ the external API fixture, submits a fixture event through the public API, perfor
 normal proxy shutdown, then reopens the instance-local DuckDB file using the driver
 contained in the packaged artifact and verifies the flushed event.
 
+### Measure ingestion throughput and CPU time
+
+```shell
+./gradlew :kansokusha-common:measureThroughput
+```
+
+See `docs/throughput-measurement.md` for parameters and measurement boundaries.
+
 ## License
 
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.
