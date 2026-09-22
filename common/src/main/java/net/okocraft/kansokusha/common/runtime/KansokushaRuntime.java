@@ -36,6 +36,7 @@ public final class KansokushaRuntime implements AutoCloseable {
     private final AsyncBatchWriterService writer;
     private final RetentionCleanupService cleanup;
     private final DuckDbDatabase database;
+    private final ConfigurationReloader configurationReloader;
     private final AtomicBoolean closeStarted = new AtomicBoolean();
     private volatile boolean closed;
 
@@ -45,10 +46,31 @@ public final class KansokushaRuntime implements AutoCloseable {
         RetentionCleanupService cleanup,
         DuckDbDatabase database
     ) {
+        this(
+            api,
+            writer,
+            cleanup,
+            database,
+            () -> {
+                throw new IllegalStateException(
+                    "Configuration reload is unavailable for this runtime."
+                );
+            }
+        );
+    }
+
+    private KansokushaRuntime(
+        DefaultKansokushaApi api,
+        AsyncBatchWriterService writer,
+        RetentionCleanupService cleanup,
+        DuckDbDatabase database,
+        ConfigurationReloader configurationReloader
+    ) {
         this.api = api;
         this.writer = writer;
         this.cleanup = cleanup;
         this.database = database;
+        this.configurationReloader = configurationReloader;
     }
 
     public static KansokushaRuntime start(
@@ -119,7 +141,19 @@ public final class KansokushaRuntime implements AutoCloseable {
             writer.start();
             cleanup.start();
 
-            return new KansokushaRuntime(api, writer, cleanup, database);
+            var reloadableIntake = intake;
+            var reloadableConfig = configHolder;
+            return new KansokushaRuntime(
+                api,
+                writer,
+                cleanup,
+                database,
+                () -> reloadableConfig.reload(
+                    loaded -> reloadableIntake.replaceRetentionPolicies(
+                        RetentionPolicySet.from(loaded.retentionSettings())
+                    )
+                )
+            );
         } catch (IOException | SQLException | RuntimeException | Error failure) {
             closeAfterStartupFailure(api, cleanup, writer, database, failureReporter, failure);
             throw failure;
@@ -143,6 +177,15 @@ public final class KansokushaRuntime implements AutoCloseable {
 
     public Optional<Throwable> failureCause() {
         return this.writer.failureCause();
+    }
+
+    public void reloadRetentionPolicies() throws IOException {
+        if (this.closeStarted.get()) {
+            throw new IllegalStateException(
+                "Retention policies cannot be reloaded after shutdown starts."
+            );
+        }
+        this.configurationReloader.reload();
     }
 
     @Override
@@ -241,6 +284,12 @@ public final class KansokushaRuntime implements AutoCloseable {
         if (primary != secondary) {
             primary.addSuppressed(secondary);
         }
+    }
+
+    @FunctionalInterface
+    private interface ConfigurationReloader {
+
+        void reload() throws IOException;
     }
 
     public enum State {

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @ConfigSerializable
 @NotNullByDefault
@@ -375,8 +376,16 @@ public class KansokushaConfig {
         }
 
         public void reload() throws IOException {
+            this.reload(config -> {
+            });
+        }
+
+        public synchronized void reload(Consumer<KansokushaConfig> beforeActivate)
+            throws IOException {
+            Objects.requireNonNull(beforeActivate, "beforeActivate");
             var loaded = this.loader.load();
             loaded.validate();
+            beforeActivate.accept(loaded);
             this.ref.set(loaded);
         }
     }

@@ -60,6 +60,11 @@ contained in the packaged artifact and verifies the flushed event.
 See `docs/throughput-measurement.md` for parameters, measurement boundaries,
 resource metrics, and the bounded-buffer scenario.
 
+### Reload retention policies
+
+Runtime retention reload semantics and platform adapter entry points are documented in
+`docs/configuration-reload.md`.
+
 ## License
 
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.
