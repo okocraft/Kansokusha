@@ -52,6 +52,26 @@ class PaperRuntimeLifecycleTest {
     }
 
     @Test
+    void testReloadDelegatesToActiveRuntime(@TempDir Path dir) throws Exception {
+        var runtime = Mockito.mock(KansokushaRuntime.class);
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(runtime.api()).thenReturn(api);
+        var lifecycle = new PaperRuntimeLifecycle(
+            dir,
+            SERVER_KEY,
+            Mockito.mock(AdministratorReporter.class),
+            (dataDirectory, serverKey, reporter) -> runtime,
+            Mockito.mock(PaperRuntimeLifecycle.ApiPublication.class)
+        );
+
+        lifecycle.start();
+        lifecycle.reloadRetentionPolicies();
+
+        Mockito.verify(runtime).reloadRetentionPolicies();
+        lifecycle.close();
+    }
+
+    @Test
     void testPublicationFailureClosesStartedRuntime(@TempDir Path dir) throws Exception {
         var runtime = Mockito.mock(KansokushaRuntime.class);
         var api = Mockito.mock(KansokushaApi.class);
