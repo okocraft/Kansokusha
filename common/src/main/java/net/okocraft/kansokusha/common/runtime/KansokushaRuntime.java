@@ -180,6 +180,11 @@ public final class KansokushaRuntime implements AutoCloseable {
     }
 
     public void reloadRetentionPolicies() throws IOException {
+        if (this.closeStarted.get()) {
+            throw new IllegalStateException(
+                "Retention policies cannot be reloaded after shutdown starts."
+            );
+        }
         this.configurationReloader.reload();
     }
 
