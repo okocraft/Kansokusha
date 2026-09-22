@@ -9,12 +9,16 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryType;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -71,6 +75,9 @@ public final class ThroughputMeasurement {
         long attempts = 0;
         long unavailable = 0;
         long accepted = 0;
+        var heapPools = heapPools();
+        var heapUsedBefore = heapUsedBytes();
+        heapPools.forEach(MemoryPoolMXBean::resetPeakUsage);
         var cpuStartedAt = processCpuTime();
         var wallStartedAt = System.nanoTime();
 
@@ -100,6 +107,9 @@ public final class ThroughputMeasurement {
             runtime.close();
             var persistenceFinishedAt = System.nanoTime();
             var cpuFinishedAt = processCpuTime();
+            var peakHeapUsed = peakHeapUsedBytes(heapPools);
+            var heapUsedAfter = heapUsedBytes();
+            var duckDbDiskBytes = duckDbDiskBytes(databasePath);
 
             var failure = reportedFailure.get();
             if (failure != null) {
@@ -118,6 +128,10 @@ public final class ThroughputMeasurement {
             var processCpuSeconds = seconds(
                 cpuFinishedAt.minus(cpuStartedAt).toNanos()
             );
+            var logicalPayloadBytes = Math.multiplyExact(
+                persisted,
+                (long) options.payloadSize()
+            );
 
             printEnvironment(options);
             print("submission_attempts", attempts);
@@ -129,6 +143,12 @@ public final class ThroughputMeasurement {
             print("submitted_events_per_second", accepted / submissionSeconds);
             print("persisted_events_per_second", persisted / persistenceSeconds);
             print("process_cpu_seconds", processCpuSeconds);
+            print("heap_used_before_bytes", heapUsedBefore);
+            print("peak_heap_used_bytes", peakHeapUsed);
+            print("heap_used_after_bytes", heapUsedAfter);
+            print("write_volume_proxy", "logical_payload_bytes");
+            print("logical_payload_bytes", logicalPayloadBytes);
+            print("duckdb_disk_bytes", duckDbDiskBytes);
         } finally {
             if (runtime.state() != KansokushaRuntime.State.CLOSED) {
                 runtime.close();
@@ -180,6 +200,38 @@ public final class ThroughputMeasurement {
                 return rows.getLong(1);
             }
         }
+    }
+
+    private static List<MemoryPoolMXBean> heapPools() {
+        return ManagementFactory.getMemoryPoolMXBeans().stream()
+            .filter(pool -> pool.getType() == MemoryType.HEAP)
+            .toList();
+    }
+
+    private static long heapUsedBytes() {
+        return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
+    }
+
+    private static long peakHeapUsedBytes(List<MemoryPoolMXBean> heapPools) {
+        return heapPools.stream()
+            .map(MemoryPoolMXBean::getPeakUsage)
+            .mapToLong(usage -> Math.max(usage.getUsed(), 0))
+            .sum();
+    }
+
+    private static long duckDbDiskBytes(Path databasePath) throws Exception {
+        long bytes = 0;
+        var directory = databasePath.getParent();
+        var prefix = databasePath.getFileName().toString();
+
+        try (var paths = Files.newDirectoryStream(directory, prefix + "*")) {
+            for (var path : paths) {
+                if (Files.isRegularFile(path)) {
+                    bytes = Math.addExact(bytes, Files.size(path));
+                }
+            }
+        }
+        return bytes;
     }
 
     private static Duration processCpuTime() {

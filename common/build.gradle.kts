@@ -56,3 +56,34 @@ tasks.register<JavaExec>("measureThroughput") {
         )
     }
 }
+
+
+tasks.register<JavaExec>("measureBoundedBuffer") {
+    group = "measurement"
+    description = "Verify configured ingestion queue and batch bounds under a held writer."
+
+    dependsOn(measurement.classesTaskName)
+    classpath = measurement.runtimeClasspath
+    mainClass.set(
+        "net.okocraft.kansokusha.common.measurement.BoundedBufferMeasurement"
+    )
+
+    val payloadSize = providers.gradleProperty("kansokusha.measure.payloadSize")
+        .orElse("128")
+    val queueCapacity = providers.gradleProperty("kansokusha.measure.queueCapacity")
+        .orElse("64")
+    val batchSize = providers.gradleProperty("kansokusha.measure.batchSize")
+        .orElse("16")
+    val extraAttempts = providers.gradleProperty(
+        "kansokusha.measure.boundedExtraAttempts"
+    ).orElse("64")
+
+    doFirst {
+        args(
+            "--payload-size=${payloadSize.get()}",
+            "--queue-capacity=${queueCapacity.get()}",
+            "--batch-size=${batchSize.get()}",
+            "--extra-attempts=${extraAttempts.get()}"
+        )
+    }
+}
