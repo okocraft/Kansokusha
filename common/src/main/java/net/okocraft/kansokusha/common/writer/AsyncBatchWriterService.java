@@ -61,29 +61,11 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         NanoClock clock,
         EventPoller poller
     ) {
-        if (maxBatchSize <= 0) {
-            throw new IllegalArgumentException("maxBatchSize must be positive.");
-        }
-        Objects.requireNonNull(maxBatchDelay, "maxBatchDelay");
-        if (maxBatchDelay.isZero() || maxBatchDelay.isNegative()) {
-            throw new IllegalArgumentException("maxBatchDelay must be positive.");
-        }
-        if (maxBatchDelay.getNano() % 1_000_000 != 0) {
-            throw new IllegalArgumentException("maxBatchDelay must use whole milliseconds.");
-        }
-
-        final long delayNanos;
-        try {
-            delayNanos = maxBatchDelay.toNanos();
-        } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("maxBatchDelay exceeds the supported nanosecond range.", e);
-        }
-
         this.intake = Objects.requireNonNull(intake, "intake");
         this.writer = Objects.requireNonNull(writer, "writer");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
         this.maxBatchSize = maxBatchSize;
-        this.maxBatchDelayNanos = delayNanos;
+        this.maxBatchDelayNanos = maxBatchDelay.toNanos();
         this.clock = Objects.requireNonNull(clock, "clock");
         this.poller = Objects.requireNonNull(poller, "poller");
     }

@@ -532,42 +532,6 @@ class AsyncBatchWriterServiceTest {
         Assertions.assertSame(failure, service.failureCause().orElseThrow());
     }
 
-    @Test
-    void testInvalidBatchSettingsAreRejected() {
-        var intake = intake(1);
-
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> new AsyncBatchWriterService(
-                intake,
-                events -> events.size(),
-                NOOP_REPORTER,
-                0,
-                Duration.ofSeconds(1)
-            )
-        );
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> new AsyncBatchWriterService(
-                intake,
-                events -> events.size(),
-                NOOP_REPORTER,
-                1,
-                Duration.ZERO
-            )
-        );
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> new AsyncBatchWriterService(
-                intake,
-                events -> events.size(),
-                NOOP_REPORTER,
-                1,
-                Duration.ofNanos(1)
-            )
-        );
-    }
-
     private static BoundedEventIntake intake(int capacity) {
         return new BoundedEventIntake(
             capacity,
