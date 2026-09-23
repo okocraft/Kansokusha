@@ -161,13 +161,13 @@ listener は storage completion を待たず、通常の bounded submission の�
 
 ### Server key encoding
 
-Velocity server name の Java UTF-16 code units を各4桁の lowercase hex に変換し、
+Velocity server name を `Locale.ROOT` で小文字化し、
 
-`kansokusha:velocity-server/<hex>`
+`kansokusha:velocity-server/<lower-cased name>`
 
 とする。
 
-この encoding は全 Java `String` に対して deterministic / lossless とする。Paper local server key との network-wide identity 統一は v1 scope 外とする。
+小文字化した name に Adventure key value で使えない文字（`[a-z0-9_.-/]` 以外）が含まれる場合、その server への接続・その server からの移動は記録せず、server name ごとに1回だけ warning を出力する。大文字小文字だけが異なる server name は同じ server key になる。Paper local server key との network-wide identity 統一は v1 scope 外とする。
 
 ### Payload generation 1
 

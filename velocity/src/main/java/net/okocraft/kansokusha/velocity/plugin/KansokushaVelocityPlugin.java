@@ -65,7 +65,7 @@ public final class KansokushaVelocityPlugin {
             if (!CommonKansokushaApiProvider.publish(runtime.api())) {
                 throw new IllegalStateException("Kansokusha API is already published.");
             }
-            this.serverConnectedListener = VelocityServerConnectedListener.register(runtime.api());
+            this.serverConnectedListener = VelocityServerConnectedListener.register(runtime.api(), this.logger);
         } catch (RuntimeException | Error failure) {
             this.closeRuntime(runtime);
             throw failure;
