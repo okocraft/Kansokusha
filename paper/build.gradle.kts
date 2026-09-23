@@ -11,7 +11,9 @@ plugins {
     alias(libs.plugins.run.server)
 }
 
-val minecraftVersion = libs.versions.paper.get().replaceAfter(".build", "").removeSuffix(".build")
+val paperApiVersion = libs.versions.paper.get()
+val minecraftVersion = paperApiVersion.substringBefore(".build.")
+val paperBuild = paperApiVersion.substringAfter(".build.").substringBefore('-').toInt()
 val externalApiTestDirectory = layout.buildDirectory.dir("paper-external-api-integration")
 val externalApiFixtureJar = project(":kansokusha-paper-test-plugin")
     .tasks.named<Jar>("jar")
@@ -41,6 +43,7 @@ tasks {
 
     runServer {
         minecraftVersion(minecraftVersion)
+        build(paperBuild)
         systemProperty("com.mojang.eula.agree", "true")
         systemProperty("paper.disable-plugin-rewriting", "true")
     }
@@ -51,6 +54,7 @@ tasks {
 
         dependsOn(paperShadowJar, externalApiFixtureJar)
         minecraftVersion(minecraftVersion)
+        build(paperBuild)
         runDirectory(externalApiTestDirectory.get().asFile)
         pluginJars(
             paperShadowJar.flatMap { it.archiveFile },
@@ -151,6 +155,35 @@ tasks {
                             }
                             check(rows.getString("payload_hex") == "010203") {
                                 "Persisted fixture payload did not match."
+                            }
+                        }
+                    }
+
+                    connection.prepareStatement(
+                        """
+                        SELECT et.event_type_key, count(*) AS event_count
+                        FROM events e
+                        JOIN payload_generations pg ON pg.id = e.payload_generation_id
+                        JOIN event_types et ON et.id = pg.event_type_id
+                        WHERE et.event_type_key IN (?, ?)
+                        GROUP BY et.event_type_key
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, "kansokusha:block_break")
+                        statement.setString(2, "kansokusha:block_harvest")
+                        statement.executeQuery().use { rows ->
+                            val counts = mutableMapOf<String, Int>()
+                            while (rows.next()) {
+                                counts[rows.getString("event_type_key")] =
+                                    rows.getInt("event_count")
+                            }
+                            check(counts["kansokusha:block_break"] == 1) {
+                                "Expected exactly one normal block-break record, found " +
+                                    counts["kansokusha:block_break"] + "."
+                            }
+                            check(counts["kansokusha:block_harvest"] == 2) {
+                                "Expected exactly two harvest/shear records, found " +
+                                    counts["kansokusha:block_harvest"] + "."
                             }
                         }
                     }

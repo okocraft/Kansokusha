@@ -16,9 +16,14 @@ Kansokusha v1 の記録基盤を実イベントで検証するため、組み込
 | --- | --- | --- | --- | --- |
 | Paper / Folia | `kansokusha:block_break` | non-cancelled `BlockBreakEvent` with earliest-available pre-state | `kansokusha:audit` | none |
 | Paper / Folia | `kansokusha:block_place` | non-cancelled/buildable `BlockPlaceEvent` / `BlockMultiPlaceEvent` with earliest-available snapshots | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:sign_change` | non-cancelled `SignChangeEvent`, before-side snapshot + final event lines | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:bucket_empty` | non-cancelled block-changing `PlayerBucketEmptyEvent` | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:bucket_fill` | non-cancelled block-changing `PlayerBucketFillEvent`; non-block fills are excluded | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:block_harvest` | non-cancelled harvest/shear source event normalized to one canonical event | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:flower_pot_change` | non-cancelled flower-pot insert/remove with canonical before/after contents | `kansokusha:audit` | none |
 | Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` | none |
 
-chat、command、sign、inventory、login/logout、自然 block update、entity、container 等は v1 minimum built-in catalog に含めない。
+chat、command、general inventory、login/logout、自然 block update、general entity/container 等、上表にない event は v1 minimum built-in catalog に含めない。
 
 ## 共通 rules
 
@@ -68,6 +73,11 @@ catalog が提示する retention configuration example は次のとおり。
 | --- | --- |
 | `kansokusha:block_break` | `kansokusha:audit` |
 | `kansokusha:block_place` | `kansokusha:audit` |
+| `kansokusha:sign_change` | `kansokusha:audit` |
+| `kansokusha:bucket_empty` | `kansokusha:audit` |
+| `kansokusha:bucket_fill` | `kansokusha:audit` |
+| `kansokusha:block_harvest` | `kansokusha:audit` |
+| `kansokusha:flower_pot_change` | `kansokusha:audit` |
 | `kansokusha:server_connected` | `kansokusha:session` |
 
 fallback policy は `kansokusha:default` とする。
@@ -144,6 +154,64 @@ outer compound は `NbtIo.write` で payload bytes にする。block entity NBT 
 
 各 submission の admission は ADR-0004 に従って独立するため、partial acceptance は許容する。v1 は atomic multi-event admission を要求しない。
 
+## `kansokusha:sign_change`
+
+LOWEST で edited side の既存 sign lines を Adventure Component JSON の immutable snapshot にする。MONITOR で cancelled でない場合のみ、event の final lines を Component JSON へ直ちに snapshot して submission を生成する。
+
+generation 1 payload は次を持つ。
+
+- `side`: edited sign side
+- `before`: LOWEST で取得した line components
+- `after`: MONITOR 時点の final event line components
+
+## `kansokusha:bucket_empty` / `kansokusha:bucket_fill`
+
+block-changing bucket operation のみを対象とする。牛・ヤギの搾乳等、Paper が `BlockFace.SELF` で発火する non-block `PlayerBucketFillEvent` は記録しない。
+
+LOWEST で changed block の pre-state と operation metadata を immutable snapshot にし、同じ pre-state、bucket operation、および changed block 座標の `EnvironmentAttributes.WATER_EVAPORATES` から vanilla の直接的な expected post-state を導出する。expected post-state は MONITOR の live block から取得しない。
+
+generation 1 payload は次を持つ。
+
+- `operation`: `empty` / `fill`
+- `bucket`, `hand`, `face`
+- `clicked_x`, `clicked_y`, `clicked_z`
+- `pre_state`: LOWEST の changed block state
+- `expected_post_state`: 成立した bucket operation が直接作る expected block state
+- `initial_result_item`: LOWEST の event result item
+- `final_result_item`: MONITOR の final event result item
+
+`expected_post_state` は source fluid / powder snow、waterlogged state、empty / water / lava / powder-snow cauldron family 間の vanilla bucket transition を表す。cauldron への empty は現在の cauldron content に関係なく bucket 種別から destination cauldron state を導出する。通常 block への water-family bucket empty で `WATER_EVAPORATES` が true の場合、Paper の直接処理は block mutation を行わないため `expected_post_state = pre_state` とする。後続 physics、上記以外の environment effect、別 event による mutation までを final world state として保証するものではない。
+
+## `kansokusha:block_harvest`
+
+`PlayerHarvestBlockEvent` と `PlayerShearBlockEvent` を canonical `kansokusha:block_harvest` に正規化する。通常の `BlockBreakEvent` はこの listener の source にしない。
+
+LOWEST で pre-state と source-specific mutable values を detached snapshot にし、MONITOR では cancellation を確認して LOWEST payload を submission する。
+
+generation 1 payload は次を持つ。
+
+- `operation`: `harvest` / `shear`
+- `source_event`: source platform event class
+- `hand`
+- `pre_state`
+- `harvest_items`: harvest source の items。shear では empty
+- `shear_tool`: shear source の tool。harvest では empty item
+- `shear_drops`: shear source の drops。harvest では empty
+
+real Paper integration verification で normal block break、sweet-berry harvest、pumpkin shear の platform event 発火を分離し、同一 vanilla action を `block_break` と `block_harvest` に二重保存しない semantics を固定する。
+
+## `kansokusha:flower_pot_change`
+
+`PlayerFlowerPotManipulateEvent` の insert/remove を記録する。contents は event に渡された inventory stack 自体ではなく、flower pot block state が表現できる canonical content とする。non-empty content は item type のみを保持した amount `1` の ItemStack として表現し、custom name、lore、custom data 等の ItemStack metadata/components は保持しない。
+
+generation 1 payload は次を持つ。
+
+- `action`: `insert` / `remove`
+- `before`: 操作前の canonical pot content
+- `after`: 操作後の canonical pot content
+
+insert は `before = empty`、`after = placed item x1`、remove は `before = removed item x1`、`after = empty` とする。
+
 ## `kansokusha:server_connected`
 
 ### Capture / fields
@@ -184,8 +252,8 @@ target backend name は common `server` field から復元可能なため payloa
 
 | 要件 | Catalog decision |
 | --- | --- |
-| §5 | v1 minimum built-in event を3種に限定 |
-| §6 | 選定3種では coalescing しない |
+| §5 | v1 minimum built-in event を8 event type に固定 |
+| §6 | 選定 built-in event では coalescing しない |
 | §8 | common fields と generation 1 payload fields を event ごとに固定 |
 | §9 | retention policy example、event mapping、fallback を固定 |
 | §11 | platform callback は storage I/O / flush completion を待たず bounded submission を使用 |
