@@ -228,6 +228,108 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testGrowMutationBackToPreStateIsSuppressed() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var preState = Blocks.WHEAT.defaultBlockState();
+        var block = PaperBlockEventTestSupport.block(
+            world, 20, 70, 20, preState, Material.WHEAT
+        );
+        var changedState = PaperBlockEventTestSupport.state(
+            world,
+            block,
+            20,
+            70,
+            20,
+            preState.setValue(net.minecraft.world.level.block.CropBlock.AGE, 1)
+        );
+        var event = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(changedState);
+
+        listener.capture(event);
+        Mockito.when(changedState.getBlockData()).thenReturn(preState.asBlockData());
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertTrue(deferred.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testFireFadeMutationBackToPreStateIsSuppressed() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 21, 70, 21, Blocks.FIRE.defaultBlockState(), Material.FIRE
+        );
+        var target = PaperBlockEventTestSupport.state(
+            world, block, 21, 70, 21, Blocks.AIR.defaultBlockState()
+        );
+        var event = Mockito.mock(BlockFadeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(target);
+
+        listener.capture(event);
+        Mockito.when(target.getBlockData()).thenReturn(Blocks.FIRE.defaultBlockState().asBlockData());
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, deferred.size());
+        Mockito.when(block.getBlockData()).thenReturn(Blocks.FIRE.defaultBlockState().asBlockData());
+        deferred.remove().run();
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testStructureGrowFinalStateEqualToPreStateIsSuppressed() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 22, 70, 22, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
+        );
+        var state = PaperBlockEventTestSupport.state(
+            world, block, 22, 70, 22, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var event = Mockito.mock(StructureGrowEvent.class);
+        Mockito.when(event.isFromBonemeal()).thenReturn(false);
+        Mockito.when(event.getSpecies()).thenReturn(TreeType.TREE);
+        Mockito.when(event.getBlocks()).thenReturn(List.of(state));
+
+        listener.capture(event);
+        Mockito.when(state.getBlockData())
+            .thenReturn(Blocks.OAK_SAPLING.defaultBlockState().asBlockData());
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertTrue(deferred.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testSingleBlockSourcesUseCommonSchema() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
@@ -257,11 +359,13 @@ class PaperNaturalBlockChangeListenerTest {
         listener.capture(form);
         listener.finalizeEvent(form);
 
+        var growPreState = Blocks.WHEAT.defaultBlockState();
+        var growPostState = growPreState.setValue(net.minecraft.world.level.block.CropBlock.AGE, 1);
         var growBlock = PaperBlockEventTestSupport.block(
-            world, 3, 70, 3, Blocks.WHEAT.defaultBlockState(), Material.WHEAT
+            world, 3, 70, 3, growPreState, Material.WHEAT
         );
         var growState = PaperBlockEventTestSupport.state(
-            world, growBlock, 3, 70, 3, Blocks.WHEAT.defaultBlockState()
+            world, growBlock, 3, 70, 3, growPostState
         );
         var grow = Mockito.mock(BlockGrowEvent.class);
         Mockito.when(grow.getBlock()).thenReturn(growBlock);
@@ -269,11 +373,16 @@ class PaperNaturalBlockChangeListenerTest {
         listener.capture(grow);
         listener.finalizeEvent(grow);
 
+        var moisturePreState = Blocks.FARMLAND.defaultBlockState();
+        var moisturePostState = moisturePreState.setValue(
+            net.minecraft.world.level.block.FarmlandBlock.MOISTURE,
+            1
+        );
         var moistureBlock = PaperBlockEventTestSupport.block(
-            world, 4, 70, 4, Blocks.FARMLAND.defaultBlockState(), Material.FARMLAND
+            world, 4, 70, 4, moisturePreState, Material.FARMLAND
         );
         var moistureState = PaperBlockEventTestSupport.state(
-            world, moistureBlock, 4, 70, 4, Blocks.FARMLAND.defaultBlockState()
+            world, moistureBlock, 4, 70, 4, moisturePostState
         );
         var moisture = Mockito.mock(MoistureChangeEvent.class);
         Mockito.when(moisture.getBlock()).thenReturn(moistureBlock);
@@ -312,8 +421,8 @@ class PaperNaturalBlockChangeListenerTest {
         );
         Assertions.assertEquals(
             naturalPayload(
-                Blocks.WHEAT.defaultBlockState(),
-                Blocks.WHEAT.defaultBlockState(),
+                growPreState,
+                growPostState,
                 "block_grow",
                 null,
                 null
@@ -322,8 +431,8 @@ class PaperNaturalBlockChangeListenerTest {
         );
         Assertions.assertEquals(
             naturalPayload(
-                Blocks.FARMLAND.defaultBlockState(),
-                Blocks.FARMLAND.defaultBlockState(),
+                moisturePreState,
+                moisturePostState,
                 "moisture_change",
                 null,
                 null

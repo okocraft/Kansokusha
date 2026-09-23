@@ -156,7 +156,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
 
         var finalPostState = event.getNewState().getBlockData().clone();
         if (sameBlockData(capture.postState(), finalPostState)) {
-            submitSnapshots(List.of(fadeSnapshot(capture, capture.postState())));
+            submitFadeIfChanged(capture, capture.postState());
             return;
         }
 
@@ -363,6 +363,10 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             if (preState == null) {
                 preState = state.getBlock().getBlockData().clone();
             }
+            var finalPostState = state.getBlockData().clone();
+            if (sameBlockData(preState, finalPostState)) {
+                continue;
+            }
             snapshots.add(new Snapshot(
                 capture.occurredAt(),
                 capture.serverKey(),
@@ -370,12 +374,16 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
                 key.position(),
                 PaperBlockEventPayloadCodec.encodeNaturalChange(
                     preState,
-                    state.getBlockData(),
+                    finalPostState,
                     "structure_grow",
                     capture.cause(),
                     null
                 )
             ));
+        }
+
+        if (snapshots.isEmpty()) {
+            return;
         }
 
         defer(
@@ -503,6 +511,10 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
 
         var finalPostState = postState.getBlockData().clone();
+        if (sameBlockData(capture.preState(), finalPostState)) {
+            return;
+        }
+
         var snapshot = new Snapshot(
             capture.occurredAt(),
             capture.serverKey(),
@@ -560,10 +572,17 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         var actualState = deferred.block().getBlockData();
         var capture = deferred.capture();
         if (sameBlockData(actualState, deferred.mutablePostState())) {
-            submitSnapshots(List.of(fadeSnapshot(capture, deferred.mutablePostState())));
+            submitFadeIfChanged(capture, deferred.mutablePostState());
         } else if (sameBlockData(actualState, capture.postState())) {
-            submitSnapshots(List.of(fadeSnapshot(capture, capture.postState())));
+            submitFadeIfChanged(capture, capture.postState());
         }
+    }
+
+    private void submitFadeIfChanged(FadeCapture capture, BlockData postState) {
+        if (sameBlockData(capture.preState(), postState)) {
+            return;
+        }
+        submitSnapshots(List.of(fadeSnapshot(capture, postState)));
     }
 
     private static Snapshot fadeSnapshot(FadeCapture capture, BlockData postState) {
