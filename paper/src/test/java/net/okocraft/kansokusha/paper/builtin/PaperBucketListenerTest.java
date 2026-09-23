@@ -111,6 +111,29 @@ class PaperBucketListenerTest {
     }
 
     @Test
+    void testNonBlockFillIsIgnored() {
+        var api = new RecordingApi();
+        var listener = listener(api);
+        var fixture = bucketEvent(
+            PlayerBucketFillEvent.class,
+            25,
+            Blocks.GRASS_BLOCK.defaultBlockState().asBlockData(),
+            Material.BUCKET,
+            ItemStack.of(Material.MILK_BUCKET, 1),
+            false
+        );
+        var event = (PlayerBucketFillEvent) fixture.event();
+        Mockito.when(event.getBlockFace()).thenReturn(BlockFace.SELF);
+
+        listener.captureFill(event);
+        listener.finalizeFill(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(fixture.changedBlock(), Mockito.never()).getBlockData();
+    }
+
+    @Test
     void testCancelledBucketEventsDoNotSubmit() {
         var api = new RecordingApi();
         var listener = listener(api);
