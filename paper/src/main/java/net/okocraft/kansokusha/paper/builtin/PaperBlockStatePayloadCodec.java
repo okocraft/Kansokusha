@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import org.bukkit.block.data.BlockData;
@@ -23,9 +24,7 @@ public final class PaperBlockStatePayloadCodec {
     }
 
     public static EventPayload encodeBlockBreak(BlockData blockData) {
-        return PaperPayloadNbtCodec.encode(
-            NbtUtils.writeBlockState(toMinecraftState(blockData))
-        );
+        return PaperPayloadNbtCodec.encode(blockState(blockData));
     }
 
     public static EventPayload encodeBlockPlace(
@@ -33,15 +32,17 @@ public final class PaperBlockStatePayloadCodec {
         BlockData placedBlockData
     ) {
         var payload = new CompoundTag();
-        payload.put(
-            REPLACED_STATE_KEY,
-            NbtUtils.writeBlockState(toMinecraftState(replacedBlockData))
-        );
-        payload.put(
-            PLACED_STATE_KEY,
-            NbtUtils.writeBlockState(toMinecraftState(placedBlockData))
-        );
+        payload.put(REPLACED_STATE_KEY, blockState(replacedBlockData));
+        payload.put(PLACED_STATE_KEY, blockState(placedBlockData));
         return PaperPayloadNbtCodec.encode(payload);
+    }
+
+    static CompoundTag blockState(BlockData blockData) {
+        return NbtUtils.writeBlockState(toMinecraftState(blockData));
+    }
+
+    static CompoundTag airBlockState() {
+        return NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState());
     }
 
     static CompoundTag decode(EventPayload payload) throws IOException {
