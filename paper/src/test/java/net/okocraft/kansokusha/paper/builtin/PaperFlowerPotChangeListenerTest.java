@@ -39,13 +39,13 @@ class PaperFlowerPotChangeListenerTest {
     void testInsertAndRemoveRecordBeforeAndAfterContents() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
-        var insertItem = ItemStack.of(Material.POPPY, 1);
+        var insertItem = ItemStack.of(Material.POPPY, 64);
         var insert = event(10, insertItem, true, false);
         var removeItem = ItemStack.of(Material.DANDELION, 1);
         var remove = event(20, removeItem, false, false);
 
         listener.capture(insert.event());
-        insertItem.setAmount(2);
+        insertItem.setAmount(32);
         listener.finalizeEvent(insert.event());
         listener.capture(remove.event());
         removeItem.setAmount(2);
