@@ -203,7 +203,9 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         this.getServer().getPluginManager().registerEvents(probe, this);
 
         bukkitPlayer.getInventory().setItemInMainHand(new ItemStack(Material.WATER_BUCKET));
-        useItemOn(gameMode, player, level, x, y, z);
+        if (!emptyBucket(gameMode, player, level, x, y, z)) {
+            throw new AssertionError("Paper BucketItem#emptyContents returned false.");
+        }
 
         probe.assertObserved();
         if (target.getType() != Material.AIR) {
@@ -233,6 +235,41 @@ public final class ExternalPaperPlugin extends JavaPlugin {
             level,
             profile,
             clientInformation
+        );
+    }
+
+    private static boolean emptyBucket(
+        Object gameMode,
+        Object player,
+        Object level,
+        int x,
+        int y,
+        int z
+    ) throws ReflectiveOperationException {
+        var mainHand = Class.forName("net.minecraft.world.InteractionHand")
+            .getField("MAIN_HAND")
+            .get(null);
+        var itemStack = invoke(player, "getMainHandItem");
+        var bucketItem = invoke(itemStack, "getItem");
+        var clickedPos = blockPos(x, y, z);
+        var targetPos = blockPos(x, y + 1, z);
+        var direction = Class.forName("net.minecraft.core.Direction")
+            .getField("UP")
+            .get(null);
+        var hitResult = blockHitResult(clickedPos, x, y, z);
+        return Boolean.TRUE.equals(
+            invoke(
+                bucketItem,
+                "emptyContents",
+                player,
+                level,
+                targetPos,
+                hitResult,
+                direction,
+                clickedPos,
+                itemStack,
+                mainHand
+            )
         );
     }
 
