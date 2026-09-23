@@ -37,7 +37,7 @@ class PaperBlockFertilizeListenerTest {
     }
 
     @Test
-    void testPlayerFertilizationSnapshotsChangedStateAtLowest() throws Exception {
+    void testPlayerFertilizationKeepsLowestPreStateAndUsesFinalPostState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockFertilizeListener.register(
             api,
@@ -52,6 +52,7 @@ class PaperBlockFertilizeListenerTest {
             world, 11, 64, 10, Blocks.COCOA.defaultBlockState(), Material.COCOA
         );
         var grownState = Blocks.COCOA.defaultBlockState().setValue(CocoaBlock.AGE, 1);
+        var finalState = Blocks.COCOA.defaultBlockState().setValue(CocoaBlock.AGE, 2);
         var changed = PaperBlockEventTestSupport.state(
             world, cocoa, 11, 64, 10, grownState
         );
@@ -65,10 +66,9 @@ class PaperBlockFertilizeListenerTest {
 
         listener.capture(event);
 
+        Mockito.verify(changed, Mockito.never()).getBlockData();
         Mockito.when(cocoa.getBlockData()).thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
-        Mockito.when(changed.getBlockData()).thenReturn(
-            Blocks.COCOA.defaultBlockState().setValue(CocoaBlock.AGE, 2).asBlockData()
-        );
+        Mockito.when(changed.getBlockData()).thenReturn(finalState.asBlockData());
 
         listener.finalizeEvent(event);
 
@@ -80,7 +80,7 @@ class PaperBlockFertilizeListenerTest {
         Assertions.assertEquals(
             fertilizePayload(
                 Blocks.COCOA.defaultBlockState(),
-                grownState,
+                finalState,
                 new BlockPosition(10, 64, 10)
             ),
             PaperBlockStatePayloadCodec.decode(submission.payload())
@@ -91,7 +91,7 @@ class PaperBlockFertilizeListenerTest {
     }
 
     @Test
-    void testDuplicatePositionsUseFirstLivePreStateAndLastPostState() throws Exception {
+    void testDuplicatePositionsUseLowestPreStateAndFinalListLastPostState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockFertilizeListener.register(
             api,
@@ -111,12 +111,13 @@ class PaperBlockFertilizeListenerTest {
         var last = PaperBlockEventTestSupport.state(
             world, changedBlock, 31, 64, 30, Blocks.BIRCH_LOG.defaultBlockState()
         );
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>(List.of(first, last));
         var event = Mockito.mock(BlockFertilizeEvent.class);
         Mockito.when(event.getBlock()).thenReturn(source);
-        Mockito.when(event.getBlocks()).thenReturn(List.of(first, last));
+        Mockito.when(event.getBlocks()).thenReturn(changedStates);
 
         listener.capture(event);
-
+        changedStates.remove(last);
         Mockito.when(changedBlock.getBlockData()).thenReturn(
             Blocks.STONE.defaultBlockState().asBlockData()
         );
@@ -128,13 +129,121 @@ class PaperBlockFertilizeListenerTest {
         Assertions.assertEquals(
             fertilizePayload(
                 Blocks.AIR.defaultBlockState(),
-                Blocks.BIRCH_LOG.defaultBlockState(),
+                Blocks.OAK_LOG.defaultBlockState(),
                 new BlockPosition(30, 64, 30)
             ),
             PaperBlockStatePayloadCodec.decode(submission.payload())
         );
         Mockito.verify(changedBlock, Mockito.times(1)).getBlockData();
         Mockito.verify(first, Mockito.times(1)).getBlockData();
+        Mockito.verify(last, Mockito.never()).getBlockData();
+    }
+
+    @Test
+    void testRemovedFertilizedBlockIsNotSubmitted() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockFertilizeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var source = PaperBlockEventTestSupport.block(
+            world, 40, 64, 40, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
+        );
+        var target = PaperBlockEventTestSupport.block(
+            world, 41, 64, 40, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var changed = PaperBlockEventTestSupport.state(
+            world, target, 41, 64, 40, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        changedStates.add(changed);
+        var event = Mockito.mock(BlockFertilizeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getBlocks()).thenReturn(changedStates);
+
+        listener.capture(event);
+        changedStates.clear();
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(target, Mockito.times(1)).getBlockData();
+        Mockito.verify(changed, Mockito.never()).getBlockData();
+    }
+
+    @Test
+    void testAddedFertilizedBlockUsesMonitorLivePreState() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockFertilizeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var source = PaperBlockEventTestSupport.block(
+            world, 50, 64, 50, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
+        );
+        var target = PaperBlockEventTestSupport.block(
+            world, 51, 64, 50, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var changed = PaperBlockEventTestSupport.state(
+            world, target, 51, 64, 50, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        var event = Mockito.mock(BlockFertilizeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getBlocks()).thenReturn(changedStates);
+
+        listener.capture(event);
+        changedStates.add(changed);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            fertilizePayload(
+                Blocks.AIR.defaultBlockState(),
+                Blocks.OAK_LOG.defaultBlockState(),
+                new BlockPosition(50, 64, 50)
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+        Mockito.verify(target, Mockito.times(1)).getBlockData();
+        Mockito.verify(changed, Mockito.times(1)).getBlockData();
+    }
+
+    @Test
+    void testNetNoOpAfterCoalescingIsNotSubmitted() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockFertilizeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var source = PaperBlockEventTestSupport.block(
+            world, 60, 64, 60, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
+        );
+        var target = PaperBlockEventTestSupport.block(
+            world, 61, 64, 60, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var first = PaperBlockEventTestSupport.state(
+            world, target, 61, 64, 60, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var last = PaperBlockEventTestSupport.state(
+            world, target, 61, 64, 60, Blocks.AIR.defaultBlockState()
+        );
+        var event = Mockito.mock(BlockFertilizeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getBlocks()).thenReturn(List.of(first, last));
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(target, Mockito.times(1)).getBlockData();
+        Mockito.verify(first, Mockito.never()).getBlockData();
         Mockito.verify(last, Mockito.times(1)).getBlockData();
     }
 
@@ -165,6 +274,7 @@ class PaperBlockFertilizeListenerTest {
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(changed, Mockito.never()).getBlockData();
     }
 
     @Test
