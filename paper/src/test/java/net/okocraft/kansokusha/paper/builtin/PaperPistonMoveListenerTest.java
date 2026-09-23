@@ -5,6 +5,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.PistonMoveReaction;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.junit.jupiter.api.Assertions;
@@ -80,6 +81,50 @@ class PaperPistonMoveListenerTest {
         );
         Mockito.verify(first, Mockito.times(1)).getBlockData();
         Mockito.verify(second, Mockito.times(1)).getBlockData();
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testExtendExcludesBlocksDestroyedByPiston() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperPistonMoveListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var piston = PaperBlockEventTestSupport.block(
+            world, 20, 64, 20, Blocks.PISTON.defaultBlockState(), Material.PISTON
+        );
+        var moved = PaperBlockEventTestSupport.block(
+            world, 21, 64, 20, Blocks.STONE.defaultBlockState(), Material.STONE
+        );
+        Mockito.when(moved.getPistonMoveReaction()).thenReturn(PistonMoveReaction.MOVE);
+        var broken = PaperBlockEventTestSupport.block(
+            world, 22, 64, 20, Blocks.TORCH.defaultBlockState(), Material.TORCH
+        );
+        Mockito.when(broken.getPistonMoveReaction()).thenReturn(PistonMoveReaction.BREAK);
+        var event = Mockito.mock(BlockPistonExtendEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(piston);
+        Mockito.when(event.getBlocks()).thenReturn(List.of(moved, broken));
+        Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(new BlockPosition(22, 64, 20), submission.position());
+        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            PaperBlockEventTestSupport.position(new BlockPosition(21, 64, 20)),
+            payload.get("from")
+        );
+        Assertions.assertEquals(
+            PaperBlockEventTestSupport.position(new BlockPosition(22, 64, 20)),
+            payload.get("to")
+        );
+        Mockito.verify(broken, Mockito.never()).getBlockData();
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
