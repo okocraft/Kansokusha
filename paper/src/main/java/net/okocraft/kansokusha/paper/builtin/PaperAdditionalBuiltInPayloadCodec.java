@@ -67,13 +67,11 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         return List.copyOf(snapshot);
     }
 
-    static EventPayload snapshotSingleItem(@Nullable ItemStack itemStack) {
+    static EventPayload snapshotFlowerPotContent(@Nullable ItemStack itemStack) {
         if (itemStack == null || itemStack.isEmpty()) {
             return snapshotItem(null);
         }
-        var single = itemStack.clone();
-        single.setAmount(1);
-        return snapshotItem(single);
+        return snapshotItem(ItemStack.of(itemStack.getType(), 1));
     }
 
     static EventPayload expectedBucketPostState(
@@ -170,7 +168,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     }
 
     static EventPayload encodeFlowerPot(boolean placing, ItemStack item) {
-        var itemSnapshot = snapshotSingleItem(item);
+        var itemSnapshot = snapshotFlowerPotContent(item);
         var empty = snapshotItem(null);
         var payload = new CompoundTag();
         payload.putString("action", placing ? "insert" : "remove");
@@ -225,7 +223,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     }
 
     private static BlockData expectedAfterEmpty(Material bucket, BlockData preState) {
-        if (preState.getMaterial() == Material.CAULDRON) {
+        if (isCauldron(preState.getMaterial())) {
             return switch (bucket) {
                 case LAVA_BUCKET -> Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData();
                 case POWDER_SNOW_BUCKET -> fullPowderSnowCauldron();
@@ -254,6 +252,13 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         return Blocks.POWDER_SNOW_CAULDRON.defaultBlockState()
             .setValue(LayeredCauldronBlock.LEVEL, 3)
             .asBlockData();
+    }
+
+    private static boolean isCauldron(Material material) {
+        return material == Material.CAULDRON
+            || material == Material.WATER_CAULDRON
+            || material == Material.LAVA_CAULDRON
+            || material == Material.POWDER_SNOW_CAULDRON;
     }
 
     private static boolean isWaterBucket(Material bucket) {
