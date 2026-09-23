@@ -9,7 +9,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -18,20 +17,16 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @NotNullByDefault
 public final class BoundedEventIntake implements EventIntake, AutoCloseable {
 
-    private final int capacity;
     private RetentionPolicySet retentionPolicies;
     private final ArrayBlockingQueue<AcceptedEvent> queue;
     private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock();
     private final Object availabilityMonitor = new Object();
     private volatile State state = State.RUNNING;
-    @Nullable
-    private volatile Throwable failureCause;
 
     public BoundedEventIntake(int capacity, RetentionPolicySet retentionPolicies) {
         if (capacity <= 0) {
             throw new IllegalArgumentException("capacity must be positive.");
         }
-        this.capacity = capacity;
         this.retentionPolicies = Objects.requireNonNull(retentionPolicies, "retentionPolicies");
         this.queue = new ArrayBlockingQueue<>(capacity);
     }
@@ -70,16 +65,6 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
     @Nullable
     public AcceptedEvent poll() {
         return this.queue.poll();
-    }
-
-    public AcceptedEvent take() throws InterruptedException {
-        return this.queue.take();
-    }
-
-    @Nullable
-    public AcceptedEvent poll(long timeout, TimeUnit unit) throws InterruptedException {
-        Objects.requireNonNull(unit, "unit");
-        return this.queue.poll(timeout, unit);
     }
 
     @Nullable
@@ -127,21 +112,12 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         }
     }
 
-
     public int size() {
         return this.queue.size();
     }
 
-    public int capacity() {
-        return this.capacity;
-    }
-
     public State state() {
         return this.state;
-    }
-
-    public Optional<Throwable> failureCause() {
-        return Optional.ofNullable(this.failureCause);
     }
 
     public void replaceRetentionPolicies(RetentionPolicySet retentionPolicies) {
@@ -174,14 +150,11 @@ public final class BoundedEventIntake implements EventIntake, AutoCloseable {
         this.signalAvailabilityChange();
     }
 
-    public void fail(Throwable cause) {
-        Objects.requireNonNull(cause, "cause");
-
+    public void fail() {
         var lock = this.lifecycleLock.writeLock();
         lock.lock();
         try {
             if (this.state == State.RUNNING || this.state == State.DRAINING) {
-                this.failureCause = cause;
                 this.state = State.FAILED;
             }
         } finally {

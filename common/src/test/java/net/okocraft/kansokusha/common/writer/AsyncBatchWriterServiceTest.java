@@ -573,7 +573,6 @@ class AsyncBatchWriterServiceTest {
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
         Assertions.assertSame(failure, service.failureCause().orElseThrow());
         Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
-        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
         Assertions.assertEquals(1, reports.get());
         Assertions.assertSame(failure, reported.get());
     }
@@ -604,7 +603,6 @@ class AsyncBatchWriterServiceTest {
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
         Assertions.assertSame(failure, service.failureCause().orElseThrow());
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
         Assertions.assertEquals(1, reportCount.get());
         Assertions.assertSame(failure, reportedFailure.get());
         Assertions.assertEquals(1, intake.size());
@@ -641,7 +639,6 @@ class AsyncBatchWriterServiceTest {
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
         Assertions.assertSame(pipelineFailure, service.failureCause().orElseThrow());
-        Assertions.assertSame(pipelineFailure, intake.failureCause().orElseThrow());
         Assertions.assertEquals(List.of(reportingFailure), List.of(pipelineFailure.getSuppressed()));
     }
 
