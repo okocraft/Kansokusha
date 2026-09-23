@@ -37,7 +37,6 @@ public final class TestServer {
             return;
         }
 
-        setUp = true;
         LoggerFactory.getLogger(TestServer.class).info("Setting the test server up.");
 
         SharedConstants.tryDetectVersion();
@@ -49,6 +48,8 @@ public final class TestServer {
 
         CraftRegistry.setMinecraftRegistry(registries);
         setUpArgumentTypes(registries);
+
+        setUp = true;
     }
 
     private static RegistryAccess.Frozen loadRegistries() {

@@ -1,9 +1,7 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
-import org.bukkit.craftbukkit.CraftRegistry;
-import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -14,6 +12,8 @@ import java.util.Objects;
 @NotNullByDefault
 public final class PaperItemStackPayloadCodec {
 
+    private static final String SERIALIZED_ITEM_KEY = "serialized";
+
     private PaperItemStackPayloadCodec() {
     }
 
@@ -23,18 +23,12 @@ public final class PaperItemStackPayloadCodec {
             return new CompoundTag();
         }
 
-        var encoded = net.minecraft.world.item.ItemStack.CODEC.encodeStart(
-            CraftRegistry.getMinecraftRegistry().createSerializationContext(NbtOps.INSTANCE),
-            CraftItemStack.asNMSCopy(itemStack)
-        ).getOrThrow();
-
-        if (!(encoded instanceof CompoundTag compound)) {
-            throw new IllegalStateException(
-                "Minecraft ItemStack codec returned a non-compound NBT value: "
-                    + encoded.getClass().getName()
-            );
-        }
-        return compound.copy();
+        var payloadValue = new CompoundTag();
+        payloadValue.put(
+            SERIALIZED_ITEM_KEY,
+            new ByteArrayTag(itemStack.serializeAsBytes())
+        );
+        return payloadValue;
     }
 
     public static ItemStack decode(CompoundTag payloadValue) {
@@ -43,10 +37,12 @@ public final class PaperItemStackPayloadCodec {
             return ItemStack.empty();
         }
 
-        var decoded = net.minecraft.world.item.ItemStack.CODEC.parse(
-            CraftRegistry.getMinecraftRegistry().createSerializationContext(NbtOps.INSTANCE),
-            payloadValue.copy()
-        ).getOrThrow();
-        return CraftItemStack.asBukkitCopy(decoded);
+        var serialized = payloadValue.get(SERIALIZED_ITEM_KEY);
+        if (!(serialized instanceof ByteArrayTag bytes)) {
+            throw new IllegalArgumentException(
+                "Paper ItemStack payload is missing the '" + SERIALIZED_ITEM_KEY + "' byte array."
+            );
+        }
+        return ItemStack.deserializeBytes(bytes.getAsByteArray().clone());
     }
 }
