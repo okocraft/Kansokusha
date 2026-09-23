@@ -14,6 +14,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -35,6 +36,7 @@ import org.jetbrains.annotations.Nullable;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -56,7 +58,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private final Key serverKey;
     private final Clock clock;
     private final BiConsumer<Location, Runnable> nextTickExecutor;
-    private final Map<Event, List<Snapshot>> inFlight = new IdentityHashMap<>();
+    private final Map<Event, Capture> inFlight = new IdentityHashMap<>();
     private final List<DeferredChange> deferredChanges = new ArrayList<>();
 
     private PaperNaturalBlockChangeListener(
@@ -106,12 +108,12 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(BlockFadeEvent event) {
-        captureTransition(event, event.getBlock(), event.getNewState(), "block_fade", null, null);
+        captureTransition(event, event.getBlock(), "block_fade", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockFadeEvent event) {
-        finalizeImmediate((Event) event, event);
+        finalizeTransition(event, event, event.getBlock(), event.getNewState(), false);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -119,7 +121,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         if (event instanceof BlockSpreadEvent || event instanceof EntityBlockFormEvent) {
             return;
         }
-        captureTransition(event, event.getBlock(), event.getNewState(), "block_form", null, null);
+        captureTransition(event, event.getBlock(), "block_form", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -127,7 +129,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         if (event instanceof BlockSpreadEvent || event instanceof EntityBlockFormEvent) {
             return;
         }
-        finalizeImmediate((Event) event, event);
+        finalizeTransition(event, event, event.getBlock(), event.getNewState(), false);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -135,7 +137,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         if (event instanceof BlockFormEvent) {
             return;
         }
-        captureTransition(event, event.getBlock(), event.getNewState(), "block_grow", null, null);
+        captureTransition(event, event.getBlock(), "block_grow", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -143,7 +145,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         if (event instanceof BlockFormEvent) {
             return;
         }
-        finalizeDeferredTransition(event, event, event.getBlock(), event.getNewState());
+        finalizeTransition(event, event, event.getBlock(), event.getNewState(), true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -152,7 +154,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         captureTransition(
             event,
             event.getBlock(),
-            event.getNewState(),
             "block_spread",
             source.getType().name().toLowerCase(Locale.ROOT),
             position(source)
@@ -161,7 +162,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockSpreadEvent event) {
-        finalizeDeferredTransition(event, event, event.getBlock(), event.getNewState());
+        finalizeTransition(event, event, event.getBlock(), event.getNewState(), true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -176,29 +177,33 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             PaperBlockEventPayloadCodec.encodeLeavesDecay(block.getBlockData()),
             block.getType()
         );
-        put(event, List.of(snapshot));
+        put(event, new SnapshotCapture(List.of(snapshot)));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(LeavesDecayEvent event) {
-        finalizeImmediate((Event) event, event);
+        Objects.requireNonNull(event, "event");
+        var capture = remove(event, SnapshotCapture.class);
+        if (capture == null || event.isCancelled()) {
+            return;
+        }
+        for (var snapshot : capture.snapshots()) {
+            var expectedMaterial = snapshot.requiredCurrentMaterial();
+            if (expectedMaterial != null && event.getBlock().getType() != expectedMaterial) {
+                return;
+            }
+        }
+        submitSnapshots(capture.snapshots());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(MoistureChangeEvent event) {
-        captureTransition(
-            event,
-            event.getBlock(),
-            event.getNewState(),
-            "moisture_change",
-            null,
-            null
-        );
+        captureTransition(event, event.getBlock(), "moisture_change", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(MoistureChangeEvent event) {
-        finalizeImmediate((Event) event, event);
+        finalizeTransition(event, event, event.getBlock(), event.getNewState(), false);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -209,44 +214,65 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             return;
         }
 
-        var occurredAt = this.clock.instant();
-        var cause = event.getSpecies().name().toLowerCase(Locale.ROOT);
-        var captured = new ArrayList<Snapshot>(event.getBlocks().size());
+        var preStates = new HashMap<BlockKey, BlockData>();
         for (var state : event.getBlocks()) {
-            var block = state.getBlock();
-            captured.add(new Snapshot(
-                occurredAt,
-                this.serverKey,
-                PaperKansokusha.key(state.getWorld().getKey()),
-                new BlockPosition(state.getX(), state.getY(), state.getZ()),
-                PaperBlockEventPayloadCodec.encodeNaturalChange(
-                    block.getBlockData(),
-                    state.getBlockData(),
-                    "structure_grow",
-                    cause,
-                    null
-                )
-            ));
+            preStates.putIfAbsent(
+                blockKey(state),
+                state.getBlock().getBlockData().clone()
+            );
         }
-        put(event, List.copyOf(captured));
+
+        put(
+            event,
+            new StructureGrowCapture(
+                this.clock.instant(),
+                this.serverKey,
+                event.getSpecies().name().toLowerCase(Locale.ROOT),
+                Map.copyOf(preStates)
+            )
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(StructureGrowEvent event) {
         Objects.requireNonNull(event, "event");
-        List<Snapshot> snapshots;
-        synchronized (this.inFlight) {
-            snapshots = this.inFlight.remove(event);
-        }
-        if (snapshots == null || event.isCancelled()) {
+        var capture = remove(event, StructureGrowCapture.class);
+        if (capture == null || event.isCancelled()) {
             return;
+        }
+
+        var finalStates = event.getBlocks();
+        if (finalStates.isEmpty()) {
+            return;
+        }
+
+        var snapshots = new ArrayList<Snapshot>(finalStates.size());
+        for (var state : finalStates) {
+            var key = blockKey(state);
+            var preState = capture.preStates().get(key);
+            if (preState == null) {
+                preState = state.getBlock().getBlockData().clone();
+            }
+            snapshots.add(new Snapshot(
+                capture.occurredAt(),
+                capture.serverKey(),
+                key.worldKey(),
+                key.position(),
+                PaperBlockEventPayloadCodec.encodeNaturalChange(
+                    preState,
+                    state.getBlockData(),
+                    "structure_grow",
+                    capture.cause(),
+                    null
+                )
+            ));
         }
 
         defer(
             event.getLocation(),
-            event.getBlocks(),
-            List.of(),
-            snapshots
+            finalStates,
+            Set.of(),
+            List.copyOf(snapshots)
         );
     }
 
@@ -254,16 +280,20 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     public void discardFertilizedChanges(BlockFertilizeEvent event) {
         Objects.requireNonNull(event, "event");
         var fertilizedBlocks = event.getBlocks();
-        var fertilizedTransitions = transitionKeys(fertilizedBlocks);
+        var fertilizedPositions = blockKeys(fertilizedBlocks);
+        var currentThread = Thread.currentThread();
 
         synchronized (this.inFlight) {
             for (int i = this.deferredChanges.size() - 1; i >= 0; i--) {
                 var deferred = this.deferredChanges.get(i);
+                if (deferred.ownerThread() != currentThread) {
+                    continue;
+                }
                 if (
                     deferred.changedStatesIdentity() == fertilizedBlocks
                         || (
-                            !deferred.transitions().isEmpty()
-                                && fertilizedTransitions.containsAll(deferred.transitions())
+                            !deferred.changedPositions().isEmpty()
+                                && fertilizedPositions.containsAll(deferred.changedPositions())
                         )
                 ) {
                     this.deferredChanges.remove(i);
@@ -289,88 +319,83 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private void captureTransition(
         Event event,
         Block block,
-        BlockState postState,
         String sourceEvent,
         @Nullable String cause,
         @Nullable BlockPosition sourcePosition
     ) {
         Objects.requireNonNull(event, "event");
         Objects.requireNonNull(block, "block");
-        Objects.requireNonNull(postState, "postState");
-        var snapshot = new Snapshot(
-            this.clock.instant(),
-            this.serverKey,
-            PaperKansokusha.key(block.getWorld().getKey()),
-            position(block),
-            PaperBlockEventPayloadCodec.encodeNaturalChange(
-                block.getBlockData(),
-                postState.getBlockData(),
+        put(
+            event,
+            new TransitionCapture(
+                this.clock.instant(),
+                this.serverKey,
+                PaperKansokusha.key(block.getWorld().getKey()),
+                position(block),
+                block.getBlockData().clone(),
                 sourceEvent,
                 cause,
                 sourcePosition
             )
         );
-        put(event, List.of(snapshot));
     }
 
-    private void finalizeImmediate(Event event, Cancellable cancellable) {
-        Objects.requireNonNull(event, "event");
-        Objects.requireNonNull(cancellable, "cancellable");
-        List<Snapshot> snapshots;
-        synchronized (this.inFlight) {
-            snapshots = this.inFlight.remove(event);
-        }
-        if (snapshots == null || cancellable.isCancelled()) {
-            return;
-        }
-        if (event instanceof LeavesDecayEvent leavesDecayEvent) {
-            for (var snapshot : snapshots) {
-                var expectedMaterial = snapshot.requiredCurrentMaterial();
-                if (
-                    expectedMaterial != null
-                        && leavesDecayEvent.getBlock().getType() != expectedMaterial
-                ) {
-                    return;
-                }
-            }
-        }
-        submitSnapshots(snapshots);
-    }
-
-    private void finalizeDeferredTransition(
+    private void finalizeTransition(
         Event event,
         Cancellable cancellable,
         Block block,
-        BlockState postState
+        BlockState postState,
+        boolean deferForFertilization
     ) {
         Objects.requireNonNull(event, "event");
         Objects.requireNonNull(cancellable, "cancellable");
         Objects.requireNonNull(block, "block");
         Objects.requireNonNull(postState, "postState");
 
-        List<Snapshot> snapshots;
-        synchronized (this.inFlight) {
-            snapshots = this.inFlight.remove(event);
+        var capture = remove(event, TransitionCapture.class);
+        if (capture == null || cancellable.isCancelled()) {
+            return;
         }
-        if (snapshots == null || cancellable.isCancelled()) {
+
+        var snapshot = new Snapshot(
+            capture.occurredAt(),
+            capture.serverKey(),
+            capture.worldKey(),
+            capture.position(),
+            PaperBlockEventPayloadCodec.encodeNaturalChange(
+                capture.preState(),
+                postState.getBlockData(),
+                capture.sourceEvent(),
+                capture.cause(),
+                capture.sourcePosition()
+            )
+        );
+
+        if (!deferForFertilization) {
+            submitSnapshots(List.of(snapshot));
             return;
         }
 
         defer(
-            new Location(block.getWorld(), block.getX(), block.getY(), block.getZ()),
+            location(block),
             null,
-            List.of(transitionKey(postState)),
-            snapshots
+            Set.of(new BlockKey(capture.worldKey(), capture.position())),
+            List.of(snapshot)
         );
     }
 
     private void defer(
         Location location,
         @Nullable List<BlockState> changedStatesIdentity,
-        List<TransitionKey> transitions,
+        Set<BlockKey> changedPositions,
         List<Snapshot> snapshots
     ) {
-        var deferred = new DeferredChange(changedStatesIdentity, transitions, snapshots);
+        var deferred = new DeferredChange(
+            Thread.currentThread(),
+            changedStatesIdentity,
+            changedPositions,
+            snapshots
+        );
         synchronized (this.inFlight) {
             this.deferredChanges.add(deferred);
         }
@@ -409,26 +434,37 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
     }
 
-    private void put(Event event, List<Snapshot> snapshots) {
+    private void put(Event event, Capture capture) {
         synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshots);
+            this.inFlight.put(event, capture);
         }
     }
 
-    private static Set<TransitionKey> transitionKeys(List<BlockState> states) {
-        var result = new HashSet<TransitionKey>(states.size());
+    private <T extends Capture> @Nullable T remove(Event event, Class<T> type) {
+        Capture capture;
+        synchronized (this.inFlight) {
+            capture = this.inFlight.remove(event);
+        }
+        return type.isInstance(capture) ? type.cast(capture) : null;
+    }
+
+    private static Set<BlockKey> blockKeys(List<BlockState> states) {
+        var result = new HashSet<BlockKey>(states.size());
         for (var state : states) {
-            result.add(transitionKey(state));
+            result.add(blockKey(state));
         }
         return Set.copyOf(result);
     }
 
-    private static TransitionKey transitionKey(BlockState state) {
-        return new TransitionKey(
+    private static BlockKey blockKey(BlockState state) {
+        return new BlockKey(
             PaperKansokusha.key(state.getWorld().getKey()),
-            new BlockPosition(state.getX(), state.getY(), state.getZ()),
-            state.getBlockData().getAsString()
+            new BlockPosition(state.getX(), state.getY(), state.getZ())
         );
+    }
+
+    private static Location location(Block block) {
+        return new Location(block.getWorld(), block.getX(), block.getY(), block.getZ());
     }
 
     private static void scheduleNextTick(Location location, Runnable task) {
@@ -440,16 +476,44 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         return new BlockPosition(block.getX(), block.getY(), block.getZ());
     }
 
-    private record TransitionKey(
+    private interface Capture {
+    }
+
+    private record TransitionCapture(
+        Instant occurredAt,
+        Key serverKey,
         Key worldKey,
         BlockPosition position,
-        String postState
+        BlockData preState,
+        String sourceEvent,
+        @Nullable String cause,
+        @Nullable BlockPosition sourcePosition
+    ) implements Capture {
+    }
+
+    private record SnapshotCapture(
+        List<Snapshot> snapshots
+    ) implements Capture {
+    }
+
+    private record StructureGrowCapture(
+        Instant occurredAt,
+        Key serverKey,
+        String cause,
+        Map<BlockKey, BlockData> preStates
+    ) implements Capture {
+    }
+
+    private record BlockKey(
+        Key worldKey,
+        BlockPosition position
     ) {
     }
 
     private record DeferredChange(
+        Thread ownerThread,
         @Nullable List<BlockState> changedStatesIdentity,
-        List<TransitionKey> transitions,
+        Set<BlockKey> changedPositions,
         List<Snapshot> snapshots
     ) {
     }

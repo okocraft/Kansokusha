@@ -71,6 +71,16 @@ class PaperFertilizationEventRelationTest {
         assertRootedDirtBonemealSpreadIsOwnedByFertilization(true);
     }
 
+    @Test
+    void testStemIntermediateGrowthIsOwnedByAcceptedFertilization() {
+        assertStemIntermediateGrowthIsOwnedByFertilization(false);
+    }
+
+    @Test
+    void testStemIntermediateGrowthIsOwnedByCancelledFertilization() {
+        assertStemIntermediateGrowthIsOwnedByFertilization(true);
+    }
+
     private static void assertDispenserBonemealStructureGrowIsOwnedByFertilization(
         boolean cancelled
     ) {
@@ -164,6 +174,67 @@ class PaperFertilizationEventRelationTest {
             fertilize(List.of(spreadState), cancelled)
         );
         deferred.remove().run();
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static void assertStemIntermediateGrowthIsOwnedByFertilization(
+        boolean cancelled
+    ) {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = listener(api, deferred);
+        var world = PaperBlockEventTestSupport.world();
+
+        var stem = PaperBlockEventTestSupport.block(
+            world, 30, 65, 30, Blocks.MELON_STEM.defaultBlockState(), Material.MELON_STEM
+        );
+        var ageSeven = PaperBlockEventTestSupport.state(
+            world,
+            stem,
+            30,
+            65,
+            30,
+            Blocks.MELON_STEM.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7,
+                7
+            )
+        );
+        var stemGrow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(stemGrow.getBlock()).thenReturn(stem);
+        Mockito.when(stemGrow.getNewState()).thenReturn(ageSeven);
+
+        listener.capture(stemGrow);
+        listener.finalizeEvent(stemGrow);
+
+        var fruit = PaperBlockEventTestSupport.block(
+            world, 31, 65, 30, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var fruitState = PaperBlockEventTestSupport.state(
+            world, fruit, 31, 65, 30, Blocks.MELON.defaultBlockState()
+        );
+        var fruitGrow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(fruitGrow.getBlock()).thenReturn(fruit);
+        Mockito.when(fruitGrow.getNewState()).thenReturn(fruitState);
+
+        listener.capture(fruitGrow);
+        listener.finalizeEvent(fruitGrow);
+
+        var attachedStem = PaperBlockEventTestSupport.state(
+            world, stem, 30, 65, 30, Blocks.ATTACHED_MELON_STEM.defaultBlockState()
+        );
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(2, deferred.size());
+        Assertions.assertEquals(2, listener.inFlightCount());
+
+        listener.discardFertilizedChanges(
+            fertilize(List.of(attachedStem, fruitState), cancelled)
+        );
+        while (!deferred.isEmpty()) {
+            deferred.remove().run();
+        }
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());

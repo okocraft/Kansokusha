@@ -74,7 +74,7 @@ class PaperNaturalBlockChangeListenerTest {
 
         var expected = naturalPayload(
             Blocks.AIR.defaultBlockState(),
-            Blocks.FIRE.defaultBlockState(),
+            Blocks.WATER.defaultBlockState(),
             "block_spread",
             "fire",
             new BlockPosition(10, 64, 10)
@@ -282,10 +282,13 @@ class PaperNaturalBlockChangeListenerTest {
         Mockito.when(event.isFromBonemeal()).thenReturn(false);
 
         listener.capture(event);
-        for (int i = 0; i < states.size(); i++) {
-            Mockito.when(states.get(i).getBlockData())
+        states.removeLast();
+        for (var state : states) {
+            Mockito.when(state.getBlockData())
                 .thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
-            Mockito.when(blocks.get(i).getBlockData())
+        }
+        for (var block : blocks) {
+            Mockito.when(block.getBlockData())
                 .thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
         }
         listener.finalizeEvent(event);
@@ -295,16 +298,16 @@ class PaperNaturalBlockChangeListenerTest {
         Assertions.assertEquals(1, deferred.size());
         deferred.remove().run();
 
-        Assertions.assertEquals(3, api.submissions.size());
+        Assertions.assertEquals(2, api.submissions.size());
         var byX = byX(api.submissions);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 2; i++) {
             var submission = byX.get(100 + i);
             Assertions.assertNotNull(submission);
             Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
             Assertions.assertEquals(
                 naturalPayload(
                     Blocks.AIR.defaultBlockState(),
-                    Blocks.OAK_LOG.defaultBlockState(),
+                    Blocks.LAVA.defaultBlockState(),
                     "structure_grow",
                     "birch",
                     null
@@ -312,6 +315,7 @@ class PaperNaturalBlockChangeListenerTest {
                 PaperBlockStatePayloadCodec.decode(submission.payload())
             );
         }
+        Assertions.assertNull(byX.get(102));
         Mockito.verify(clock, Mockito.times(1)).instant();
         Assertions.assertEquals(0, listener.inFlightCount());
     }

@@ -17,6 +17,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.UUID;
 
 class PaperBlockIgniteListenerTest {
@@ -32,10 +33,12 @@ class PaperBlockIgniteListenerTest {
     @Test
     void testCapturesCauseActorAndImmutablePreStateAfterAcceptedPlacement() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
         var listener = PaperBlockIgniteListener.register(
             api,
             PaperBlockEventTestSupport.SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
         );
         var world = PaperBlockEventTestSupport.world();
         var target = PaperBlockEventTestSupport.block(
@@ -66,6 +69,8 @@ class PaperBlockIgniteListenerTest {
         Mockito.when(placement.getBlockPlaced()).thenReturn(target);
         Mockito.when(placement.canBuild()).thenReturn(true);
         listener.finalizePlacement(placement);
+        Assertions.assertEquals(1, deferred.size());
+        deferred.remove().run();
 
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperBlockIgniteListener.EVENT_TYPE, submission.eventType());
@@ -114,6 +119,48 @@ class PaperBlockIgniteListenerTest {
     }
 
     @Test
+    void testPlayerOwnedFireballFallsBackWhenNoPlacementEventFollows() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperBlockIgniteListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var target = PaperBlockEventTestSupport.block(
+            world, 14, 65, 14, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var player = player();
+        var ignite = Mockito.mock(BlockIgniteEvent.class);
+        Mockito.when(ignite.getBlock()).thenReturn(target);
+        Mockito.when(ignite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.FIREBALL);
+        Mockito.when(ignite.getIgnitingEntity()).thenReturn(player);
+        Mockito.when(ignite.getPlayer()).thenReturn(player);
+
+        listener.capture(ignite);
+        listener.finalizeEvent(ignite);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, deferred.size());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        deferred.remove().run();
+
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(0, listener.inFlightCount());
+
+        var laterPlacement = Mockito.mock(BlockPlaceEvent.class);
+        Mockito.when(laterPlacement.getPlayer()).thenReturn(player);
+        Mockito.when(laterPlacement.getBlockPlaced()).thenReturn(target);
+        Mockito.when(laterPlacement.canBuild()).thenReturn(true);
+        listener.finalizePlacement(laterPlacement);
+
+        Assertions.assertEquals(1, api.submissions.size());
+    }
+
+    @Test
     void testCancelledIgniteDropsSnapshot() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
@@ -153,7 +200,13 @@ class PaperBlockIgniteListenerTest {
         boolean canBuild
     ) {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperBlockIgniteListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
         var world = PaperBlockEventTestSupport.world();
         var target = PaperBlockEventTestSupport.block(
             world, 4, 65, 6, Blocks.AIR.defaultBlockState(), Material.AIR
@@ -177,6 +230,8 @@ class PaperBlockIgniteListenerTest {
         Mockito.when(placement.isCancelled()).thenReturn(cancelled);
         Mockito.when(placement.canBuild()).thenReturn(canBuild);
         listener.finalizePlacement(placement);
+        Assertions.assertEquals(1, deferred.size());
+        deferred.remove().run();
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());

@@ -10,6 +10,8 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
@@ -18,12 +20,14 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockMultiPlaceEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -31,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -43,22 +48,44 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
+    private final BiConsumer<Location, Runnable> nextTickExecutor;
     private final Map<BlockIgniteEvent, Snapshot> inFlight = new IdentityHashMap<>();
-    private final Map<PlayerPlacementKey, Snapshot> pendingPlayerPlacements = new HashMap<>();
+    private final Map<PlayerPlacementKey, ArrayDeque<PendingPlacement>> pendingPlayerPlacements =
+        new HashMap<>();
 
-    private PaperBlockIgniteListener(KansokushaApi api, Key serverKey, Clock clock) {
+    private PaperBlockIgniteListener(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Location, Runnable> nextTickExecutor
+    ) {
         this.api = Objects.requireNonNull(api, "api");
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.nextTickExecutor = Objects.requireNonNull(nextTickExecutor, "nextTickExecutor");
     }
 
     public static PaperBlockIgniteListener register(KansokushaApi api, Key serverKey) {
-        return register(api, serverKey, Clock.systemUTC());
+        return register(
+            api,
+            serverKey,
+            Clock.systemUTC(),
+            PaperBlockIgniteListener::scheduleNextTick
+        );
     }
 
     static PaperBlockIgniteListener register(KansokushaApi api, Key serverKey, Clock clock) {
+        return register(api, serverKey, clock, (location, task) -> task.run());
+    }
+
+    static PaperBlockIgniteListener register(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Location, Runnable> nextTickExecutor
+    ) {
         registerEventType(api, DEFINITION);
-        return new PaperBlockIgniteListener(api, serverKey, clock);
+        return new PaperBlockIgniteListener(api, serverKey, clock, nextTickExecutor);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -110,21 +137,27 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         }
 
         var playerId = snapshot.awaitingPlacementPlayerId();
-        if (playerId != null) {
-            synchronized (this.inFlight) {
-                this.pendingPlayerPlacements.put(
-                    new PlayerPlacementKey(
-                        snapshot.worldKey(),
-                        snapshot.position(),
-                        playerId
-                    ),
-                    snapshot
-                );
-            }
+        if (playerId == null) {
+            submit(this.api, EVENT_TYPE, snapshot);
             return;
         }
 
-        submit(this.api, EVENT_TYPE, snapshot);
+        var key = new PlayerPlacementKey(
+            snapshot.worldKey(),
+            snapshot.position(),
+            playerId
+        );
+        var pending = new PendingPlacement(snapshot);
+        synchronized (this.inFlight) {
+            this.pendingPlayerPlacements
+                .computeIfAbsent(key, ignored -> new ArrayDeque<>())
+                .addLast(pending);
+        }
+
+        this.nextTickExecutor.accept(
+            location(event.getBlock()),
+            () -> finalizePendingPlacement(key, pending)
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -150,7 +183,30 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size() + this.pendingPlayerPlacements.size();
+            var pendingCount = 0;
+            for (var queue : this.pendingPlayerPlacements.values()) {
+                pendingCount += queue.size();
+            }
+            return this.inFlight.size() + pendingCount;
+        }
+    }
+
+    private void finalizePendingPlacement(
+        PlayerPlacementKey key,
+        PendingPlacement pending
+    ) {
+        var removed = false;
+        synchronized (this.inFlight) {
+            var queue = this.pendingPlayerPlacements.get(key);
+            if (queue != null) {
+                removed = queue.remove(pending);
+                if (queue.isEmpty()) {
+                    this.pendingPlayerPlacements.remove(key);
+                }
+            }
+        }
+        if (removed) {
+            submit(this.api, EVENT_TYPE, pending.snapshot());
         }
     }
 
@@ -159,23 +215,30 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             if (event instanceof BlockMultiPlaceEvent multiPlaceEvent) {
                 for (var state : multiPlaceEvent.getReplacedBlockStates()) {
-                    var snapshot = this.pendingPlayerPlacements.remove(
-                        placementKey(playerId, state)
-                    );
-                    if (snapshot != null) {
-                        result.add(snapshot);
-                    }
+                    removeLatestPending(placementKey(playerId, state), result);
                 }
             } else {
-                var snapshot = this.pendingPlayerPlacements.remove(
-                    placementKey(playerId, event.getBlockPlaced())
-                );
-                if (snapshot != null) {
-                    result.add(snapshot);
-                }
+                removeLatestPending(placementKey(playerId, event.getBlockPlaced()), result);
             }
         }
         return List.copyOf(result);
+    }
+
+    private void removeLatestPending(
+        PlayerPlacementKey key,
+        List<Snapshot> result
+    ) {
+        var queue = this.pendingPlayerPlacements.get(key);
+        if (queue == null) {
+            return;
+        }
+        var pending = queue.pollLast();
+        if (pending != null) {
+            result.add(pending.snapshot());
+        }
+        if (queue.isEmpty()) {
+            this.pendingPlayerPlacements.remove(key);
+        }
     }
 
     private static boolean awaitsPlayerPlacement(
@@ -207,6 +270,15 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
 
     private static @Nullable SourceBlock source(@Nullable Block block) {
         return block == null ? null : new SourceBlock(position(block), block.getBlockData());
+    }
+
+    private static Location location(Block block) {
+        return new Location(block.getWorld(), block.getX(), block.getY(), block.getZ());
+    }
+
+    private static void scheduleNextTick(Location location, Runnable task) {
+        var plugin = JavaPlugin.getProvidingPlugin(PaperBlockIgniteListener.class);
+        Bukkit.getRegionScheduler().run(plugin, location, ignored -> task.run());
     }
 
     private static BlockPosition position(Block block) {
@@ -243,6 +315,11 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         Key worldKey,
         BlockPosition position,
         UUID playerId
+    ) {
+    }
+
+    private record PendingPlacement(
+        Snapshot snapshot
     ) {
     }
 
