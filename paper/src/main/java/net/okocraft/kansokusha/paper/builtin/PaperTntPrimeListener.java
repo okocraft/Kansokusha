@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.GameRules;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
@@ -162,7 +163,13 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             snapshot = this.pendingFire.remove(event.getBlock());
         }
-        if (snapshot == null || event.isCancelled()) {
+        if (
+            snapshot == null
+                || event.isCancelled()
+                || !Boolean.TRUE.equals(
+                    event.getBlock().getWorld().getGameRuleValue(GameRules.TNT_EXPLODES)
+                )
+        ) {
             return;
         }
         submit(snapshot);

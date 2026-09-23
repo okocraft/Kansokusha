@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import org.bukkit.GameRules;
 import org.bukkit.Material;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.junit.jupiter.api.Assertions;
@@ -264,6 +265,53 @@ class PaperBlockBurnListenerTest {
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testTntExplodesFalseFireRecordsBurnButNotPrime() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var burnListener = PaperBlockBurnListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var primeListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(false);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 11, 70, 11, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+
+        var burn = Mockito.mock(BlockBurnEvent.class);
+        Mockito.when(burn.getBlock()).thenReturn(tnt);
+        burnListener.capture(burn);
+        burnListener.finalizeEvent(burn);
+
+        var modern = Mockito.mock(org.bukkit.event.block.TNTPrimeEvent.class);
+        Mockito.when(modern.getBlock()).thenReturn(tnt);
+        Mockito.when(modern.getCause())
+            .thenReturn(org.bukkit.event.block.TNTPrimeEvent.PrimeCause.FIRE);
+        primeListener.capture(modern);
+        primeListener.finalizeEvent(modern);
+        burnListener.finalizeTntPrime(modern);
+
+        var legacy = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(legacy.getBlock()).thenReturn(tnt);
+        Mockito.when(legacy.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE);
+        burnListener.captureTntPrime(legacy);
+        primeListener.finalizeTntPrime(legacy);
+        burnListener.finalizeTntPrime(legacy);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(PaperBlockBurnListener.EVENT_TYPE, submission.eventType());
+        Assertions.assertEquals(new BlockPosition(11, 70, 11), submission.position());
+        Assertions.assertEquals(0, burnListener.inFlightCount());
+        Assertions.assertEquals(0, primeListener.inFlightCount());
     }
 
     @Test
