@@ -35,7 +35,7 @@ class PaperCauldronLevelChangeListenerTest {
     }
 
     @Test
-    void testPlayerChangeKeepsReasonActorAndLowestStates() throws Exception {
+    void testPlayerChangeKeepsLowestMetadataAndUsesFinalNewState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperCauldronLevelChangeListener.register(
             api,
@@ -65,6 +65,7 @@ class PaperCauldronLevelChangeListenerTest {
 
         listener.capture(event);
 
+        Mockito.verify(changed, Mockito.never()).getBlockData();
         Mockito.when(block.getBlockData()).thenReturn(
             Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData()
         );
@@ -84,7 +85,7 @@ class PaperCauldronLevelChangeListenerTest {
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,
-                newState,
+                Blocks.AIR.defaultBlockState(),
                 CauldronLevelChangeEvent.ChangeReason.BOTTLE_FILL,
                 "player",
                 PLAYER_ID,
@@ -210,6 +211,7 @@ class PaperCauldronLevelChangeListenerTest {
         listener.capture(event);
         listener.finalizeEvent(event);
 
+        Mockito.verify(changed, Mockito.never()).getBlockData();
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
     }
