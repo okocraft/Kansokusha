@@ -150,7 +150,7 @@ class PaperBlockFertilizeListenerTest {
 
         var structure = Mockito.mock(StructureGrowEvent.class);
         Mockito.when(structure.isFromBonemeal()).thenReturn(false);
-        Mockito.when(structure.getSpecies()).thenReturn(TreeType.OAK);
+        Mockito.when(structure.getSpecies()).thenReturn(TreeType.TREE);
         Mockito.when(structure.getBlocks()).thenReturn(changedStates);
         Mockito.when(structure.getLocation()).thenReturn(new Location(world, 20, 64, 20));
 
