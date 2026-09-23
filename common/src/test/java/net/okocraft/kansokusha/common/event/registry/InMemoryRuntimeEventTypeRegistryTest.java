@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.common.event.registry;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryRuntimeEventTypeRegistryTest {
 
@@ -26,7 +25,7 @@ class InMemoryRuntimeEventTypeRegistryTest {
         InMemoryRuntimeEventTypeRegistry registry = new InMemoryRuntimeEventTypeRegistry();
         EventTypeDefinition definition = definition(1);
 
-        assertEquals(RegistrationStatus.REGISTERED, registry.register(definition));
+        assertEquals(RegistrationOutcome.REGISTERED, registry.register(definition));
         assertEquals(Optional.of(definition), registry.find(EVENT_KEY));
     }
 
@@ -35,25 +34,10 @@ class InMemoryRuntimeEventTypeRegistryTest {
         InMemoryRuntimeEventTypeRegistry registry = new InMemoryRuntimeEventTypeRegistry();
         EventTypeDefinition first = definition(1);
 
-        assertEquals(RegistrationStatus.REGISTERED, registry.register(first));
-        assertEquals(RegistrationStatus.ALREADY_REGISTERED, registry.register(definition(1)));
-        assertEquals(RegistrationStatus.CONFLICT, registry.register(definition(2)));
+        assertEquals(RegistrationOutcome.REGISTERED, registry.register(first));
+        assertEquals(RegistrationOutcome.ALREADY_REGISTERED, registry.register(definition(1)));
+        assertEquals(RegistrationOutcome.CONFLICT, registry.register(definition(2)));
         assertEquals(Optional.of(first), registry.find(EVENT_KEY));
-    }
-
-    @Test
-    void testOnlyExactDefinitionCanBeUnregisteredAndAnotherGenerationCanReplaceIt() {
-        InMemoryRuntimeEventTypeRegistry registry = new InMemoryRuntimeEventTypeRegistry();
-        EventTypeDefinition first = definition(1);
-        EventTypeDefinition next = definition(2);
-        registry.register(first);
-
-        assertFalse(registry.unregister(next));
-        assertEquals(Optional.of(first), registry.find(EVENT_KEY));
-        assertTrue(registry.unregister(first));
-        assertTrue(registry.find(EVENT_KEY).isEmpty());
-        assertEquals(RegistrationStatus.REGISTERED, registry.register(next));
-        assertEquals(Optional.of(next), registry.find(EVENT_KEY));
     }
 
     @Test
@@ -63,7 +47,7 @@ class InMemoryRuntimeEventTypeRegistryTest {
         CountDownLatch ready = new CountDownLatch(threadCount);
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        List<Future<RegistrationStatus>> results = new ArrayList<>();
+        List<Future<RegistrationOutcome>> results = new ArrayList<>();
 
         try {
             for (int i = 1; i <= threadCount; i++) {
@@ -77,17 +61,17 @@ class InMemoryRuntimeEventTypeRegistryTest {
             ready.await();
             start.countDown();
 
-            List<RegistrationStatus> statuses = new ArrayList<>();
-            for (Future<RegistrationStatus> result : results) {
+            List<RegistrationOutcome> statuses = new ArrayList<>();
+            for (Future<RegistrationOutcome> result : results) {
                 statuses.add(result.get());
             }
             assertEquals(1, statuses.stream()
-                .filter(status -> status == RegistrationStatus.REGISTERED)
+                .filter(status -> status == RegistrationOutcome.REGISTERED)
                 .count());
             assertEquals(threadCount - 1, statuses.stream()
-                .filter(status -> status == RegistrationStatus.CONFLICT)
+                .filter(status -> status == RegistrationOutcome.CONFLICT)
                 .count());
-            int registeredIndex = statuses.indexOf(RegistrationStatus.REGISTERED);
+            int registeredIndex = statuses.indexOf(RegistrationOutcome.REGISTERED);
             assertEquals(definition(registeredIndex + 1), registry.find(EVENT_KEY).orElseThrow());
         } finally {
             executor.shutdownNow();

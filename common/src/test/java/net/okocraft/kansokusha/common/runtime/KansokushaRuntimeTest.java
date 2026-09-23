@@ -143,11 +143,11 @@ class KansokushaRuntimeTest {
 
             try {
                 var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-                while (writer.state() != AsyncBatchWriterService.State.DRAINING && System.nanoTime() < deadline) {
+                while (intake.state() != BoundedEventIntake.State.DRAINING && System.nanoTime() < deadline) {
                     Thread.onSpinWait();
                 }
 
-                Assertions.assertEquals(AsyncBatchWriterService.State.DRAINING, writer.state());
+                Assertions.assertEquals(BoundedEventIntake.State.DRAINING, intake.state());
                 Assertions.assertFalse(close.isDone());
                 releaseAccept.countDown();
                 Assertions.assertEquals(SubmissionOutcome.CLOSED, submit.get(2, TimeUnit.SECONDS));

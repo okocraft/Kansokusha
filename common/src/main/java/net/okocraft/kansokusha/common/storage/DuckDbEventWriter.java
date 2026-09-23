@@ -62,7 +62,7 @@ public final class DuckDbEventWriter implements EventBatchWriter {
             var payloadId = cached(
                 payloadIds,
                 definition,
-                () -> DuckDbEventTypeRegistry.resolve(connection, definition).id()
+                () -> resolvePayloadGeneration(connection, definition)
             );
             var serverId = cached(
                 serverIds,
@@ -161,6 +161,42 @@ public final class DuckDbEventWriter implements EventBatchWriter {
             try (var result = insert.executeQuery()) {
                 if (!result.next()) {
                     throw new SQLException("Creating metadata returned no identifier for " + key.asString());
+                }
+                return result.getInt("id");
+            }
+        }
+    }
+
+    private static int resolvePayloadGeneration(
+        Connection connection,
+        EventTypeDefinition definition
+    ) throws SQLException {
+        var eventTypeId = resolveKey(connection, "event_types", "event_type_key", definition.key());
+        var generation = definition.payloadGeneration().value();
+
+        try (var select = connection.prepareStatement(
+            "SELECT id FROM payload_generations WHERE event_type_id = ? AND generation = ?"
+        )) {
+            select.setInt(1, eventTypeId);
+            select.setInt(2, generation);
+            try (var result = select.executeQuery()) {
+                if (result.next()) {
+                    return result.getInt("id");
+                }
+            }
+        }
+
+        try (var insert = connection.prepareStatement(
+            "INSERT INTO payload_generations (event_type_id, generation) VALUES (?, ?) RETURNING id"
+        )) {
+            insert.setInt(1, eventTypeId);
+            insert.setInt(2, generation);
+            try (var result = insert.executeQuery()) {
+                if (!result.next()) {
+                    throw new SQLException(
+                        "Creating payload generation returned no identifier for "
+                            + definition.key().asString() + " generation " + generation
+                    );
                 }
                 return result.getInt("id");
             }

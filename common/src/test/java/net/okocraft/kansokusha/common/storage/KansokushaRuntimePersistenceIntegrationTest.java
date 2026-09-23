@@ -110,20 +110,11 @@ class KansokushaRuntimePersistenceIntegrationTest {
     ) throws Exception {
         try (var database = DuckDbDatabase.open(databasePath)) {
             DuckDbMigrations.migrate(database);
-            var registry = new DuckDbEventTypeRegistry(database);
-            var eventType = registry.findEventType(EVENT_TYPE).orElseThrow();
+            var eventTypeId = eventTypeId(database.connection());
             var generationId = generationId(
                 database.connection(),
-                eventType.id(),
+                eventTypeId,
                 PayloadGeneration.FIRST.value()
-            );
-
-            var recoveredGeneration = registry.findPayloadGeneration(generationId)
-                .orElseThrow();
-            Assertions.assertEquals(eventType, recoveredGeneration.eventType());
-            Assertions.assertEquals(
-                PayloadGeneration.FIRST,
-                recoveredGeneration.generation()
             );
 
             try (
@@ -155,7 +146,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 )
             ) {
                 Assertions.assertTrue(rows.next());
-                Assertions.assertEquals(eventType.id(), rows.getInt("event_type_id"));
+                Assertions.assertEquals(eventTypeId, rows.getInt("event_type_id"));
                 Assertions.assertEquals(generationId, rows.getInt("payload_generation_id"));
                 Assertions.assertEquals(EVENT_TYPE.asString(), rows.getString("event_type_key"));
                 Assertions.assertEquals(1, rows.getInt("generation"));
@@ -178,7 +169,7 @@ class KansokushaRuntimePersistenceIntegrationTest {
                 Assertions.assertFalse(rows.next());
             }
 
-            return new PersistentIdentity(eventType.id(), generationId);
+            return new PersistentIdentity(eventTypeId, generationId);
         }
     }
 
@@ -188,35 +179,21 @@ class KansokushaRuntimePersistenceIntegrationTest {
     ) throws Exception {
         try (var database = DuckDbDatabase.open(databasePath)) {
             DuckDbMigrations.migrate(database);
-            var registry = new DuckDbEventTypeRegistry(database);
-            var eventType = registry.findEventType(EVENT_TYPE).orElseThrow();
+            var eventTypeId = eventTypeId(database.connection());
 
-            Assertions.assertEquals(firstIdentity.eventTypeId(), eventType.id());
+            Assertions.assertEquals(firstIdentity.eventTypeId(), eventTypeId);
             Assertions.assertEquals(
                 firstIdentity.generationOneId(),
-                generationId(database.connection(), eventType.id(), 1)
+                generationId(database.connection(), eventTypeId, 1)
             );
             var generationTwoId = generationId(
                 database.connection(),
-                eventType.id(),
+                eventTypeId,
                 2
             );
             Assertions.assertNotEquals(
                 firstIdentity.generationOneId(),
                 generationTwoId
-            );
-
-            Assertions.assertEquals(
-                PayloadGeneration.FIRST,
-                registry.findPayloadGeneration(firstIdentity.generationOneId())
-                    .orElseThrow()
-                    .generation()
-            );
-            Assertions.assertEquals(
-                new PayloadGeneration(2),
-                registry.findPayloadGeneration(generationTwoId)
-                    .orElseThrow()
-                    .generation()
             );
 
             try (
@@ -258,6 +235,20 @@ class KansokushaRuntimePersistenceIntegrationTest {
             new PlayerSubject(PLAYER),
             EventPayload.copyOf(payload)
         );
+    }
+
+    private static int eventTypeId(Connection connection) throws Exception {
+        try (
+            var statement = connection.prepareStatement(
+                "SELECT id FROM event_types WHERE event_type_key = ?"
+            )
+        ) {
+            statement.setString(1, EVENT_TYPE.asString());
+            try (var rows = statement.executeQuery()) {
+                Assertions.assertTrue(rows.next());
+                return rows.getInt("id");
+            }
+        }
     }
 
     private static int generationId(

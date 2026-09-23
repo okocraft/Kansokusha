@@ -83,7 +83,6 @@ class BoundedEventIntakeTest {
             intake.accept(submission(OCCURRED_AT.plusMillis(2)))
         );
         Assertions.assertEquals(2, intake.size());
-        Assertions.assertEquals(2, intake.capacity());
 
         Assertions.assertNotNull(intake.poll());
         Assertions.assertEquals(
@@ -163,41 +162,34 @@ class BoundedEventIntakeTest {
     }
 
     @Test
-    void testFailedIntakeIsUnavailableAndRetainsFirstCause() {
+    void testFailedIntakeStaysUnavailable() {
         var intake = new BoundedEventIntake(1, policies(Duration.ofHours(1)));
-        var first = new IllegalStateException("first failure");
-        var second = new IllegalArgumentException("second failure");
 
-        intake.fail(first);
+        intake.fail();
 
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertSame(first, intake.failureCause().orElseThrow());
         Assertions.assertEquals(
             EventIntake.Admission.UNAVAILABLE,
             intake.accept(submission(OCCURRED_AT))
         );
 
-        intake.fail(second);
+        intake.fail();
         intake.beginDraining();
 
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertSame(first, intake.failureCause().orElseThrow());
 
         intake.close();
         Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
-        Assertions.assertSame(first, intake.failureCause().orElseThrow());
     }
 
     @Test
     void testDrainingCanTransitionToFailed() {
         var intake = new BoundedEventIntake(1, policies(Duration.ofHours(1)));
-        var failure = new IllegalStateException("drain failed");
 
         intake.beginDraining();
-        intake.fail(failure);
+        intake.fail();
 
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
         Assertions.assertEquals(
             EventIntake.Admission.UNAVAILABLE,
             intake.accept(submission(OCCURRED_AT))
@@ -211,7 +203,6 @@ class BoundedEventIntakeTest {
         var ready = new CountDownLatch(producers);
         var start = new CountDownLatch(1);
         var failureComplete = new CountDownLatch(1);
-        var failure = new IllegalStateException("writer failed");
         var results = new ArrayList<List<EventIntake.Admission>>();
 
         try (var executor = Executors.newFixedThreadPool(producers + 1)) {
@@ -235,7 +226,7 @@ class BoundedEventIntakeTest {
             var failureFuture = executor.submit(() -> {
                 start.await();
                 try {
-                    intake.fail(failure);
+                    intake.fail();
                 } finally {
                     failureComplete.countDown();
                 }
@@ -255,7 +246,6 @@ class BoundedEventIntakeTest {
             .count();
 
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
-        Assertions.assertSame(failure, intake.failureCause().orElseThrow());
         Assertions.assertEquals(acceptedBeforeFailure, intake.size());
         Assertions.assertTrue(
             results.stream().allMatch(

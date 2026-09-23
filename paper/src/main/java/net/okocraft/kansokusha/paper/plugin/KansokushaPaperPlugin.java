@@ -1,7 +1,9 @@
 package net.okocraft.kansokusha.paper.plugin;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.common.api.CommonKansokushaApiProvider;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener;
 import net.okocraft.kansokusha.paper.builtin.PaperBlockPlaceListener;
 import org.bukkit.event.HandlerList;
@@ -17,7 +19,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     private Key serverKey;
     private PaperBlockBreakListener blockBreakListener;
     private PaperBlockPlaceListener blockPlaceListener;
-    private PaperRuntimeLifecycle runtimeLifecycle;
+    private KansokushaRuntime runtime;
 
     @Override
     public void onLoad() {
@@ -39,54 +41,52 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        var reporter = new PaperAdministratorReporter(this.getLogger());
         var serverKey = this.requireServerKey();
-        var lifecycle = new PaperRuntimeLifecycle(
-            this.getDataPath(),
-            serverKey,
-            reporter
-        );
+        final KansokushaRuntime runtime;
+
+        try {
+            runtime = KansokushaRuntime.start(
+                this.getDataPath(),
+                serverKey,
+                (message, failure) -> this.getLogger().log(Level.SEVERE, message, failure)
+            );
+        } catch (IOException | SQLException e) {
+            throw new IllegalStateException("Failed to start Kansokusha runtime.", e);
+        }
+
         PaperBlockBreakListener blockBreakListener = null;
         PaperBlockPlaceListener blockPlaceListener = null;
 
         try {
-            lifecycle.start();
+            if (!CommonKansokushaApiProvider.publish(runtime.api())) {
+                throw new IllegalStateException("Kansokusha API is already published.");
+            }
 
-            blockBreakListener = PaperBlockBreakListener.register(
-                lifecycle.api(),
-                serverKey
-            );
-            blockPlaceListener = PaperBlockPlaceListener.register(
-                lifecycle.api(),
-                serverKey
-            );
+            blockBreakListener = PaperBlockBreakListener.register(runtime.api(), serverKey);
+            blockPlaceListener = PaperBlockPlaceListener.register(runtime.api(), serverKey);
 
             var pluginManager = this.getServer().getPluginManager();
             pluginManager.registerEvents(blockBreakListener, this);
             pluginManager.registerEvents(blockPlaceListener, this);
-
-            this.blockBreakListener = blockBreakListener;
-            this.blockPlaceListener = blockPlaceListener;
-            this.runtimeLifecycle = lifecycle;
-        } catch (IOException | SQLException e) {
-            cleanupListeners(blockPlaceListener, blockBreakListener);
-            lifecycle.close();
-            throw new IllegalStateException("Failed to start Kansokusha runtime.", e);
         } catch (RuntimeException | Error failure) {
             cleanupListeners(blockPlaceListener, blockBreakListener);
-            lifecycle.close();
+            this.closeRuntime(runtime);
             throw failure;
         }
+
+        this.blockBreakListener = blockBreakListener;
+        this.blockPlaceListener = blockPlaceListener;
+        this.runtime = runtime;
     }
 
     public boolean reloadRetentionPolicies() {
-        var lifecycle = this.runtimeLifecycle;
-        if (lifecycle == null) {
+        var runtime = this.runtime;
+        if (runtime == null) {
             return false;
         }
 
         try {
-            lifecycle.reloadRetentionPolicies();
+            runtime.reloadRetentionPolicies();
             this.getLogger().info("Reloaded retention policies.");
             return true;
         } catch (IOException | RuntimeException failure) {
@@ -107,10 +107,19 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
         this.blockBreakListener = null;
         cleanupListeners(blockPlaceListener, blockBreakListener);
 
-        var lifecycle = this.runtimeLifecycle;
-        this.runtimeLifecycle = null;
-        if (lifecycle != null) {
-            lifecycle.close();
+        var runtime = this.runtime;
+        this.runtime = null;
+        if (runtime != null) {
+            this.closeRuntime(runtime);
+        }
+    }
+
+    private void closeRuntime(KansokushaRuntime runtime) {
+        CommonKansokushaApiProvider.unpublish(runtime.api());
+        try {
+            runtime.close();
+        } catch (SQLException | RuntimeException failure) {
+            this.getLogger().log(Level.SEVERE, "Kansokusha runtime failed to shut down cleanly.", failure);
         }
     }
 
