@@ -37,6 +37,9 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     private final Key serverKey;
     private final Clock clock;
     private final Map<TNTPrimeEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    @SuppressWarnings({"deprecation", "removal"})
+    private final Map<com.destroystokyo.paper.event.block.TNTPrimeEvent, Snapshot>
+        legacyExplosionInFlight = new IdentityHashMap<>();
     private final PaperTntTransitionTracker<Snapshot> pendingFire =
         new PaperTntTransitionTracker<>();
 
@@ -58,24 +61,19 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(TNTPrimeEvent event) {
         Objects.requireNonNull(event, "event");
+        if (event.getCause() == TNTPrimeEvent.PrimeCause.EXPLOSION) {
+            PaperExplosionTntCorrelation.captureModern(this.api, event);
+        }
+
         var tnt = event.getBlock();
         var actor = PaperEntityAttribution.capture(event.getPrimingEntity());
         var primingBlock = immutableBlock(event.getPrimingBlock());
-
-        var snapshot = new Snapshot(
-            this.clock.instant(),
-            this.serverKey,
-            PaperKansokusha.key(tnt.getWorld().getKey()),
-            position(tnt),
-            event.getCause() == TNTPrimeEvent.PrimeCause.FIRE,
-            actor.subject(),
-            PaperWorldMutationPayloadCodec.encodeTntPrime(
-                event.getCause().name(),
-                actor,
-                primingBlock == null ? null : primingBlock.worldKey(),
-                primingBlock == null ? null : primingBlock.position(),
-                primingBlock == null ? null : primingBlock.state()
-            )
+        var snapshot = snapshot(
+            event.getCause().name(),
+            tnt,
+            actor,
+            primingBlock,
+            event.getCause() == TNTPrimeEvent.PrimeCause.FIRE
         );
 
         synchronized (this.inFlight) {
@@ -93,11 +91,12 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         if (snapshot == null) {
             return;
         }
-        if (
-            event.getCause() == TNTPrimeEvent.PrimeCause.EXPLOSION
-                && PaperTntPrimeSuppression.consumeExplosion(this.api, event.getBlock())
-        ) {
-            return;
+
+        if (event.getCause() == TNTPrimeEvent.PrimeCause.EXPLOSION) {
+            var decision = PaperExplosionTntCorrelation.finalizeModern(this.api, event);
+            if (decision.tracked() && !decision.recordTntPrime()) {
+                return;
+            }
         }
         if (event.isCancelled()) {
             return;
@@ -112,11 +111,51 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         submit(snapshot);
     }
 
+    @EventHandler(priority = EventPriority.LOWEST)
+    @SuppressWarnings({"deprecation", "removal"})
+    public void captureTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (
+            event.getReason()
+                != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION
+        ) {
+            return;
+        }
+        if (!PaperExplosionTntCorrelation.captureLegacy(this.api, event)) {
+            return;
+        }
+
+        var tnt = event.getBlock();
+        var actor = PaperEntityAttribution.capture(event.getPrimerEntity());
+        var snapshot = snapshot("EXPLOSION", tnt, actor, null, false);
+        synchronized (this.inFlight) {
+            this.legacyExplosionInFlight.put(event, snapshot);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     @SuppressWarnings({"deprecation", "removal"})
     public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
         Objects.requireNonNull(event, "event");
-        if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
+        if (
+            event.getReason()
+                == com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION
+        ) {
+            Snapshot snapshot;
+            synchronized (this.inFlight) {
+                snapshot = this.legacyExplosionInFlight.remove(event);
+            }
+            var decision = PaperExplosionTntCorrelation.finalizeLegacy(this.api, event);
+            if (snapshot != null && decision.recordTntPrime()) {
+                submit(snapshot);
+            }
+            return;
+        }
+
+        if (
+            event.getReason()
+                != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE
+        ) {
             return;
         }
         Snapshot snapshot;
@@ -133,15 +172,42 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
+            this.legacyExplosionInFlight.clear();
             this.pendingFire.clear();
         }
-        PaperTntPrimeSuppression.clear(this.api);
+        PaperExplosionTntCorrelation.clear(this.api);
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size() + this.pendingFire.size();
+            return this.inFlight.size()
+                + this.legacyExplosionInFlight.size()
+                + this.pendingFire.size();
         }
+    }
+
+    private Snapshot snapshot(
+        String cause,
+        Block tnt,
+        PaperEntityAttribution actor,
+        @Nullable ImmutableBlock primingBlock,
+        boolean awaitLegacyFire
+    ) {
+        return new Snapshot(
+            this.clock.instant(),
+            this.serverKey,
+            PaperKansokusha.key(tnt.getWorld().getKey()),
+            position(tnt),
+            awaitLegacyFire,
+            actor.subject(),
+            PaperWorldMutationPayloadCodec.encodeTntPrime(
+                cause,
+                actor,
+                primingBlock == null ? null : primingBlock.worldKey(),
+                primingBlock == null ? null : primingBlock.position(),
+                primingBlock == null ? null : primingBlock.state()
+            )
+        );
     }
 
     private void submit(Snapshot snapshot) {
@@ -175,7 +241,10 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     private static void registerEventType(KansokushaApi api) {
         Objects.requireNonNull(api, "api");
         var outcome = api.registerEventType(DEFINITION);
-        if (outcome != RegistrationOutcome.REGISTERED && outcome != RegistrationOutcome.ALREADY_REGISTERED) {
+        if (
+            outcome != RegistrationOutcome.REGISTERED
+                && outcome != RegistrationOutcome.ALREADY_REGISTERED
+        ) {
             throw new IllegalStateException(
                 "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
             );

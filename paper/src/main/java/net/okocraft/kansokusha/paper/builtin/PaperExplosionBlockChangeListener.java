@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,10 +46,6 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     private final Key serverKey;
     private final Clock clock;
     private final Map<Event, Capture> inFlight = new IdentityHashMap<>();
-    private final PaperTntTransitionTracker<EventSubmission> pendingTntChanges =
-        new PaperTntTransitionTracker<>();
-    private final PaperTntTransitionTracker<EventSubmission> pendingDragonChanges =
-        new PaperTntTransitionTracker<>();
 
     private PaperExplosionBlockChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -141,57 +138,39 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
         finalizeExplosion(event, event.isCancelled(), event.blockList(), event.getYield());
     }
 
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void captureTntPrime(TNTPrimeEvent event) {
+        PaperExplosionTntCorrelation.captureModern(this.api, event);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeTntPrime(TNTPrimeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.getCause() != TNTPrimeEvent.PrimeCause.EXPLOSION) {
-            return;
-        }
-        EventSubmission submission;
-        synchronized (this.inFlight) {
-            submission = this.pendingTntChanges.remove(event.getBlock());
-        }
-        if (submission == null || event.isCancelled()) {
-            return;
-        }
-        this.api.submit(submission);
+        PaperExplosionTntCorrelation.finalizeModern(this.api, event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    @SuppressWarnings({"deprecation", "removal"})
+    public void captureTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
+        PaperExplosionTntCorrelation.captureLegacy(this.api, event);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     @SuppressWarnings({"deprecation", "removal"})
     public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (
-            event.getReason()
-                != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION
-        ) {
-            return;
-        }
-        EventSubmission submission;
-        synchronized (this.inFlight) {
-            submission = this.pendingDragonChanges.remove(event.getBlock());
-        }
-        if (submission == null || event.isCancelled()) {
-            return;
-        }
-        this.api.submit(submission);
+        PaperExplosionTntCorrelation.finalizeLegacy(this.api, event);
     }
 
     @Override
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
-            this.pendingTntChanges.clear();
-            this.pendingDragonChanges.clear();
         }
-        PaperTntPrimeSuppression.clear(this.api);
+        PaperExplosionTntCorrelation.clear(this.api);
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size()
-                + this.pendingTntChanges.size()
-                + this.pendingDragonChanges.size();
+            return this.inFlight.size() + PaperExplosionTntCorrelation.pendingCount(this.api);
         }
     }
 
@@ -208,7 +187,7 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
 
         var result = capture.result();
         if (result == ExplosionResult.TRIGGER_BLOCK) {
-            suppressTriggerTntPrimes(capture, finalBlocks);
+            beginTriggerCorrelation(capture, finalBlocks);
             return;
         }
         if (
@@ -219,53 +198,66 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
             return;
         }
 
+        var rawCounts = rawCounts(capture, finalBlocks);
         var uniqueBlocks = uniqueFinalBlocks(capture, finalBlocks);
+
+        if (capture.enderDragon() && yield != 0.0F) {
+            var candidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
+            var tntExplodes = Boolean.TRUE.equals(
+                capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
+            );
+            for (var entry : uniqueBlocks.entrySet()) {
+                var key = entry.getKey();
+                var liveBlock = normalizedBlock(capture, entry.getValue());
+                if (liveBlock.getType().isAir()) {
+                    continue;
+                }
+                var submission = submission(capture, key, preState(capture, key, liveBlock));
+                candidates.add(PaperExplosionTntCorrelation.candidate(
+                    capture.worldKey(),
+                    key.position(),
+                    rawCounts.getOrDefault(key, 1),
+                    submission,
+                    liveBlock.getType() == Material.TNT && tntExplodes
+                ));
+            }
+            PaperExplosionTntCorrelation.beginLegacyDragon(this.api, candidates);
+            return;
+        }
+
+        var modernCandidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
+        var tntExplodes = Boolean.TRUE.equals(
+            capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
+        );
         for (var entry : uniqueBlocks.entrySet()) {
             var key = entry.getKey();
             var liveBlock = normalizedBlock(capture, entry.getValue());
             if (liveBlock.getType().isAir()) {
                 continue;
             }
-
-            var preState = capture.preStates().get(key);
-            if (preState == null) {
-                // A plugin may add a block after LOWEST. Snapshot the block in the explosion
-                // world at MONITOR rather than retaining the mutable list entry as payload data.
-                preState = liveBlock.getBlockData().clone();
-            }
-            var submission = submission(capture, key, preState);
+            var submission = submission(capture, key, preState(capture, key, liveBlock));
 
             if (capture.enderDragon()) {
-                if (yield == 0.0F) {
-                    this.api.submit(submission);
-                } else {
-                    synchronized (this.inFlight) {
-                        this.pendingDragonChanges.add(
-                            capture.worldKey(),
-                            key.position(),
-                            submission
-                        );
-                    }
-                }
+                this.api.submit(submission);
                 continue;
             }
 
-            if (
-                liveBlock.getType() == Material.TNT
-                    && Boolean.TRUE.equals(
-                        capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
-                    )
-            ) {
-                synchronized (this.inFlight) {
-                    this.pendingTntChanges.add(capture.worldKey(), key.position(), submission);
-                }
+            if (liveBlock.getType() == Material.TNT && tntExplodes) {
+                modernCandidates.add(PaperExplosionTntCorrelation.candidate(
+                    capture.worldKey(),
+                    key.position(),
+                    rawCounts.getOrDefault(key, 1),
+                    submission,
+                    true
+                ));
                 continue;
             }
             this.api.submit(submission);
         }
+        PaperExplosionTntCorrelation.beginModernDestroy(this.api, modernCandidates);
     }
 
-    private void suppressTriggerTntPrimes(Capture capture, List<Block> finalBlocks) {
+    private void beginTriggerCorrelation(Capture capture, List<Block> finalBlocks) {
         if (
             !Boolean.TRUE.equals(
                 capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
@@ -273,20 +265,27 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
         ) {
             return;
         }
-
-        // Paper processes raw target entries one by one. TRIGGER_BLOCK keeps TNT in place, so
-        // duplicate coordinates can produce duplicate modern prime events and each one must be
-        // suppressed even though #115 itself deduplicates changed-block submissions.
-        for (var listedBlock : List.copyOf(finalBlocks)) {
-            var liveBlock = normalizedBlock(capture, listedBlock);
+        var rawCounts = rawCounts(capture, finalBlocks);
+        var candidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
+        for (var entry : uniqueFinalBlocks(capture, finalBlocks).entrySet()) {
+            var key = entry.getKey();
+            var liveBlock = normalizedBlock(capture, entry.getValue());
             if (liveBlock.getType() == Material.TNT) {
-                PaperTntPrimeSuppression.suppressExplosion(
-                    this.api,
+                candidates.add(PaperExplosionTntCorrelation.candidate(
                     capture.worldKey(),
-                    position(listedBlock)
-                );
+                    key.position(),
+                    rawCounts.getOrDefault(key, 1),
+                    null,
+                    false
+                ));
             }
         }
+        PaperExplosionTntCorrelation.beginModernTrigger(this.api, candidates);
+    }
+
+    private static BlockData preState(Capture capture, BlockKey key, Block liveBlock) {
+        var preState = capture.preStates().get(key);
+        return preState == null ? liveBlock.getBlockData().clone() : preState;
     }
 
     private EventSubmission submission(Capture capture, BlockKey key, BlockData preState) {
@@ -323,6 +322,15 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
         synchronized (this.inFlight) {
             return this.inFlight.remove(event);
         }
+    }
+
+    private static Map<BlockKey, Integer> rawCounts(Capture capture, List<Block> blocks) {
+        var result = new LinkedHashMap<BlockKey, Integer>();
+        for (var block : List.copyOf(blocks)) {
+            var key = new BlockKey(capture.worldKey(), position(block));
+            result.merge(key, 1, Integer::sum);
+        }
+        return result;
     }
 
     private static Map<BlockKey, BlockData> snapshotPreStates(
@@ -379,7 +387,10 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     private static void registerEventType(KansokushaApi api) {
         Objects.requireNonNull(api, "api");
         var outcome = api.registerEventType(DEFINITION);
-        if (outcome != RegistrationOutcome.REGISTERED && outcome != RegistrationOutcome.ALREADY_REGISTERED) {
+        if (
+            outcome != RegistrationOutcome.REGISTERED
+                && outcome != RegistrationOutcome.ALREADY_REGISTERED
+        ) {
             throw new IllegalStateException(
                 "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
             );
