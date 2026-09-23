@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
+import net.minecraft.tags.FluidTags;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
@@ -9,18 +10,18 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.IdentityHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -62,8 +63,8 @@ public final class PaperFluidChangeListener implements PaperInFlightListener {
     public void capture(BlockFromToEvent event) {
         Objects.requireNonNull(event, "event");
         var source = event.getBlock();
-        var material = source.getType();
-        if (material != Material.WATER && material != Material.LAVA) {
+        var fluidKind = fluidKind(source);
+        if (fluidKind == null) {
             return;
         }
 
@@ -76,7 +77,7 @@ public final class PaperFluidChangeListener implements PaperInFlightListener {
             PaperKansokusha.key(destination.getWorld().getKey()),
             destinationPosition,
             PaperBlockEventPayloadCodec.encodeFluidChange(
-                material.name().toLowerCase(Locale.ROOT),
+                fluidKind,
                 sourcePosition,
                 destinationPosition
             )
@@ -119,6 +120,21 @@ public final class PaperFluidChangeListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             return this.inFlight.size();
         }
+    }
+
+    private static @Nullable String fluidKind(Block block) {
+        if (!(block instanceof CraftBlock craftBlock)) {
+            return null;
+        }
+
+        var fluidState = craftBlock.getBlockState().getFluidState();
+        if (fluidState.is(FluidTags.WATER)) {
+            return "water";
+        }
+        if (fluidState.is(FluidTags.LAVA)) {
+            return "lava";
+        }
+        return null;
     }
 
     private static BlockPosition position(Block block) {

@@ -2,8 +2,11 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,7 +35,7 @@ class PaperFluidChangeListenerTest {
             Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
         var world = PaperBlockEventTestSupport.world();
-        var source = PaperBlockEventTestSupport.block(
+        var source = craftBlock(
             world, 10, 62, 10, Blocks.WATER.defaultBlockState(), Material.WATER
         );
         var destination = PaperBlockEventTestSupport.block(
@@ -43,7 +46,7 @@ class PaperFluidChangeListenerTest {
         Mockito.when(event.getToBlock()).thenReturn(destination);
 
         listener.capture(event);
-        Mockito.when(source.getType()).thenReturn(Material.LAVA);
+        Mockito.when(source.getBlockState()).thenReturn(Blocks.LAVA.defaultBlockState());
         Mockito.when(source.getX()).thenReturn(1000);
         Mockito.when(destination.getX()).thenReturn(2000);
         listener.finalizeEvent(event);
@@ -70,11 +73,44 @@ class PaperFluidChangeListenerTest {
     }
 
     @Test
+    void testWaterloggedBlockCanBeFluidSource() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperFluidChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var waterloggedSlab = Blocks.OAK_SLAB.defaultBlockState().setValue(
+            BlockStateProperties.WATERLOGGED,
+            true
+        );
+        var source = craftBlock(
+            world, 20, 63, 20, waterloggedSlab, Material.OAK_SLAB
+        );
+        var destination = PaperBlockEventTestSupport.block(
+            world, 21, 63, 20, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var event = Mockito.mock(BlockFromToEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getToBlock()).thenReturn(destination);
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        var submission = api.submissions.remove();
+        var payload = PaperBlockStatePayloadCodec.decode(submission.payload());
+        Assertions.assertEquals("water", payload.getString("fluid").orElseThrow());
+        Assertions.assertEquals(new BlockPosition(21, 63, 20), submission.position());
+        Mockito.verify(source, Mockito.never()).getBlockData();
+    }
+
+    @Test
     void testLavaArrivalIsCaptured() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperFluidChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
-        var source = PaperBlockEventTestSupport.block(
+        var source = craftBlock(
             world, 1, 2, 3, Blocks.LAVA.defaultBlockState(), Material.LAVA
         );
         var destination = PaperBlockEventTestSupport.block(
@@ -96,7 +132,7 @@ class PaperFluidChangeListenerTest {
         var listener = PaperFluidChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
 
-        var cancelledSource = PaperBlockEventTestSupport.block(
+        var cancelledSource = craftBlock(
             world, 1, 2, 3, Blocks.WATER.defaultBlockState(), Material.WATER
         );
         var cancelledDestination = PaperBlockEventTestSupport.block(
@@ -109,7 +145,7 @@ class PaperFluidChangeListenerTest {
         listener.capture(cancelled);
         listener.finalizeEvent(cancelled);
 
-        var dragonEggBlock = PaperBlockEventTestSupport.block(
+        var dragonEggBlock = craftBlock(
             world, 4, 5, 6, Blocks.DRAGON_EGG.defaultBlockState(), Material.DRAGON_EGG
         );
         var dragonEgg = Mockito.mock(BlockFromToEvent.class);
@@ -120,5 +156,23 @@ class PaperFluidChangeListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(dragonEgg, Mockito.never()).getToBlock();
+    }
+
+    private static CraftBlock craftBlock(
+        World world,
+        int x,
+        int y,
+        int z,
+        net.minecraft.world.level.block.state.BlockState state,
+        Material material
+    ) {
+        var block = Mockito.mock(CraftBlock.class);
+        Mockito.when(block.getWorld()).thenReturn(world);
+        Mockito.when(block.getX()).thenReturn(x);
+        Mockito.when(block.getY()).thenReturn(y);
+        Mockito.when(block.getZ()).thenReturn(z);
+        Mockito.when(block.getBlockState()).thenReturn(state);
+        Mockito.when(block.getType()).thenReturn(material);
+        return block;
     }
 }

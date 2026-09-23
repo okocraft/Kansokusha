@@ -14,8 +14,10 @@ import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.FallingBlock;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -113,6 +115,16 @@ class PaperNaturalBlockChangeListenerTest {
             ),
             PaperBlockStatePayloadCodec.decode(submission.payload())
         );
+    }
+
+    @Test
+    void testAcceptedScaffoldingFallSubmitsFadeAfterEntityChange() throws Exception {
+        assertScaffoldingFallFinalization(false);
+    }
+
+    @Test
+    void testCancelledScaffoldingFallDropsFade() throws Exception {
+        assertScaffoldingFallFinalization(true);
     }
 
     @Test
@@ -458,6 +470,59 @@ class PaperNaturalBlockChangeListenerTest {
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static void assertScaffoldingFallFinalization(boolean cancelled) throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var scaffoldingState = Blocks.SCAFFOLDING.defaultBlockState().setValue(
+            net.minecraft.world.level.block.ScaffoldingBlock.DISTANCE,
+            7
+        );
+        var block = PaperBlockEventTestSupport.block(
+            world, 35, 72, 35, scaffoldingState, Material.SCAFFOLDING
+        );
+        var target = PaperBlockEventTestSupport.state(
+            world, block, 35, 72, 35, Blocks.AIR.defaultBlockState()
+        );
+        var fade = Mockito.mock(BlockFadeEvent.class);
+        Mockito.when(fade.getBlock()).thenReturn(block);
+        Mockito.when(fade.getNewState()).thenReturn(target);
+
+        listener.capture(fade);
+        listener.finalizeEvent(fade);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var fallingBlock = Mockito.mock(FallingBlock.class);
+        Mockito.when(fallingBlock.getBlockData()).thenReturn(scaffoldingState.asBlockData());
+        var entityChange = new EntityChangeBlockEvent(
+            fallingBlock,
+            block,
+            Blocks.AIR.defaultBlockState().asBlockData()
+        );
+        entityChange.setCancelled(cancelled);
+        listener.finalizeScaffoldingFall(entityChange);
+
+        Assertions.assertEquals(0, listener.inFlightCount());
+        if (cancelled) {
+            Assertions.assertTrue(api.submissions.isEmpty());
+            return;
+        }
+
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            naturalPayload(
+                scaffoldingState,
+                Blocks.AIR.defaultBlockState(),
+                "block_fade",
+                null,
+                null
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
     }
 
     private static void assertDispenserBonemealIsReservedForBlockFertilize(boolean cancelled) {

@@ -15,6 +15,8 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.type.Scaffolding;
+import org.bukkit.entity.FallingBlock;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -27,6 +29,7 @@ import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
@@ -35,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -58,6 +62,8 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private final BiConsumer<Location, Runnable> nextTickExecutor;
     private final Map<Event, Capture> inFlight = new IdentityHashMap<>();
     private final List<DeferredChange> deferredChanges = new ArrayList<>();
+    private final Map<ScaffoldingFadeKey, ArrayDeque<PendingScaffoldingFade>> pendingScaffoldingFades =
+        new HashMap<>();
 
     private PaperNaturalBlockChangeListener(
         KansokushaApi api,
@@ -108,30 +114,97 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     public void capture(BlockFadeEvent event) {
         Objects.requireNonNull(event, "event");
         var block = event.getBlock();
+        var preState = block.getBlockData().clone();
+        var postState = event.getNewState().getBlockData().clone();
         var snapshot = new Snapshot(
             this.clock.instant(),
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
             PaperBlockEventPayloadCodec.encodeNaturalChange(
-                block.getBlockData().clone(),
-                event.getNewState().getBlockData().clone(),
+                preState,
+                postState,
                 "block_fade",
                 null,
                 null
             )
         );
-        put(event, new SnapshotCapture(List.of(snapshot)));
+        put(
+            event,
+            new FadeCapture(
+                snapshot,
+                awaitsScaffoldingEntityChange(preState),
+                postState
+            )
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockFadeEvent event) {
         Objects.requireNonNull(event, "event");
-        var capture = remove(event, SnapshotCapture.class);
+        var capture = remove(event, FadeCapture.class);
         if (capture == null || event.isCancelled()) {
             return;
         }
-        submitSnapshots(capture.snapshots());
+
+        if (capture.awaitsScaffoldingEntityChange()) {
+            var snapshot = capture.snapshot();
+            var key = new ScaffoldingFadeKey(
+                Thread.currentThread(),
+                snapshot.worldKey(),
+                snapshot.position()
+            );
+            synchronized (this.inFlight) {
+                this.pendingScaffoldingFades
+                    .computeIfAbsent(key, ignored -> new ArrayDeque<>())
+                    .addLast(new PendingScaffoldingFade(snapshot, capture.postState()));
+            }
+            return;
+        }
+
+        submitSnapshots(List.of(capture.snapshot()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void finalizeScaffoldingFall(EntityChangeBlockEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (!(event.getEntity() instanceof FallingBlock fallingBlock)) {
+            return;
+        }
+        if (fallingBlock.getBlockData().getMaterial() != Material.SCAFFOLDING) {
+            return;
+        }
+
+        var block = event.getBlock();
+        var key = new ScaffoldingFadeKey(
+            Thread.currentThread(),
+            PaperKansokusha.key(block.getWorld().getKey()),
+            position(block)
+        );
+        var eventTarget = event.getBlockData();
+
+        PendingScaffoldingFade pending = null;
+        synchronized (this.inFlight) {
+            var queue = this.pendingScaffoldingFades.get(key);
+            if (queue != null) {
+                for (var iterator = queue.descendingIterator(); iterator.hasNext();) {
+                    var candidate = iterator.next();
+                    if (sameBlockData(candidate.postState(), eventTarget)) {
+                        pending = candidate;
+                        iterator.remove();
+                        break;
+                    }
+                }
+                if (queue.isEmpty()) {
+                    this.pendingScaffoldingFades.remove(key);
+                }
+            }
+        }
+
+        if (pending == null || event.isCancelled()) {
+            return;
+        }
+        submitSnapshots(List.of(pending.snapshot()));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -351,12 +424,17 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         synchronized (this.inFlight) {
             this.inFlight.clear();
             this.deferredChanges.clear();
+            this.pendingScaffoldingFades.clear();
         }
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size() + this.deferredChanges.size();
+            var scaffoldingFadeCount = 0;
+            for (var queue : this.pendingScaffoldingFades.values()) {
+                scaffoldingFadeCount += queue.size();
+            }
+            return this.inFlight.size() + this.deferredChanges.size() + scaffoldingFadeCount;
         }
     }
 
@@ -504,6 +582,11 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         );
     }
 
+    private static boolean awaitsScaffoldingEntityChange(BlockData preState) {
+        return preState instanceof Scaffolding scaffolding
+            && scaffolding.getDistance() == scaffolding.getMaximumDistance();
+    }
+
     private static boolean sameBlockData(BlockData first, BlockData second) {
         return first.getAsString().equals(second.getAsString());
     }
@@ -536,6 +619,13 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     ) implements Capture {
     }
 
+    private record FadeCapture(
+        Snapshot snapshot,
+        boolean awaitsScaffoldingEntityChange,
+        BlockData postState
+    ) implements Capture {
+    }
+
     private record SnapshotCapture(
         List<Snapshot> snapshots
     ) implements Capture {
@@ -552,6 +642,19 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private record BlockKey(
         Key worldKey,
         BlockPosition position
+    ) {
+    }
+
+    private record ScaffoldingFadeKey(
+        Thread ownerThread,
+        Key worldKey,
+        BlockPosition position
+    ) {
+    }
+
+    private record PendingScaffoldingFade(
+        Snapshot snapshot,
+        BlockData postState
     ) {
     }
 
