@@ -11,6 +11,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.PistonMoveReaction;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -105,6 +106,10 @@ public final class PaperPistonMoveListener implements PaperInFlightListener {
         var snapshots = new ArrayList<Snapshot>(movedBlocks.size());
 
         for (var block : movedBlocks) {
+            if (block.getPistonMoveReaction() == PistonMoveReaction.BREAK) {
+                continue;
+            }
+
             var from = position(block);
             var to = new BlockPosition(
                 from.x() + direction.getModX(),
