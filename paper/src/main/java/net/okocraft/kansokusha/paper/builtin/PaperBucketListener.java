@@ -114,6 +114,11 @@ public final class PaperBucketListener implements PaperInFlightListener {
             clickedBlock.getY(),
             clickedBlock.getZ(),
             PaperAdditionalBuiltInPayloadCodec.snapshotBlockState(changedBlock.getBlockData()),
+            PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
+                operation,
+                event.getBucket(),
+                changedBlock.getBlockData()
+            ),
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
 
@@ -142,6 +147,7 @@ public final class PaperBucketListener implements PaperInFlightListener {
             snapshot.clickedY(),
             snapshot.clickedZ(),
             snapshot.preState(),
+            snapshot.expectedPostState(),
             snapshot.initialResultItem(),
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
@@ -187,6 +193,7 @@ public final class PaperBucketListener implements PaperInFlightListener {
         int clickedY,
         int clickedZ,
         EventPayload preState,
+        EventPayload expectedPostState,
         EventPayload initialResultItem
     ) {
     }
