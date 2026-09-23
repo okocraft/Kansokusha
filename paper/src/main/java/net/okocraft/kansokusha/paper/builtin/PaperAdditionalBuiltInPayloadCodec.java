@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.block.sign.Side;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -64,6 +65,35 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         return List.copyOf(snapshot);
     }
 
+    static EventPayload snapshotSingleItem(@Nullable ItemStack itemStack) {
+        if (itemStack == null || itemStack.isEmpty()) {
+            return snapshotItem(null);
+        }
+        var single = itemStack.clone();
+        single.setAmount(1);
+        return snapshotItem(single);
+    }
+
+    static EventPayload expectedBucketPostState(
+        String operation,
+        Material bucket,
+        BlockData preState
+    ) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(bucket, "bucket");
+        Objects.requireNonNull(preState, "preState");
+
+        BlockData expected;
+        if ("fill".equals(operation)) {
+            expected = expectedAfterFill(preState);
+        } else if ("empty".equals(operation)) {
+            expected = expectedAfterEmpty(bucket, preState);
+        } else {
+            throw new IllegalArgumentException("Unknown bucket operation: " + operation);
+        }
+        return snapshotBlockState(expected);
+    }
+
     static EventPayload encodeSignChange(
         Side side,
         List<Optional<String>> before,
@@ -85,6 +115,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         int clickedY,
         int clickedZ,
         EventPayload preState,
+        EventPayload expectedPostState,
         EventPayload initialResultItem,
         EventPayload finalResultItem
     ) {
@@ -97,6 +128,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         payload.putInt("clicked_y", clickedY);
         payload.putInt("clicked_z", clickedZ);
         putPayload(payload, "pre_state", preState);
+        putPayload(payload, "expected_post_state", expectedPostState);
         putPayload(payload, "initial_result_item", initialResultItem);
         putPayload(payload, "final_result_item", finalResultItem);
         return PaperPayloadNbtCodec.encode(payload);
@@ -136,7 +168,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     }
 
     static EventPayload encodeFlowerPot(boolean placing, ItemStack item) {
-        var itemSnapshot = snapshotItem(item);
+        var itemSnapshot = snapshotSingleItem(item);
         var empty = snapshotItem(null);
         var payload = new CompoundTag();
         payload.putString("action", placing ? "insert" : "remove");
@@ -171,6 +203,63 @@ public final class PaperAdditionalBuiltInPayloadCodec {
             );
         }
         return List.copyOf(decoded);
+    }
+
+    private static BlockData expectedAfterFill(BlockData preState) {
+        var material = preState.getMaterial();
+        if (
+            material == Material.WATER_CAULDRON
+                || material == Material.LAVA_CAULDRON
+                || material == Material.POWDER_SNOW_CAULDRON
+        ) {
+            return Material.CAULDRON.createBlockData();
+        }
+        if (preState instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
+            var expected = preState.clone();
+            ((Waterlogged) expected).setWaterlogged(false);
+            return expected;
+        }
+        return Material.AIR.createBlockData();
+    }
+
+    private static BlockData expectedAfterEmpty(Material bucket, BlockData preState) {
+        if (preState.getMaterial() == Material.CAULDRON) {
+            return switch (bucket) {
+                case LAVA_BUCKET -> Material.LAVA_CAULDRON.createBlockData();
+                case POWDER_SNOW_BUCKET -> fullPowderSnowCauldron();
+                default -> fullWaterCauldron();
+            };
+        }
+        if (isWaterBucket(bucket) && preState instanceof Waterlogged waterlogged) {
+            var expected = preState.clone();
+            ((Waterlogged) expected).setWaterlogged(true);
+            return expected;
+        }
+        return switch (bucket) {
+            case LAVA_BUCKET -> Material.LAVA.createBlockData();
+            case POWDER_SNOW_BUCKET -> Material.POWDER_SNOW.createBlockData();
+            default -> Material.WATER.createBlockData();
+        };
+    }
+
+    private static BlockData fullWaterCauldron() {
+        var data = Material.WATER_CAULDRON.createBlockData();
+        if (data instanceof org.bukkit.block.data.Levelled levelled) {
+            levelled.setLevel(levelled.getMaximumLevel());
+        }
+        return data;
+    }
+
+    private static BlockData fullPowderSnowCauldron() {
+        var data = Material.POWDER_SNOW_CAULDRON.createBlockData();
+        if (data instanceof org.bukkit.block.data.Levelled levelled) {
+            levelled.setLevel(levelled.getMaximumLevel());
+        }
+        return data;
+    }
+
+    private static boolean isWaterBucket(Material bucket) {
+        return bucket != Material.LAVA_BUCKET && bucket != Material.POWDER_SNOW_BUCKET;
     }
 
     private static EventPayload encodeBlockHarvest(
