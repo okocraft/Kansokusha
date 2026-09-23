@@ -66,6 +66,9 @@ public final class PaperBucketListener implements PaperInFlightListener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void captureFill(PlayerBucketFillEvent event) {
+        if (event.getBlockFace() == BlockFace.SELF) {
+            return;
+        }
         this.capture(event, FILL_EVENT_TYPE, "fill");
     }
 
