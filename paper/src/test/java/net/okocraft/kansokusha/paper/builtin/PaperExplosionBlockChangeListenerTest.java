@@ -8,6 +8,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Ghast;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.block.BlockExplodeEvent;
@@ -154,6 +155,49 @@ class PaperExplosionBlockChangeListenerTest {
             payload.getString("owner_uuid").orElseThrow()
         );
         Assertions.assertEquals("entity", payload.getString("source_kind").orElseThrow());
+    }
+
+    @Test
+    void testNonPlayerProjectileOwnerDoesNotBecomeCommonPlayerSubject() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var destroyed = PaperBlockEventTestSupport.block(
+            world, 30, 70, 30, Blocks.NETHERRACK.defaultBlockState(), Material.NETHERRACK
+        );
+        var ghastId = UUID.fromString("123e4567-e89b-12d3-a456-426614174013");
+        var projectileId = UUID.fromString("123e4567-e89b-12d3-a456-426614174014");
+        var ghast = Mockito.mock(Ghast.class);
+        Mockito.when(ghast.getUniqueId()).thenReturn(ghastId);
+        Mockito.when(ghast.getType()).thenReturn(EntityType.GHAST);
+        var projectile = Mockito.mock(Projectile.class);
+        Mockito.when(projectile.getUniqueId()).thenReturn(projectileId);
+        Mockito.when(projectile.getType()).thenReturn(EntityType.FIREBALL);
+        Mockito.when(projectile.getShooter()).thenReturn(ghast);
+        Mockito.when(projectile.getOwnerUniqueId()).thenReturn(ghastId);
+        var event = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(event.getEntity()).thenReturn(projectile);
+        Mockito.when(event.getLocation()).thenReturn(new Location(world, 30.5, 70.5, 30.5));
+        Mockito.when(event.blockList()).thenReturn(new ArrayList<>(List.of(destroyed)));
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        var submission = api.submissions.remove();
+        Assertions.assertNull(submission.subject());
+        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            ghastId.toString(),
+            payload.getString("shooter_entity_uuid").orElseThrow()
+        );
+        Assertions.assertEquals(
+            ghastId.toString(),
+            payload.getString("owner_uuid").orElseThrow()
+        );
     }
 
     @Test
