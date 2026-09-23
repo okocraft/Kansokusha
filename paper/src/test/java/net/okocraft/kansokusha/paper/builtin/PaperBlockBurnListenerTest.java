@@ -54,9 +54,18 @@ class PaperBlockBurnListenerTest {
         Assertions.assertNull(submission.subject());
 
         var expected = new CompoundTag();
-        expected.put("pre_state", PaperBlockStatePayloadCodec.blockState(Blocks.OAK_PLANKS.defaultBlockState().asBlockData()));
-        expected.put("source", PaperBlockEventTestSupport.position(new BlockPosition(19, 65, 30)));
-        expected.put("source_state", PaperBlockStatePayloadCodec.blockState(Blocks.FIRE.defaultBlockState().asBlockData()));
+        expected.put(
+            "pre_state",
+            PaperBlockStatePayloadCodec.blockState(Blocks.OAK_PLANKS.defaultBlockState().asBlockData())
+        );
+        expected.put(
+            "source",
+            PaperBlockEventTestSupport.position(new BlockPosition(19, 65, 30))
+        );
+        expected.put(
+            "source_state",
+            PaperBlockStatePayloadCodec.blockState(Blocks.FIRE.defaultBlockState().asBlockData())
+        );
         Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
         Mockito.verify(burned, Mockito.times(1)).getBlockData();
         Mockito.verify(source, Mockito.times(1)).getBlockData();
@@ -66,10 +75,12 @@ class PaperBlockBurnListenerTest {
     void testCancelledBurnDropsSnapshot() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var burned = PaperBlockEventTestSupport.block(
+            world, 1, 2, 3, Blocks.OAK_LOG.defaultBlockState(), Material.OAK_LOG
+        );
         var event = Mockito.mock(BlockBurnEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(PaperBlockEventTestSupport.block(
-            PaperBlockEventTestSupport.world(), 1, 2, 3, Blocks.OAK_LOG.defaultBlockState(), Material.OAK_LOG
-        ));
+        Mockito.when(event.getBlock()).thenReturn(burned);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
         listener.capture(event);

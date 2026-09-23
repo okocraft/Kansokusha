@@ -20,6 +20,7 @@ import org.mockito.Mockito;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -39,7 +40,7 @@ class PaperNaturalBlockChangeListenerTest {
         var listener = PaperNaturalBlockChangeListener.register(
             api,
             PaperBlockEventTestSupport.SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, java.time.ZoneOffset.UTC)
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
         var world = PaperBlockEventTestSupport.world();
         var changed = PaperBlockEventTestSupport.block(
@@ -80,6 +81,46 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testInheritedGrowHandlersDoNotReplaceSpreadSemantics() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var changed = PaperBlockEventTestSupport.block(
+            world, 11, 64, 10, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var source = PaperBlockEventTestSupport.block(
+            world, 10, 64, 10, Blocks.FIRE.defaultBlockState(), Material.FIRE
+        );
+        var post = PaperBlockEventTestSupport.state(
+            world, changed, 11, 64, 10, Blocks.FIRE.defaultBlockState()
+        );
+        var event = Mockito.mock(BlockSpreadEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(changed);
+        Mockito.when(event.getSource()).thenReturn(source);
+        Mockito.when(event.getNewState()).thenReturn(post);
+
+        listener.capture((BlockGrowEvent) event);
+        listener.capture((BlockFormEvent) event);
+        listener.capture(event);
+        listener.finalizeEvent((BlockGrowEvent) event);
+        listener.finalizeEvent((BlockFormEvent) event);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            naturalPayload(
+                Blocks.AIR.defaultBlockState(),
+                Blocks.FIRE.defaultBlockState(),
+                "block_spread",
+                "fire",
+                new BlockPosition(10, 64, 10)
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+    }
+
+    @Test
     void testSingleBlockSourcesUseCommonSchema() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
@@ -88,44 +129,48 @@ class PaperNaturalBlockChangeListenerTest {
         var fadeBlock = PaperBlockEventTestSupport.block(
             world, 1, 70, 1, Blocks.ICE.defaultBlockState(), Material.ICE
         );
+        var fadeState = PaperBlockEventTestSupport.state(
+            world, fadeBlock, 1, 70, 1, Blocks.WATER.defaultBlockState()
+        );
         var fade = Mockito.mock(BlockFadeEvent.class);
         Mockito.when(fade.getBlock()).thenReturn(fadeBlock);
-        Mockito.when(fade.getNewState()).thenReturn(PaperBlockEventTestSupport.state(
-            world, fadeBlock, 1, 70, 1, Blocks.WATER.defaultBlockState()
-        ));
+        Mockito.when(fade.getNewState()).thenReturn(fadeState);
         listener.capture(fade);
         listener.finalizeEvent(fade);
 
         var formBlock = PaperBlockEventTestSupport.block(
             world, 2, 70, 2, Blocks.WATER.defaultBlockState(), Material.WATER
         );
+        var formState = PaperBlockEventTestSupport.state(
+            world, formBlock, 2, 70, 2, Blocks.ICE.defaultBlockState()
+        );
         var form = Mockito.mock(BlockFormEvent.class);
         Mockito.when(form.getBlock()).thenReturn(formBlock);
-        Mockito.when(form.getNewState()).thenReturn(PaperBlockEventTestSupport.state(
-            world, formBlock, 2, 70, 2, Blocks.ICE.defaultBlockState()
-        ));
+        Mockito.when(form.getNewState()).thenReturn(formState);
         listener.capture(form);
         listener.finalizeEvent(form);
 
         var growBlock = PaperBlockEventTestSupport.block(
             world, 3, 70, 3, Blocks.WHEAT.defaultBlockState(), Material.WHEAT
         );
+        var growState = PaperBlockEventTestSupport.state(
+            world, growBlock, 3, 70, 3, Blocks.WHEAT.defaultBlockState()
+        );
         var grow = Mockito.mock(BlockGrowEvent.class);
         Mockito.when(grow.getBlock()).thenReturn(growBlock);
-        Mockito.when(grow.getNewState()).thenReturn(PaperBlockEventTestSupport.state(
-            world, growBlock, 3, 70, 3, Blocks.WHEAT.defaultBlockState()
-        ));
+        Mockito.when(grow.getNewState()).thenReturn(growState);
         listener.capture(grow);
         listener.finalizeEvent(grow);
 
         var moistureBlock = PaperBlockEventTestSupport.block(
             world, 4, 70, 4, Blocks.FARMLAND.defaultBlockState(), Material.FARMLAND
         );
+        var moistureState = PaperBlockEventTestSupport.state(
+            world, moistureBlock, 4, 70, 4, Blocks.FARMLAND.defaultBlockState()
+        );
         var moisture = Mockito.mock(MoistureChangeEvent.class);
         Mockito.when(moisture.getBlock()).thenReturn(moistureBlock);
-        Mockito.when(moisture.getNewState()).thenReturn(PaperBlockEventTestSupport.state(
-            world, moistureBlock, 4, 70, 4, Blocks.FARMLAND.defaultBlockState()
-        ));
+        Mockito.when(moisture.getNewState()).thenReturn(moistureState);
         listener.capture(moisture);
         listener.finalizeEvent(moisture);
 
@@ -139,23 +184,53 @@ class PaperNaturalBlockChangeListenerTest {
 
         var byX = byX(api.submissions);
         Assertions.assertEquals(
-            naturalPayload(Blocks.ICE.defaultBlockState(), Blocks.WATER.defaultBlockState(), "block_fade", null, null),
+            naturalPayload(
+                Blocks.ICE.defaultBlockState(),
+                Blocks.WATER.defaultBlockState(),
+                "block_fade",
+                null,
+                null
+            ),
             PaperBlockStatePayloadCodec.decode(byX.get(1).payload())
         );
         Assertions.assertEquals(
-            naturalPayload(Blocks.WATER.defaultBlockState(), Blocks.ICE.defaultBlockState(), "block_form", null, null),
+            naturalPayload(
+                Blocks.WATER.defaultBlockState(),
+                Blocks.ICE.defaultBlockState(),
+                "block_form",
+                null,
+                null
+            ),
             PaperBlockStatePayloadCodec.decode(byX.get(2).payload())
         );
         Assertions.assertEquals(
-            naturalPayload(Blocks.WHEAT.defaultBlockState(), Blocks.WHEAT.defaultBlockState(), "block_grow", null, null),
+            naturalPayload(
+                Blocks.WHEAT.defaultBlockState(),
+                Blocks.WHEAT.defaultBlockState(),
+                "block_grow",
+                null,
+                null
+            ),
             PaperBlockStatePayloadCodec.decode(byX.get(3).payload())
         );
         Assertions.assertEquals(
-            naturalPayload(Blocks.FARMLAND.defaultBlockState(), Blocks.FARMLAND.defaultBlockState(), "moisture_change", null, null),
+            naturalPayload(
+                Blocks.FARMLAND.defaultBlockState(),
+                Blocks.FARMLAND.defaultBlockState(),
+                "moisture_change",
+                null,
+                null
+            ),
             PaperBlockStatePayloadCodec.decode(byX.get(4).payload())
         );
         Assertions.assertEquals(
-            naturalPayload(Blocks.OAK_LEAVES.defaultBlockState(), Blocks.AIR.defaultBlockState(), "leaves_decay", null, null),
+            naturalPayload(
+                Blocks.OAK_LEAVES.defaultBlockState(),
+                Blocks.AIR.defaultBlockState(),
+                "leaves_decay",
+                null,
+                null
+            ),
             PaperBlockStatePayloadCodec.decode(byX.get(5).payload())
         );
     }
@@ -175,6 +250,7 @@ class PaperNaturalBlockChangeListenerTest {
             clock
         );
         var world = PaperBlockEventTestSupport.world();
+        var blocks = new ArrayList<org.bukkit.block.Block>();
         var states = new ArrayList<org.bukkit.block.BlockState>();
         for (int i = 0; i < 3; i++) {
             var block = PaperBlockEventTestSupport.block(
@@ -185,6 +261,7 @@ class PaperNaturalBlockChangeListenerTest {
                 Blocks.AIR.defaultBlockState(),
                 Material.AIR
             );
+            blocks.add(block);
             states.add(PaperBlockEventTestSupport.state(
                 world,
                 block,
@@ -200,9 +277,11 @@ class PaperNaturalBlockChangeListenerTest {
         Mockito.when(event.isFromBonemeal()).thenReturn(false);
 
         listener.capture(event);
-        for (var state : states) {
-            Mockito.when(state.getBlockData()).thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
-            Mockito.when(state.getBlock().getBlockData()).thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
+        for (int i = 0; i < states.size(); i++) {
+            Mockito.when(states.get(i).getBlockData())
+                .thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
+            Mockito.when(blocks.get(i).getBlockData())
+                .thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
         }
         listener.finalizeEvent(event);
 
@@ -248,30 +327,33 @@ class PaperNaturalBlockChangeListenerTest {
         var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
 
-        var spread = Mockito.mock(BlockSpreadEvent.class);
         var changed = PaperBlockEventTestSupport.block(
             world, 1, 64, 1, Blocks.AIR.defaultBlockState(), Material.AIR
         );
-        Mockito.when(spread.getBlock()).thenReturn(changed);
-        Mockito.when(spread.getSource()).thenReturn(PaperBlockEventTestSupport.block(
+        var source = PaperBlockEventTestSupport.block(
             world, 0, 64, 1, Blocks.FIRE.defaultBlockState(), Material.FIRE
-        ));
-        Mockito.when(spread.getNewState()).thenReturn(PaperBlockEventTestSupport.state(
+        );
+        var spreadState = PaperBlockEventTestSupport.state(
             world, changed, 1, 64, 1, Blocks.FIRE.defaultBlockState()
-        ));
+        );
+        var spread = Mockito.mock(BlockSpreadEvent.class);
+        Mockito.when(spread.getBlock()).thenReturn(changed);
+        Mockito.when(spread.getSource()).thenReturn(source);
+        Mockito.when(spread.getNewState()).thenReturn(spreadState);
         Mockito.when(spread.isCancelled()).thenReturn(true);
         listener.capture(spread);
         listener.finalizeEvent(spread);
 
-        var structure = Mockito.mock(StructureGrowEvent.class);
         var structureBlock = PaperBlockEventTestSupport.block(
             world, 2, 64, 2, Blocks.AIR.defaultBlockState(), Material.AIR
         );
+        var structureState = PaperBlockEventTestSupport.state(
+            world, structureBlock, 2, 64, 2, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var structure = Mockito.mock(StructureGrowEvent.class);
         Mockito.when(structure.isFromBonemeal()).thenReturn(false);
         Mockito.when(structure.getSpecies()).thenReturn(TreeType.BIRCH);
-        Mockito.when(structure.getBlocks()).thenReturn(List.of(PaperBlockEventTestSupport.state(
-            world, structureBlock, 2, 64, 2, Blocks.OAK_LOG.defaultBlockState()
-        )));
+        Mockito.when(structure.getBlocks()).thenReturn(List.of(structureState));
         Mockito.when(structure.isCancelled()).thenReturn(true);
         listener.capture(structure);
         listener.finalizeEvent(structure);
@@ -308,5 +390,4 @@ class PaperNaturalBlockChangeListenerTest {
         }
         return result;
     }
-
 }

@@ -56,8 +56,14 @@ class PaperFluidChangeListenerTest {
 
         var expected = new CompoundTag();
         expected.putString("fluid", "water");
-        expected.put("source", PaperBlockEventTestSupport.position(new BlockPosition(10, 62, 10)));
-        expected.put("destination", PaperBlockEventTestSupport.position(new BlockPosition(11, 62, 10)));
+        expected.put(
+            "source",
+            PaperBlockEventTestSupport.position(new BlockPosition(10, 62, 10))
+        );
+        expected.put(
+            "destination",
+            PaperBlockEventTestSupport.position(new BlockPosition(11, 62, 10))
+        );
         Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
         Mockito.verify(source, Mockito.never()).getBlockData();
         Mockito.verify(destination, Mockito.never()).getBlockData();
@@ -68,13 +74,15 @@ class PaperFluidChangeListenerTest {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperFluidChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
-        var event = Mockito.mock(BlockFromToEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(PaperBlockEventTestSupport.block(
+        var source = PaperBlockEventTestSupport.block(
             world, 1, 2, 3, Blocks.LAVA.defaultBlockState(), Material.LAVA
-        ));
-        Mockito.when(event.getToBlock()).thenReturn(PaperBlockEventTestSupport.block(
+        );
+        var destination = PaperBlockEventTestSupport.block(
             world, 2, 2, 3, Blocks.AIR.defaultBlockState(), Material.AIR
-        ));
+        );
+        var event = Mockito.mock(BlockFromToEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getToBlock()).thenReturn(destination);
 
         listener.capture(event);
         listener.finalizeEvent(event);
@@ -88,21 +96,24 @@ class PaperFluidChangeListenerTest {
         var listener = PaperFluidChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
 
-        var cancelled = Mockito.mock(BlockFromToEvent.class);
-        Mockito.when(cancelled.getBlock()).thenReturn(PaperBlockEventTestSupport.block(
+        var cancelledSource = PaperBlockEventTestSupport.block(
             world, 1, 2, 3, Blocks.WATER.defaultBlockState(), Material.WATER
-        ));
-        Mockito.when(cancelled.getToBlock()).thenReturn(PaperBlockEventTestSupport.block(
+        );
+        var cancelledDestination = PaperBlockEventTestSupport.block(
             world, 2, 2, 3, Blocks.AIR.defaultBlockState(), Material.AIR
-        ));
+        );
+        var cancelled = Mockito.mock(BlockFromToEvent.class);
+        Mockito.when(cancelled.getBlock()).thenReturn(cancelledSource);
+        Mockito.when(cancelled.getToBlock()).thenReturn(cancelledDestination);
         Mockito.when(cancelled.isCancelled()).thenReturn(true);
         listener.capture(cancelled);
         listener.finalizeEvent(cancelled);
 
-        var dragonEgg = Mockito.mock(BlockFromToEvent.class);
-        Mockito.when(dragonEgg.getBlock()).thenReturn(PaperBlockEventTestSupport.block(
+        var dragonEggBlock = PaperBlockEventTestSupport.block(
             world, 4, 5, 6, Blocks.DRAGON_EGG.defaultBlockState(), Material.DRAGON_EGG
-        ));
+        );
+        var dragonEgg = Mockito.mock(BlockFromToEvent.class);
+        Mockito.when(dragonEgg.getBlock()).thenReturn(dragonEggBlock);
         listener.capture(dragonEgg);
         listener.finalizeEvent(dragonEgg);
 

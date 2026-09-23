@@ -86,21 +86,33 @@ public final class PaperNaturalBlockChangeListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(BlockFormEvent event) {
+        if (event instanceof BlockSpreadEvent) {
+            return;
+        }
         captureTransition(event, event.getBlock(), event.getNewState(), "block_form", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockFormEvent event) {
+        if (event instanceof BlockSpreadEvent) {
+            return;
+        }
         finalizeEvent((Event) event, event);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(BlockGrowEvent event) {
+        if (event instanceof BlockFormEvent) {
+            return;
+        }
         captureTransition(event, event.getBlock(), event.getNewState(), "block_grow", null, null);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockGrowEvent event) {
+        if (event instanceof BlockFormEvent) {
+            return;
+        }
         finalizeEvent((Event) event, event);
     }
 
