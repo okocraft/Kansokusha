@@ -3,6 +3,8 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LayeredCauldronBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.SubmissionOutcome;
@@ -28,6 +30,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -87,6 +90,13 @@ class PaperBucketListenerTest {
             NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState()),
             PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(emptyPayload, "pre_state")
         );
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(Blocks.WATER.defaultBlockState()),
+            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(
+                emptyPayload,
+                "expected_post_state"
+            )
+        );
         var initialItem = PaperItemStackPayloadCodec.decode(
             PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(
                 emptyPayload,
@@ -107,7 +117,92 @@ class PaperBucketListenerTest {
         var fillPayload = PaperAdditionalBuiltInPayloadCodec.decode(fillSubmission.payload());
         Assertions.assertEquals("fill", string(fillPayload, "operation"));
         Assertions.assertEquals("minecraft:bucket", string(fillPayload, "bucket"));
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState()),
+            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(
+                fillPayload,
+                "expected_post_state"
+            )
+        );
         Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testExpectedPostStateCoversWaterloggedAndCauldronChanges() throws Exception {
+        var api = new RecordingApi();
+        var listener = listener(api);
+
+        var dryStairs = Blocks.OAK_STAIRS.defaultBlockState()
+            .setValue(BlockStateProperties.WATERLOGGED, false);
+        var wetStairs = dryStairs.setValue(BlockStateProperties.WATERLOGGED, true);
+        var waterlog = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            31,
+            dryStairs.asBlockData(),
+            Material.WATER_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
+        var unwaterlog = bucketEvent(
+            PlayerBucketFillEvent.class,
+            32,
+            wetStairs.asBlockData(),
+            Material.BUCKET,
+            ItemStack.of(Material.WATER_BUCKET, 1),
+            false
+        );
+        var lavaCauldron = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            33,
+            Blocks.CAULDRON.defaultBlockState().asBlockData(),
+            Material.LAVA_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
+        var powderSnowCauldron = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            34,
+            Blocks.CAULDRON.defaultBlockState().asBlockData(),
+            Material.POWDER_SNOW_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
+        var fillFromWaterCauldron = bucketEvent(
+            PlayerBucketFillEvent.class,
+            35,
+            Blocks.WATER_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 3)
+                .asBlockData(),
+            Material.BUCKET,
+            ItemStack.of(Material.WATER_BUCKET, 1),
+            false
+        );
+
+        for (var fixture : List.of(
+            waterlog,
+            unwaterlog,
+            lavaCauldron,
+            powderSnowCauldron,
+            fillFromWaterCauldron
+        )) {
+            capture(listener, fixture);
+            finish(listener, fixture);
+        }
+
+        var byX = new HashMap<Integer, EventSubmission>();
+        for (var submission : api.submissions) {
+            byX.put(submission.position().x(), submission);
+        }
+
+        assertExpectedState(byX.get(31), wetStairs);
+        assertExpectedState(byX.get(32), dryStairs);
+        assertExpectedState(byX.get(33), Blocks.LAVA_CAULDRON.defaultBlockState());
+        assertExpectedState(
+            byX.get(34),
+            Blocks.POWDER_SNOW_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 3)
+        );
+        assertExpectedState(byX.get(35), Blocks.CAULDRON.defaultBlockState());
     }
 
     @Test
@@ -313,6 +408,21 @@ class PaperBucketListenerTest {
         } else {
             listener.finalizeFill((PlayerBucketFillEvent) fixture.event());
         }
+    }
+
+    private static void assertExpectedState(
+        EventSubmission submission,
+        net.minecraft.world.level.block.state.BlockState expected
+    ) throws Exception {
+        Assertions.assertNotNull(submission);
+        var payload = PaperAdditionalBuiltInPayloadCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(expected),
+            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(
+                payload,
+                "expected_post_state"
+            )
+        );
     }
 
     private static String string(net.minecraft.nbt.CompoundTag tag, String key) {
