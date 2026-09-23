@@ -11,7 +11,9 @@ plugins {
     alias(libs.plugins.run.server)
 }
 
-val minecraftVersion = libs.versions.paper.get().replaceAfter(".build", "").removeSuffix(".build")
+val paperApiVersion = libs.versions.paper.get()
+val minecraftVersion = paperApiVersion.substringBefore(".build.")
+val paperBuild = paperApiVersion.substringAfter(".build.").substringBefore('-').toInt()
 val externalApiTestDirectory = layout.buildDirectory.dir("paper-external-api-integration")
 val externalApiFixtureJar = project(":kansokusha-paper-test-plugin")
     .tasks.named<Jar>("jar")
@@ -41,6 +43,7 @@ tasks {
 
     runServer {
         minecraftVersion(minecraftVersion)
+        build(paperBuild)
         systemProperty("com.mojang.eula.agree", "true")
         systemProperty("paper.disable-plugin-rewriting", "true")
     }
@@ -51,6 +54,7 @@ tasks {
 
         dependsOn(paperShadowJar, externalApiFixtureJar)
         minecraftVersion(minecraftVersion)
+        build(paperBuild)
         runDirectory(externalApiTestDirectory.get().asFile)
         pluginJars(
             paperShadowJar.flatMap { it.archiveFile },
