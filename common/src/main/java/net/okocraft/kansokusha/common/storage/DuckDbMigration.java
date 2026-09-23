@@ -7,8 +7,18 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public record DuckDbMigration(int version, String name, List<String> statements) {
+
+    private static final Pattern LEADING_COMMENTS = Pattern.compile(
+        "^(?:\\s+|--[^\\n]*(?:\\n|$)|/\\*.*?\\*/)*",
+        Pattern.DOTALL
+    );
+    private static final Pattern TRANSACTION_CONTROL = Pattern.compile(
+        "^(?:BEGIN|START|COMMIT|END|ROLLBACK|ABORT)\\b",
+        Pattern.CASE_INSENSITIVE
+    );
 
     public DuckDbMigration {
         if (version <= 0) {
@@ -31,6 +41,7 @@ public record DuckDbMigration(int version, String name, List<String> statements)
             if (statement.isBlank()) {
                 throw new IllegalArgumentException("statements must not contain blank SQL");
             }
+            rejectTransactionControl(statement);
         }
     }
 
@@ -54,5 +65,25 @@ public record DuckDbMigration(int version, String name, List<String> statements)
         }
 
         return HexFormat.of().formatHex(digest.digest());
+    }
+
+    /**
+     * Keeps the runner's per-migration transaction intact: each entry must be a single statement
+     * and must not start with a transaction-control keyword.
+     */
+    private static void rejectTransactionControl(String statement) {
+        var body = statement.strip();
+        if (body.endsWith(";")) {
+            body = body.substring(0, body.length() - 1);
+        }
+        if (body.indexOf(';') >= 0) {
+            throw new IllegalArgumentException("Each migration statement must contain exactly one SQL statement");
+        }
+
+        var matcher = LEADING_COMMENTS.matcher(body);
+        var start = matcher.lookingAt() ? matcher.end() : 0;
+        if (TRANSACTION_CONTROL.matcher(body).region(start, body.length()).lookingAt()) {
+            throw new IllegalArgumentException("Migration SQL must not control transactions: " + statement);
+        }
     }
 }

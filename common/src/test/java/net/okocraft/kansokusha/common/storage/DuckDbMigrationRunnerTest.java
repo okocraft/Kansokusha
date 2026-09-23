@@ -215,6 +215,31 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
+    void testRejectsTransactionControlAndMultipleStatements() {
+        for (var sql : List.of(
+            "COMMIT",
+            "  begin transaction",
+            "-- comment\nROLLBACK",
+            "/* block */ END",
+            "CREATE TABLE t (value INTEGER); COMMIT"
+        )) {
+            Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> DuckDbMigration.of(1, "invalid", sql),
+                sql
+            );
+        }
+
+        Assertions.assertDoesNotThrow(() -> DuckDbMigration.of(
+            1,
+            "valid",
+            "CREATE TABLE t (value INTEGER);",
+            "SELECT CASE WHEN 1 = 1 THEN 1 END",
+            "CREATE TABLE commits (value INTEGER)"
+        ));
+    }
+
+    @Test
     void testRejectsNonConsecutiveApplicationDefinitions() {
         var versionTwo = DuckDbMigration.of(2, "version_two", "SELECT 1");
 
