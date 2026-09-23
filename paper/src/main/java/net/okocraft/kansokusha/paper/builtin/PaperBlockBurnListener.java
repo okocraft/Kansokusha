@@ -121,7 +121,7 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             this.legacyTntPrimeCaptures.put(
                 event,
-                new LegacyTntPrimeCapture(event.getBlock().getType() != Material.TNT)
+                new LegacyTntPrimeCapture(event.getBlock().getType() == Material.FIRE)
             );
         }
     }
@@ -141,8 +141,14 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         if (snapshot == null) {
             return;
         }
-        if (event.isCancelled() && (capture == null || !capture.alreadyBurned())) {
-            return;
+        if (event.isCancelled()) {
+            if (
+                capture == null
+                    || !capture.alreadyBurned()
+                    || event.getBlock().getType() != Material.FIRE
+            ) {
+                return;
+            }
         }
         submit(snapshot);
     }
