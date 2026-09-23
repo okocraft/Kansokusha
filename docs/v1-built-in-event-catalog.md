@@ -180,7 +180,7 @@ generation 1 payload は次を持つ。
 - `initial_result_item`: LOWEST の event result item
 - `final_result_item`: MONITOR の final event result item
 
-`expected_post_state` は source fluid / powder snow、waterlogged state、water/lava/powder-snow cauldron の vanilla bucket transition を表す。後続 physics、environment effect、別 event による mutation までを final world state として保証するものではない。
+`expected_post_state` は source fluid / powder snow、waterlogged state、empty / water / lava / powder-snow cauldron family 間の vanilla bucket transition を表す。cauldron への empty は現在の cauldron content に関係なく bucket 種別から destination cauldron state を導出する。後続 physics、environment effect、別 event による mutation までを final world state として保証するものではない。
 
 ## `kansokusha:block_harvest`
 
@@ -202,7 +202,7 @@ real Paper integration verification で normal block break、sweet-berry harvest
 
 ## `kansokusha:flower_pot_change`
 
-`PlayerFlowerPotManipulateEvent` の insert/remove を記録する。contents は inventory stack size ではなく flower pot 内の canonical content として表現し、non-empty item は components/meta を保持したまま amount を厳密に `1` に正規化する。
+`PlayerFlowerPotManipulateEvent` の insert/remove を記録する。contents は event に渡された inventory stack 自体ではなく、flower pot block state が表現できる canonical content とする。non-empty content は item type のみを保持した amount `1` の ItemStack として表現し、custom name、lore、custom data 等の ItemStack metadata/components は保持しない。
 
 generation 1 payload は次を持つ。
 
