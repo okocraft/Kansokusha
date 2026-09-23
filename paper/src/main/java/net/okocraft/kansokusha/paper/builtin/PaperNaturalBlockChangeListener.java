@@ -68,16 +68,11 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     }
 
     public static PaperNaturalBlockChangeListener register(KansokushaApi api, Key serverKey) {
-        var plugin = JavaPlugin.getProvidingPlugin(PaperNaturalBlockChangeListener.class);
         return register(
             api,
             serverKey,
             Clock.systemUTC(),
-            (location, task) -> Bukkit.getRegionScheduler().run(
-                plugin,
-                location,
-                ignored -> task.run()
-            )
+            PaperNaturalBlockChangeListener::scheduleNextTick
         );
     }
 
@@ -378,6 +373,11 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             ));
         }
         return List.copyOf(result);
+    }
+
+    private static void scheduleNextTick(Location location, Runnable task) {
+        var plugin = JavaPlugin.getProvidingPlugin(PaperNaturalBlockChangeListener.class);
+        Bukkit.getRegionScheduler().run(plugin, location, ignored -> task.run());
     }
 
     private static BlockPosition position(Block block) {
