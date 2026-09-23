@@ -154,6 +154,63 @@ tasks {
                             }
                         }
                     }
+
+                    val expectedBuiltInTypes = setOf(
+                        "kansokusha:sign_change",
+                        "kansokusha:bucket_empty",
+                        "kansokusha:bucket_fill",
+                        "kansokusha:block_harvest",
+                        "kansokusha:flower_pot_change"
+                    )
+                    connection.prepareStatement(
+                        """
+                        SELECT event_type_key
+                        FROM event_types
+                        WHERE event_type_key IN (?, ?, ?, ?, ?)
+                        """.trimIndent()
+                    ).use { statement ->
+                        expectedBuiltInTypes.forEachIndexed { index, eventType ->
+                            statement.setString(index + 1, eventType)
+                        }
+                        statement.executeQuery().use { rows ->
+                            val registered = mutableSetOf<String>()
+                            while (rows.next()) {
+                                registered.add(rows.getString("event_type_key"))
+                            }
+                            check(registered == expectedBuiltInTypes) {
+                                "Built-in event types were not all registered: " + registered
+                            }
+                        }
+                    }
+
+                    connection.prepareStatement(
+                        """
+                        SELECT et.event_type_key, count(*) AS event_count
+                        FROM events e
+                        JOIN payload_generations pg ON pg.id = e.payload_generation_id
+                        JOIN event_types et ON et.id = pg.event_type_id
+                        WHERE et.event_type_key IN (?, ?)
+                        GROUP BY et.event_type_key
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, "kansokusha:block_break")
+                        statement.setString(2, "kansokusha:block_harvest")
+                        statement.executeQuery().use { rows ->
+                            val counts = mutableMapOf<String, Int>()
+                            while (rows.next()) {
+                                counts[rows.getString("event_type_key")] =
+                                    rows.getInt("event_count")
+                            }
+                            check(counts["kansokusha:block_break"] == 1) {
+                                "Expected exactly one normal block-break record, found " +
+                                    counts["kansokusha:block_break"] + "."
+                            }
+                            check(counts["kansokusha:block_harvest"] == 2) {
+                                "Expected exactly two harvest/shear records, found " +
+                                    counts["kansokusha:block_harvest"] + "."
+                            }
+                        }
+                    }
                 }
             }
         }
