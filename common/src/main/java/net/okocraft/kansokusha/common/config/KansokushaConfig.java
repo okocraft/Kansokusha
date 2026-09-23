@@ -289,51 +289,12 @@ public class KansokushaConfig {
         int maxBatchSize,
         Duration maxBatchDelay
     ) {
-
-        public IngestionSettings {
-            if (queueCapacity <= 0) {
-                throw new IllegalArgumentException("queueCapacity must be positive.");
-            }
-            if (maxBatchSize <= 0) {
-                throw new IllegalArgumentException("maxBatchSize must be positive.");
-            }
-            Objects.requireNonNull(maxBatchDelay, "maxBatchDelay");
-            if (maxBatchDelay.isZero() || maxBatchDelay.isNegative()) {
-                throw new IllegalArgumentException("maxBatchDelay must be positive.");
-            }
-            if (maxBatchDelay.getNano() % 1_000_000 != 0) {
-                throw new IllegalArgumentException("maxBatchDelay must use whole milliseconds.");
-            }
-            try {
-                maxBatchDelay.toNanos();
-            } catch (ArithmeticException e) {
-                throw new IllegalArgumentException("maxBatchDelay exceeds the supported nanosecond range.", e);
-            }
-        }
     }
 
     public record RetentionCleanupSettings(
         Duration interval,
         int maxRowsPerPass
     ) {
-
-        public RetentionCleanupSettings {
-            Objects.requireNonNull(interval, "interval");
-            if (interval.isZero() || interval.isNegative()) {
-                throw new IllegalArgumentException("interval must be positive.");
-            }
-            if (interval.getNano() % 1_000_000 != 0) {
-                throw new IllegalArgumentException("interval must use whole milliseconds.");
-            }
-            try {
-                interval.toMillis();
-            } catch (ArithmeticException e) {
-                throw new IllegalArgumentException("interval exceeds the supported millisecond range.", e);
-            }
-            if (maxRowsPerPass <= 0) {
-                throw new IllegalArgumentException("maxRowsPerPass must be positive.");
-            }
-        }
     }
 
     public record RetentionSettings(

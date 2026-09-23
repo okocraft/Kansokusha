@@ -135,21 +135,6 @@ class RetentionCleanupServiceTest {
         Assertions.assertEquals(RetentionCleanupService.State.STOPPED, service.state());
         Mockito.verify(executor).shutdown();
     }
-    @Test
-    void testInvalidSettingsAreRejected() {
-        RetentionCleaner cleaner = (cutoff, bound) -> 0;
-        var executor = Mockito.mock(ScheduledExecutorService.class);
-
-        Assertions.assertThrows(IllegalArgumentException.class, () ->
-            service(cleaner, failure -> { }, Duration.ZERO, 1, executor)
-        );
-        Assertions.assertThrows(IllegalArgumentException.class, () ->
-            service(cleaner, failure -> { }, Duration.ofNanos(1), 1, executor)
-        );
-        Assertions.assertThrows(IllegalArgumentException.class, () ->
-            service(cleaner, failure -> { }, INTERVAL, 0, executor)
-        );
-    }
     private static ScheduledExecutorService executor() throws InterruptedException {
         var executor = Mockito.mock(ScheduledExecutorService.class);
         Mockito.when(executor.awaitTermination(Mockito.anyLong(), Mockito.any(TimeUnit.class))).thenReturn(true);

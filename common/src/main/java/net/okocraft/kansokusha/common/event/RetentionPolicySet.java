@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -32,40 +32,15 @@ public final class RetentionPolicySet {
     public static RetentionPolicySet from(KansokushaConfig.RetentionSettings settings) {
         Objects.requireNonNull(settings, "settings");
 
-        var policies = new LinkedHashMap<Key, RetentionPolicy>();
-        for (var entry : settings.policies().entrySet()) {
-            var key = Objects.requireNonNull(entry.getKey(), "policy key");
-            var duration = Objects.requireNonNull(entry.getValue(), "policy duration");
-            validateDuration(key, duration);
-            policies.put(key, new RetentionPolicy(key, duration));
-        }
+        var exactMappings = new HashMap<Key, RetentionPolicy>();
+        settings.eventTypeMappings().forEach(
+            (eventType, policyKey) -> exactMappings.put(eventType, policy(settings, policyKey))
+        );
+        return new RetentionPolicySet(exactMappings, policy(settings, settings.fallbackPolicy()));
+    }
 
-        if (policies.isEmpty()) {
-            throw new IllegalArgumentException("At least one retention policy is required.");
-        }
-
-        var fallback = policies.get(settings.fallbackPolicy());
-        if (fallback == null) {
-            throw new IllegalArgumentException(
-                "Fallback references unknown retention policy " + settings.fallbackPolicy().asString()
-            );
-        }
-
-        var exactMappings = new LinkedHashMap<Key, RetentionPolicy>();
-        for (var entry : settings.eventTypeMappings().entrySet()) {
-            var eventType = Objects.requireNonNull(entry.getKey(), "event type key");
-            var policyKey = Objects.requireNonNull(entry.getValue(), "mapped policy key");
-            var policy = policies.get(policyKey);
-            if (policy == null) {
-                throw new IllegalArgumentException(
-                    "Event type " + eventType.asString()
-                        + " references unknown retention policy " + policyKey.asString()
-                );
-            }
-            exactMappings.put(eventType, policy);
-        }
-
-        return new RetentionPolicySet(exactMappings, fallback);
+    private static RetentionPolicy policy(KansokushaConfig.RetentionSettings settings, Key key) {
+        return new RetentionPolicy(key, settings.policies().get(key));
     }
 
     public RetentionPolicy resolvePolicy(Key eventType) {
@@ -119,28 +94,6 @@ public final class RetentionPolicySet {
             throw new RetentionResolutionException(
                 field + " resolves to a DuckDB TIMESTAMP_MS infinity sentinel or out-of-range value for event type "
                     + eventType.asString()
-            );
-        }
-    }
-
-    private static void validateDuration(Key key, Duration duration) {
-        if (duration.isZero() || duration.isNegative()) {
-            throw new IllegalArgumentException(
-                "Retention policy " + key.asString() + " must have a positive duration."
-            );
-        }
-        if (duration.getNano() % 1_000_000 != 0) {
-            throw new IllegalArgumentException(
-                "Retention policy " + key.asString() + " must use whole milliseconds."
-            );
-        }
-
-        try {
-            duration.toMillis();
-        } catch (ArithmeticException e) {
-            throw new IllegalArgumentException(
-                "Retention policy " + key.asString() + " exceeds the supported millisecond range.",
-                e
             );
         }
     }

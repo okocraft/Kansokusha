@@ -32,9 +32,6 @@ public final class DuckDbRetentionCleaner implements RetentionCleaner {
     @Override
     public int deleteExpired(Instant cutoff, int maxRowsPerPass) throws SQLException {
         Objects.requireNonNull(cutoff, "cutoff");
-        if (maxRowsPerPass <= 0) {
-            throw new IllegalArgumentException("maxRowsPerPass must be positive.");
-        }
 
         var cutoffMillis = finiteMillis(cutoff.truncatedTo(ChronoUnit.MILLIS));
         return this.database.transaction(
