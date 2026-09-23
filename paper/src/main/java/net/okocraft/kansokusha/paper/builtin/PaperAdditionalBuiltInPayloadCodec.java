@@ -4,6 +4,8 @@ import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LayeredCauldronBlock;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
@@ -212,20 +214,20 @@ public final class PaperAdditionalBuiltInPayloadCodec {
                 || material == Material.LAVA_CAULDRON
                 || material == Material.POWDER_SNOW_CAULDRON
         ) {
-            return Material.CAULDRON.createBlockData();
+            return Blocks.CAULDRON.defaultBlockState().asBlockData();
         }
         if (preState instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
             var expected = preState.clone();
             ((Waterlogged) expected).setWaterlogged(false);
             return expected;
         }
-        return Material.AIR.createBlockData();
+        return Blocks.AIR.defaultBlockState().asBlockData();
     }
 
     private static BlockData expectedAfterEmpty(Material bucket, BlockData preState) {
         if (preState.getMaterial() == Material.CAULDRON) {
             return switch (bucket) {
-                case LAVA_BUCKET -> Material.LAVA_CAULDRON.createBlockData();
+                case LAVA_BUCKET -> Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData();
                 case POWDER_SNOW_BUCKET -> fullPowderSnowCauldron();
                 default -> fullWaterCauldron();
             };
@@ -236,26 +238,22 @@ public final class PaperAdditionalBuiltInPayloadCodec {
             return expected;
         }
         return switch (bucket) {
-            case LAVA_BUCKET -> Material.LAVA.createBlockData();
-            case POWDER_SNOW_BUCKET -> Material.POWDER_SNOW.createBlockData();
-            default -> Material.WATER.createBlockData();
+            case LAVA_BUCKET -> Blocks.LAVA.defaultBlockState().asBlockData();
+            case POWDER_SNOW_BUCKET -> Blocks.POWDER_SNOW.defaultBlockState().asBlockData();
+            default -> Blocks.WATER.defaultBlockState().asBlockData();
         };
     }
 
     private static BlockData fullWaterCauldron() {
-        var data = Material.WATER_CAULDRON.createBlockData();
-        if (data instanceof org.bukkit.block.data.Levelled levelled) {
-            levelled.setLevel(levelled.getMaximumLevel());
-        }
-        return data;
+        return Blocks.WATER_CAULDRON.defaultBlockState()
+            .setValue(LayeredCauldronBlock.LEVEL, 3)
+            .asBlockData();
     }
 
     private static BlockData fullPowderSnowCauldron() {
-        var data = Material.POWDER_SNOW_CAULDRON.createBlockData();
-        if (data instanceof org.bukkit.block.data.Levelled levelled) {
-            levelled.setLevel(levelled.getMaximumLevel());
-        }
-        return data;
+        return Blocks.POWDER_SNOW_CAULDRON.defaultBlockState()
+            .setValue(LayeredCauldronBlock.LEVEL, 3)
+            .asBlockData();
     }
 
     private static boolean isWaterBucket(Material bucket) {
