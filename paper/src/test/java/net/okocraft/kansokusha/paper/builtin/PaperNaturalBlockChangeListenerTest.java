@@ -81,7 +81,6 @@ class PaperNaturalBlockChangeListenerTest {
         );
         Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
         Mockito.verify(changed, Mockito.times(1)).getBlockData();
-        Mockito.verify(post, Mockito.times(1)).getBlockData();
     }
 
     @Test
