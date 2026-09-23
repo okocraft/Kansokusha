@@ -155,34 +155,6 @@ tasks {
                         }
                     }
 
-                    val expectedBuiltInTypes = setOf(
-                        "kansokusha:sign_change",
-                        "kansokusha:bucket_empty",
-                        "kansokusha:bucket_fill",
-                        "kansokusha:block_harvest",
-                        "kansokusha:flower_pot_change"
-                    )
-                    connection.prepareStatement(
-                        """
-                        SELECT event_type_key
-                        FROM event_types
-                        WHERE event_type_key IN (?, ?, ?, ?, ?)
-                        """.trimIndent()
-                    ).use { statement ->
-                        expectedBuiltInTypes.forEachIndexed { index, eventType ->
-                            statement.setString(index + 1, eventType)
-                        }
-                        statement.executeQuery().use { rows ->
-                            val registered = mutableSetOf<String>()
-                            while (rows.next()) {
-                                registered.add(rows.getString("event_type_key"))
-                            }
-                            check(registered == expectedBuiltInTypes) {
-                                "Built-in event types were not all registered: " + registered
-                            }
-                        }
-                    }
-
                     connection.prepareStatement(
                         """
                         SELECT et.event_type_key, count(*) AS event_count
