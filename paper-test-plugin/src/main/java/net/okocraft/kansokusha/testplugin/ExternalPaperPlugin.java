@@ -1,18 +1,6 @@
 package net.okocraft.kansokusha.testplugin;
 
-import com.mojang.authlib.GameProfile;
 import io.papermc.paper.event.block.PlayerShearBlockEvent;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.server.level.ClientInformation;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SweetBerryBushBlock;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
@@ -22,22 +10,28 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.craftbukkit.CraftServer;
-import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.UUID;
 
 public final class ExternalPaperPlugin extends JavaPlugin {
@@ -92,72 +86,184 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         return new Result(api, definition, submission);
     }
 
-    private void verifyBuiltInPlatformSemantics() {
-        var craftServer = (CraftServer) this.getServer();
-        var level = ((CraftWorld) Bukkit.getWorlds().getFirst()).getHandle();
-        var player = new ServerPlayer(
-            craftServer.getServer(),
-            level,
-            new GameProfile(
-                UUID.fromString("123e4567-e89b-12d3-a456-426614174001"),
-                "KansokushaFixture"
-            ),
-            ClientInformation.createDefault()
-        );
+    private void verifyBuiltInPlatformSemantics() throws ReflectiveOperationException {
+        var world = Bukkit.getWorlds().getFirst();
+        var server = invoke(this.getServer(), "getServer");
+        var level = invoke(world, "getHandle");
+        var player = newServerPlayer(server, level);
+        var bukkitPlayer = (Player) invoke(player, "getBukkitEntity");
+        var gameMode = field(player, "gameMode");
+
         var probe = new PlatformEventProbe();
         this.getServer().getPluginManager().registerEvents(probe, this);
 
-        var base = new BlockPos(128, 80, 128);
-        player.setPos(base.getX() + 0.5, base.getY(), base.getZ() + 0.5);
+        int x = 128;
+        int y = Math.max(world.getMinHeight() + 8, 80);
+        int z = 128;
+        invoke(player, "setPos", x + 0.5, (double) y, z + 0.5);
 
-        var breakPos = base;
-        level.setBlockAndUpdate(breakPos, Blocks.STONE.defaultBlockState());
-        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        var breakBlock = world.getBlockAt(x, y, z);
+        breakBlock.setType(Material.STONE, false);
+        bukkitPlayer.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
         var beforeBreak = probe.snapshot();
-        if (!player.gameMode.destroyBlock(breakPos)) {
+        var breakPos = blockPos(x, y, z);
+        if (!Boolean.TRUE.equals(invoke(gameMode, "destroyBlock", breakPos))) {
             throw new AssertionError("Fixture normal block break did not succeed.");
         }
         probe.assertDelta("normal break", beforeBreak, 1, 0, 0);
 
-        var harvestPos = base.offset(1, 0, 0);
-        level.setBlockAndUpdate(
-            harvestPos,
-            Blocks.SWEET_BERRY_BUSH.defaultBlockState()
-                .setValue(SweetBerryBushBlock.AGE, SweetBerryBushBlock.MAX_AGE)
-        );
-        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        var harvestBlock = world.getBlockAt(x + 1, y, z);
+        harvestBlock.setType(Material.SWEET_BERRY_BUSH, false);
+        var ageable = (Ageable) harvestBlock.getBlockData();
+        ageable.setAge(ageable.getMaximumAge());
+        harvestBlock.setBlockData(ageable, false);
+        bukkitPlayer.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
         var beforeHarvest = probe.snapshot();
-        player.gameMode.useItemOn(
-            player,
-            level,
-            ItemStack.EMPTY,
-            InteractionHand.MAIN_HAND,
-            hit(harvestPos)
-        );
+        useItemOn(gameMode, player, level, x + 1, y, z);
         probe.assertDelta("berry harvest", beforeHarvest, 0, 1, 0);
 
-        var shearPos = base.offset(2, 0, 0);
-        level.setBlockAndUpdate(shearPos, Blocks.PUMPKIN.defaultBlockState());
-        var shears = new ItemStack(Items.SHEARS);
-        player.setItemInHand(InteractionHand.MAIN_HAND, shears);
+        var shearBlock = world.getBlockAt(x + 2, y, z);
+        shearBlock.setType(Material.PUMPKIN, false);
+        bukkitPlayer.getInventory().setItemInMainHand(new ItemStack(Material.SHEARS));
         var beforeShear = probe.snapshot();
-        player.gameMode.useItemOn(
-            player,
-            level,
-            shears,
-            InteractionHand.MAIN_HAND,
-            hit(shearPos)
-        );
+        useItemOn(gameMode, player, level, x + 2, y, z);
         probe.assertDelta("pumpkin shear", beforeShear, 0, 0, 1);
     }
 
-    private static BlockHitResult hit(BlockPos pos) {
-        return new BlockHitResult(
-            Vec3.atCenterOf(pos),
-            Direction.UP,
+    private static Object newServerPlayer(Object server, Object level)
+        throws ReflectiveOperationException {
+        var profileClass = Class.forName("com.mojang.authlib.GameProfile");
+        var profile = construct(
+            profileClass,
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174001"),
+            "KansokushaFixture"
+        );
+        var clientInformationClass =
+            Class.forName("net.minecraft.server.level.ClientInformation");
+        var clientInformation = clientInformationClass
+            .getMethod("createDefault")
+            .invoke(null);
+        return construct(
+            Class.forName("net.minecraft.server.level.ServerPlayer"),
+            server,
+            level,
+            profile,
+            clientInformation
+        );
+    }
+
+    private static void useItemOn(
+        Object gameMode,
+        Object player,
+        Object level,
+        int x,
+        int y,
+        int z
+    ) throws ReflectiveOperationException {
+        var mainHand = Class.forName("net.minecraft.world.InteractionHand")
+            .getField("MAIN_HAND")
+            .get(null);
+        var item = invoke(player, "getMainHandItem");
+        var pos = blockPos(x, y, z);
+        var hitResult = blockHitResult(pos, x, y, z);
+        invoke(gameMode, "useItemOn", player, level, item, mainHand, hitResult);
+    }
+
+    private static Object blockPos(int x, int y, int z)
+        throws ReflectiveOperationException {
+        return construct(Class.forName("net.minecraft.core.BlockPos"), x, y, z);
+    }
+
+    private static Object blockHitResult(Object pos, int x, int y, int z)
+        throws ReflectiveOperationException {
+        var vec3 = construct(
+            Class.forName("net.minecraft.world.phys.Vec3"),
+            x + 0.5,
+            y + 0.5,
+            z + 0.5
+        );
+        var up = Class.forName("net.minecraft.core.Direction")
+            .getField("UP")
+            .get(null);
+        return construct(
+            Class.forName("net.minecraft.world.phys.BlockHitResult"),
+            vec3,
+            up,
             pos,
             false
         );
+    }
+
+    private static Object field(Object target, String name)
+        throws ReflectiveOperationException {
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
+    private static Object invoke(Object target, String name, Object... args)
+        throws ReflectiveOperationException {
+        Method method = Arrays.stream(target.getClass().getMethods())
+            .filter(candidate -> candidate.getName().equals(name))
+            .filter(candidate -> matches(candidate.getParameterTypes(), args))
+            .findFirst()
+            .orElseThrow(() -> new NoSuchMethodException(
+                target.getClass().getName() + "#" + name
+            ));
+        method.setAccessible(true);
+        return method.invoke(target, args);
+    }
+
+    private static Object construct(Class<?> type, Object... args)
+        throws ReflectiveOperationException {
+        Constructor<?> constructor = Arrays.stream(type.getConstructors())
+            .filter(candidate -> matches(candidate.getParameterTypes(), args))
+            .findFirst()
+            .orElseThrow(() -> new NoSuchMethodException(
+                "No matching constructor for " + type.getName()
+            ));
+        constructor.setAccessible(true);
+        return constructor.newInstance(args);
+    }
+
+    private static boolean matches(Class<?>[] parameterTypes, Object[] args) {
+        if (parameterTypes.length != args.length) {
+            return false;
+        }
+        for (int i = 0; i < parameterTypes.length; i++) {
+            if (!isAssignable(parameterTypes[i], args[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAssignable(Class<?> parameterType, Object arg) {
+        if (arg == null) {
+            return !parameterType.isPrimitive();
+        }
+        if (!parameterType.isPrimitive()) {
+            return parameterType.isAssignableFrom(arg.getClass());
+        }
+        return switch (parameterType.getName()) {
+            case "boolean" -> arg instanceof Boolean;
+            case "byte" -> arg instanceof Byte;
+            case "short" -> arg instanceof Short;
+            case "int" -> arg instanceof Integer;
+            case "long" -> arg instanceof Long;
+            case "float" -> arg instanceof Float;
+            case "double" -> arg instanceof Double;
+            case "char" -> arg instanceof Character;
+            default -> false;
+        };
     }
 
     private void verifyAfterShutdown(Result result) {
