@@ -11,19 +11,26 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockIgniteEvent;
+import org.bukkit.event.block.BlockMultiPlaceEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -37,6 +44,7 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
     private final Key serverKey;
     private final Clock clock;
     private final Map<BlockIgniteEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    private final Map<PlayerPlacementKey, Snapshot> pendingPlayerPlacements = new HashMap<>();
 
     private PaperBlockIgniteListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -57,7 +65,8 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
     public void capture(BlockIgniteEvent event) {
         Objects.requireNonNull(event, "event");
 
-        if (event.getCause() == BlockIgniteEvent.IgniteCause.SPREAD) {
+        var cause = event.getCause();
+        if (cause == BlockIgniteEvent.IgniteCause.SPREAD) {
             return;
         }
 
@@ -65,9 +74,10 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         var source = source(event.getIgnitingBlock());
         var entity = event.getIgnitingEntity();
         var player = event.getPlayer();
+        var playerId = player == null ? null : player.getUniqueId();
         var payload = PaperBlockEventPayloadCodec.encodeIgnite(
             block.getBlockData(),
-            event.getCause().name(),
+            cause.name(),
             source == null ? null : source.position(),
             source == null ? null : source.state(),
             entity == null ? null : entity.getUniqueId(),
@@ -78,8 +88,9 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            player == null ? null : new PlayerSubject(player.getUniqueId()),
-            payload
+            playerId == null ? null : new PlayerSubject(playerId),
+            payload,
+            awaitsPlayerPlacement(cause, playerId) ? playerId : null
         );
 
         synchronized (this.inFlight) {
@@ -97,20 +108,101 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         if (snapshot == null || event.isCancelled()) {
             return;
         }
+
+        var playerId = snapshot.awaitingPlacementPlayerId();
+        if (playerId != null) {
+            synchronized (this.inFlight) {
+                this.pendingPlayerPlacements.put(
+                    new PlayerPlacementKey(
+                        snapshot.worldKey(),
+                        snapshot.position(),
+                        playerId
+                    ),
+                    snapshot
+                );
+            }
+            return;
+        }
+
         submit(this.api, EVENT_TYPE, snapshot);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void finalizePlacement(BlockPlaceEvent event) {
+        Objects.requireNonNull(event, "event");
+        var playerId = event.getPlayer().getUniqueId();
+        var snapshots = removePendingPlacements(event, playerId);
+        if (snapshots.isEmpty() || event.isCancelled() || !event.canBuild()) {
+            return;
+        }
+        for (var snapshot : snapshots) {
+            submit(this.api, EVENT_TYPE, snapshot);
+        }
     }
 
     @Override
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
+            this.pendingPlayerPlacements.clear();
         }
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size();
+            return this.inFlight.size() + this.pendingPlayerPlacements.size();
         }
+    }
+
+    private List<Snapshot> removePendingPlacements(BlockPlaceEvent event, UUID playerId) {
+        var result = new ArrayList<Snapshot>();
+        synchronized (this.inFlight) {
+            if (event instanceof BlockMultiPlaceEvent multiPlaceEvent) {
+                for (var state : multiPlaceEvent.getReplacedBlockStates()) {
+                    var snapshot = this.pendingPlayerPlacements.remove(
+                        placementKey(playerId, state)
+                    );
+                    if (snapshot != null) {
+                        result.add(snapshot);
+                    }
+                }
+            } else {
+                var snapshot = this.pendingPlayerPlacements.remove(
+                    placementKey(playerId, event.getBlockPlaced())
+                );
+                if (snapshot != null) {
+                    result.add(snapshot);
+                }
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean awaitsPlayerPlacement(
+        BlockIgniteEvent.IgniteCause cause,
+        @Nullable UUID playerId
+    ) {
+        return playerId != null
+            && (
+                cause == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL
+                    || cause == BlockIgniteEvent.IgniteCause.FIREBALL
+            );
+    }
+
+    private static PlayerPlacementKey placementKey(UUID playerId, Block block) {
+        return new PlayerPlacementKey(
+            PaperKansokusha.key(block.getWorld().getKey()),
+            position(block),
+            playerId
+        );
+    }
+
+    private static PlayerPlacementKey placementKey(UUID playerId, BlockState state) {
+        return new PlayerPlacementKey(
+            PaperKansokusha.key(state.getWorld().getKey()),
+            new BlockPosition(state.getX(), state.getY(), state.getZ()),
+            playerId
+        );
     }
 
     private static @Nullable SourceBlock source(@Nullable Block block) {
@@ -147,13 +239,21 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
     private record SourceBlock(BlockPosition position, BlockData state) {
     }
 
+    private record PlayerPlacementKey(
+        Key worldKey,
+        BlockPosition position,
+        UUID playerId
+    ) {
+    }
+
     private record Snapshot(
         Instant occurredAt,
         Key serverKey,
         Key worldKey,
         BlockPosition position,
         @Nullable PlayerSubject subject,
-        EventPayload payload
+        EventPayload payload,
+        @Nullable UUID awaitingPlacementPlayerId
     ) {
     }
 }

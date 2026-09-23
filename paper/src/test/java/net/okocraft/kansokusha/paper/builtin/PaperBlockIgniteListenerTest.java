@@ -8,6 +8,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockIgniteEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class PaperBlockIgniteListenerTest {
     }
 
     @Test
-    void testCapturesCauseActorAndImmutablePreState() throws Exception {
+    void testCapturesCauseActorAndImmutablePreStateAfterAcceptedPlacement() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockIgniteListener.register(
             api,
@@ -43,9 +44,7 @@ class PaperBlockIgniteListenerTest {
         var source = PaperBlockEventTestSupport.block(
             world, 9, 64, 20, Blocks.NETHERRACK.defaultBlockState(), Material.NETHERRACK
         );
-        var player = Mockito.mock(Player.class);
-        Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
-        Mockito.when(player.getType()).thenReturn(EntityType.PLAYER);
+        var player = player();
 
         var event = Mockito.mock(BlockIgniteEvent.class);
         Mockito.when(event.getBlock()).thenReturn(target);
@@ -59,6 +58,15 @@ class PaperBlockIgniteListenerTest {
         Mockito.when(source.getBlockData()).thenReturn(Blocks.FIRE.defaultBlockState().asBlockData());
         listener.finalizeEvent(event);
 
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var placement = Mockito.mock(BlockPlaceEvent.class);
+        Mockito.when(placement.getPlayer()).thenReturn(player);
+        Mockito.when(placement.getBlockPlaced()).thenReturn(target);
+        Mockito.when(placement.canBuild()).thenReturn(true);
+        listener.finalizePlacement(placement);
+
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperBlockIgniteListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
@@ -66,16 +74,43 @@ class PaperBlockIgniteListenerTest {
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
 
         var expected = new CompoundTag();
-        expected.put("pre_state", PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData()));
+        expected.put(
+            "pre_state",
+            PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData())
+        );
         expected.putString("cause", "FLINT_AND_STEEL");
-        expected.put("source", PaperBlockEventTestSupport.position(new BlockPosition(9, 64, 20)));
-        expected.put("source_state", PaperBlockStatePayloadCodec.blockState(Blocks.NETHERRACK.defaultBlockState().asBlockData()));
+        expected.put(
+            "source",
+            PaperBlockEventTestSupport.position(new BlockPosition(9, 64, 20))
+        );
+        expected.put(
+            "source_state",
+            PaperBlockStatePayloadCodec.blockState(Blocks.NETHERRACK.defaultBlockState().asBlockData())
+        );
         expected.putString("actor_entity_uuid", PLAYER_ID.toString());
         expected.putString("actor_entity_type", "PLAYER");
         Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(target, Mockito.times(1)).getBlockData();
         Mockito.verify(source, Mockito.times(1)).getBlockData();
+    }
+
+    @Test
+    void testCancelledPlacementDropsPlayerFlintAndSteelIgnite() {
+        assertRejectedPlacementDropsPlayerIgnite(
+            BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL,
+            true,
+            true
+        );
+    }
+
+    @Test
+    void testCannotBuildDropsPlayerFireChargeIgnite() {
+        assertRejectedPlacementDropsPlayerIgnite(
+            BlockIgniteEvent.IgniteCause.FIREBALL,
+            false,
+            false
+        );
     }
 
     @Test
@@ -110,5 +145,47 @@ class PaperBlockIgniteListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(event, Mockito.never()).getBlock();
+    }
+
+    private static void assertRejectedPlacementDropsPlayerIgnite(
+        BlockIgniteEvent.IgniteCause cause,
+        boolean cancelled,
+        boolean canBuild
+    ) {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var target = PaperBlockEventTestSupport.block(
+            world, 4, 65, 6, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var player = player();
+        var ignite = Mockito.mock(BlockIgniteEvent.class);
+        Mockito.when(ignite.getBlock()).thenReturn(target);
+        Mockito.when(ignite.getCause()).thenReturn(cause);
+        Mockito.when(ignite.getIgnitingEntity()).thenReturn(player);
+        Mockito.when(ignite.getPlayer()).thenReturn(player);
+
+        listener.capture(ignite);
+        listener.finalizeEvent(ignite);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var placement = Mockito.mock(BlockPlaceEvent.class);
+        Mockito.when(placement.getPlayer()).thenReturn(player);
+        Mockito.when(placement.getBlockPlaced()).thenReturn(target);
+        Mockito.when(placement.isCancelled()).thenReturn(cancelled);
+        Mockito.when(placement.canBuild()).thenReturn(canBuild);
+        listener.finalizePlacement(placement);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static Player player() {
+        var player = Mockito.mock(Player.class);
+        Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
+        Mockito.when(player.getType()).thenReturn(EntityType.PLAYER);
+        return player;
     }
 }

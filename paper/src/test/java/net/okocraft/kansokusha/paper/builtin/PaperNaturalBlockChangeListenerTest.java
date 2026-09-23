@@ -11,9 +11,11 @@ import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
+import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
 import org.bukkit.event.world.StructureGrowEvent;
+import org.bukkit.entity.Entity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -85,7 +87,7 @@ class PaperNaturalBlockChangeListenerTest {
     @Test
     void testInheritedGrowHandlersDoNotReplaceSpreadSemantics() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
         var changed = PaperBlockEventTestSupport.block(
             world, 11, 64, 10, Blocks.AIR.defaultBlockState(), Material.AIR
@@ -125,7 +127,7 @@ class PaperNaturalBlockChangeListenerTest {
     @Test
     void testSingleBlockSourcesUseCommonSchema() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
 
         var fadeBlock = PaperBlockEventTestSupport.block(
@@ -318,7 +320,7 @@ class PaperNaturalBlockChangeListenerTest {
     @Test
     void testBonemealStructureGrowIsReservedForBlockFertilize() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var listener = listener(api);
         var event = Mockito.mock(StructureGrowEvent.class);
         Mockito.when(event.isFromBonemeal()).thenReturn(true);
 
@@ -341,9 +343,51 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testEntityBlockFormIsExcludedFromNaturalChanges() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 30, 64, 30, Blocks.WATER.defaultBlockState(), Material.WATER
+        );
+        var state = PaperBlockEventTestSupport.state(
+            world, block, 30, 64, 30, Blocks.FROSTED_ICE.defaultBlockState()
+        );
+        var entity = Mockito.mock(Entity.class);
+        var event = new EntityBlockFormEvent(entity, block, state);
+
+        Assertions.assertSame(BlockFormEvent.getHandlerList(), event.getHandlers());
+
+        listener.capture((BlockFormEvent) event);
+        listener.finalizeEvent((BlockFormEvent) event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testLeavesDecayDropsSnapshotWhenBlockWasReplacedDuringEvent() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var leaves = PaperBlockEventTestSupport.block(
+            world, 31, 70, 31, Blocks.OAK_LEAVES.defaultBlockState(), Material.OAK_LEAVES
+        );
+        var event = Mockito.mock(LeavesDecayEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(leaves);
+
+        listener.capture(event);
+        Mockito.when(leaves.getType()).thenReturn(Material.STONE);
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testFinalCancellationDropsCapturedChanges() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
 
         var changed = PaperBlockEventTestSupport.block(
@@ -414,12 +458,23 @@ class PaperNaturalBlockChangeListenerTest {
         var fertilize = Mockito.mock(BlockFertilizeEvent.class);
         Mockito.when(fertilize.getBlocks()).thenReturn(changedStates);
         Mockito.when(fertilize.isCancelled()).thenReturn(cancelled);
-        listener.discardFertilizedStructureGrow(fertilize);
+        listener.discardFertilizedChanges(fertilize);
 
         deferred.remove().run();
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static PaperNaturalBlockChangeListener listener(
+        PaperBlockEventTestSupport.RecordingApi api
+    ) {
+        return PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.systemUTC(),
+            (location, task) -> task.run()
+        );
     }
 
     private static CompoundTag naturalPayload(

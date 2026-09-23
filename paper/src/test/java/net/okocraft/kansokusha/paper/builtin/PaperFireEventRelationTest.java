@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.Clock;
 import java.util.HashMap;
 
 class PaperFireEventRelationTest {
@@ -23,7 +24,12 @@ class PaperFireEventRelationTest {
     void testIgniteSpreadAndBurnHaveDistinctCanonicalOwnership() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var igniteListener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var naturalListener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var naturalListener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.systemUTC(),
+            (location, task) -> task.run()
+        );
         var burnListener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
         var sourceFire = PaperBlockEventTestSupport.block(
