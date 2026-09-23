@@ -248,6 +248,53 @@ class PaperBucketListenerTest {
     }
 
     @Test
+    void testExpectedPostStateAccountsForWaterEvaporation() throws Exception {
+        var air = Blocks.AIR.defaultBlockState();
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(air),
+            PaperBlockStatePayloadCodec.decode(
+                PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
+                    "empty",
+                    Material.WATER_BUCKET,
+                    air.asBlockData(),
+                    true
+                )
+            )
+        );
+
+        var dryStairs = Blocks.OAK_STAIRS.defaultBlockState()
+            .setValue(BlockStateProperties.WATERLOGGED, false);
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(dryStairs),
+            PaperBlockStatePayloadCodec.decode(
+                PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
+                    "empty",
+                    Material.WATER_BUCKET,
+                    dryStairs.asBlockData(),
+                    true
+                )
+            )
+        );
+
+        var partialWaterCauldron = Blocks.WATER_CAULDRON.defaultBlockState()
+            .setValue(LayeredCauldronBlock.LEVEL, 1);
+        Assertions.assertEquals(
+            NbtUtils.writeBlockState(
+                Blocks.WATER_CAULDRON.defaultBlockState()
+                    .setValue(LayeredCauldronBlock.LEVEL, 3)
+            ),
+            PaperBlockStatePayloadCodec.decode(
+                PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
+                    "empty",
+                    Material.WATER_BUCKET,
+                    partialWaterCauldron.asBlockData(),
+                    true
+                )
+            )
+        );
+    }
+
+    @Test
     void testNonBlockFillIsIgnored() {
         var api = new RecordingApi();
         var listener = listener(api);
