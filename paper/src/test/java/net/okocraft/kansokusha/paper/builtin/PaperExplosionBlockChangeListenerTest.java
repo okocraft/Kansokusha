@@ -159,6 +159,7 @@ class PaperExplosionBlockChangeListenerTest {
         Mockito.when(cancelledPrime.getBlock()).thenReturn(cancelledTnt);
         Mockito.when(cancelledPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
         Mockito.when(cancelledPrime.isCancelled()).thenReturn(true);
+        listener.captureTntPrime(cancelledPrime);
         listener.finalizeTntPrime(cancelledPrime);
 
         Assertions.assertEquals(1, api.submissions.size());
@@ -167,6 +168,7 @@ class PaperExplosionBlockChangeListenerTest {
         var acceptedPrime = Mockito.mock(TNTPrimeEvent.class);
         Mockito.when(acceptedPrime.getBlock()).thenReturn(primedTnt);
         Mockito.when(acceptedPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        listener.captureTntPrime(acceptedPrime);
         listener.finalizeTntPrime(acceptedPrime);
 
         Assertions.assertEquals(2, api.submissions.size());
@@ -275,6 +277,7 @@ class PaperExplosionBlockChangeListenerTest {
         Mockito.when(legacy.getReason())
             .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION);
         Mockito.when(legacy.isCancelled()).thenReturn(true);
+        listener.captureTntPrime(legacy);
         listener.finalizeTntPrime(legacy);
 
         Assertions.assertTrue(api.submissions.isEmpty());
@@ -328,7 +331,7 @@ class PaperExplosionBlockChangeListenerTest {
     }
 
     @Test
-    void testDuplicateFinalTntEntryProducesOneSubmissionAndOnePendingPrime() {
+    void testDuplicateFinalTntFirstPrimeCancelledThenSecondAccepted() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperExplosionBlockChangeListener.register(
             api,
@@ -357,17 +360,28 @@ class PaperExplosionBlockChangeListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(1, listener.inFlightCount());
 
-        var prime = Mockito.mock(TNTPrimeEvent.class);
-        Mockito.when(prime.getBlock()).thenReturn(tnt);
-        Mockito.when(prime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
-        listener.finalizeTntPrime(prime);
+        var firstPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(firstPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(firstPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        Mockito.when(firstPrime.isCancelled()).thenReturn(true);
+        listener.captureTntPrime(firstPrime);
+        listener.finalizeTntPrime(firstPrime);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var secondPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(secondPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(secondPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        listener.captureTntPrime(secondPrime);
+        listener.finalizeTntPrime(secondPrime);
 
         Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(new BlockPosition(55, 64, 55), api.submissions.remove().position());
         Assertions.assertEquals(0, listener.inFlightCount());
     }
-
     @Test
-    void testReentrantSameCoordinatePrimeUsesInnermostExplosion() throws Exception {
+    void testReentrantAcceptedInnerDestroyInvalidatesOuterPending() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperExplosionBlockChangeListener.register(
             api,
@@ -409,26 +423,216 @@ class PaperExplosionBlockChangeListenerTest {
 
         Assertions.assertEquals(2, listener.inFlightCount());
 
-        var prime = Mockito.mock(TNTPrimeEvent.class);
-        Mockito.when(prime.getBlock()).thenReturn(tnt);
-        Mockito.when(prime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
-        listener.finalizeTntPrime(prime);
+        var innerPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(innerPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(innerPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        listener.captureTntPrime(innerPrime);
+        listener.finalizeTntPrime(innerPrime);
 
+        Assertions.assertEquals(1, api.submissions.size());
         var innerSubmission = api.submissions.remove();
         var innerPayload = PaperWorldMutationPayloadCodec.decode(innerSubmission.payload());
         Assertions.assertEquals(
             PaperBlockEventTestSupport.position(new BlockPosition(2, 64, 2)),
             innerPayload.get("source_block")
         );
-
-        listener.finalizeTntPrime(prime);
-        var outerSubmission = api.submissions.remove();
-        var outerPayload = PaperWorldMutationPayloadCodec.decode(outerSubmission.payload());
-        Assertions.assertEquals(
-            PaperBlockEventTestSupport.position(new BlockPosition(1, 64, 1)),
-            outerPayload.get("source_block")
-        );
         Assertions.assertEquals(0, listener.inFlightCount());
+    }
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testDragonAcceptedLegacyExplosionRecordsBlockChangeAndTntPrime() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var explosionListener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var tntListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 58, 64, 58, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var dragon = Mockito.mock(EnderDragon.class);
+        Mockito.when(dragon.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(dragon.getType()).thenReturn(EntityType.ENDER_DRAGON);
+        var explosion = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(explosion.getEntity()).thenReturn(dragon);
+        Mockito.when(explosion.getLocation()).thenReturn(new Location(world, 58.5, 64.5, 58.5));
+        Mockito.when(explosion.getExplosionResult()).thenReturn(ExplosionResult.DESTROY);
+        Mockito.when(explosion.getYield()).thenReturn(1.0F);
+        Mockito.when(explosion.blockList()).thenReturn(new ArrayList<>(List.of(tnt)));
+
+        explosionListener.capture(explosion);
+        explosionListener.finalizeEvent(explosion);
+
+        var legacy = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(legacy.getBlock()).thenReturn(tnt);
+        Mockito.when(legacy.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION);
+        Mockito.when(legacy.getPrimerEntity()).thenReturn(dragon);
+
+        explosionListener.captureTntPrime(legacy);
+        tntListener.captureTntPrime(legacy);
+        tntListener.finalizeTntPrime(legacy);
+        explosionListener.finalizeTntPrime(legacy);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(
+                    PaperExplosionBlockChangeListener.EVENT_TYPE
+                ))
+                .count()
+        );
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(
+                    PaperTntPrimeListener.EVENT_TYPE
+                ))
+                .count()
+        );
+        Assertions.assertEquals(0, explosionListener.inFlightCount());
+        Assertions.assertEquals(0, tntListener.inFlightCount());
+    }
+
+    @Test
+    void testNestedDestroyThenTriggerKeepsOuterCancellationIndependent() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var explosionListener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var tntListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 59, 64, 59, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+
+        var outerSource = PaperBlockEventTestSupport.block(
+            world, 3, 64, 3, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var outerState = PaperBlockEventTestSupport.state(
+            world, outerSource, 3, 64, 3, Blocks.RESPAWN_ANCHOR.defaultBlockState()
+        );
+        var outer = Mockito.mock(BlockExplodeEvent.class);
+        Mockito.when(outer.getExplodedBlockState()).thenReturn(outerState);
+        Mockito.when(outer.getExplosionResult()).thenReturn(ExplosionResult.DESTROY);
+        Mockito.when(outer.blockList()).thenReturn(new ArrayList<>(List.of(tnt)));
+        explosionListener.capture(outer);
+        explosionListener.finalizeEvent(outer);
+
+        var triggerSource = Mockito.mock(Projectile.class);
+        Mockito.when(triggerSource.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(triggerSource.getType()).thenReturn(EntityType.WIND_CHARGE);
+        var inner = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(inner.getEntity()).thenReturn(triggerSource);
+        Mockito.when(inner.getLocation()).thenReturn(new Location(world, 59.5, 64.5, 59.5));
+        Mockito.when(inner.getExplosionResult()).thenReturn(ExplosionResult.TRIGGER_BLOCK);
+        Mockito.when(inner.blockList()).thenReturn(new ArrayList<>(List.of(tnt)));
+        explosionListener.capture(inner);
+        explosionListener.finalizeEvent(inner);
+
+        var triggerPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(triggerPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(triggerPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        explosionListener.captureTntPrime(triggerPrime);
+        tntListener.capture(triggerPrime);
+        tntListener.finalizeEvent(triggerPrime);
+        explosionListener.finalizeTntPrime(triggerPrime);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+
+        var outerPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(outerPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(outerPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        Mockito.when(outerPrime.isCancelled()).thenReturn(true);
+        explosionListener.captureTntPrime(outerPrime);
+        tntListener.capture(outerPrime);
+        explosionListener.finalizeTntPrime(outerPrime);
+        tntListener.finalizeEvent(outerPrime);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, explosionListener.inFlightCount());
+    }
+
+    @Test
+    void testNestedTriggerThenDestroyRecordsInnerAndInvalidatesOuterTrigger() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var explosionListener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var tntListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 60, 64, 60, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+
+        var triggerSource = Mockito.mock(Projectile.class);
+        Mockito.when(triggerSource.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(triggerSource.getType()).thenReturn(EntityType.WIND_CHARGE);
+        var outer = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(outer.getEntity()).thenReturn(triggerSource);
+        Mockito.when(outer.getLocation()).thenReturn(new Location(world, 60.5, 64.5, 60.5));
+        Mockito.when(outer.getExplosionResult()).thenReturn(ExplosionResult.TRIGGER_BLOCK);
+        Mockito.when(outer.blockList()).thenReturn(new ArrayList<>(List.of(tnt)));
+        explosionListener.capture(outer);
+        explosionListener.finalizeEvent(outer);
+
+        var innerSource = PaperBlockEventTestSupport.block(
+            world, 4, 64, 4, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var innerState = PaperBlockEventTestSupport.state(
+            world, innerSource, 4, 64, 4, Blocks.RESPAWN_ANCHOR.defaultBlockState()
+        );
+        var inner = Mockito.mock(BlockExplodeEvent.class);
+        Mockito.when(inner.getExplodedBlockState()).thenReturn(innerState);
+        Mockito.when(inner.getExplosionResult()).thenReturn(ExplosionResult.DESTROY);
+        Mockito.when(inner.blockList()).thenReturn(new ArrayList<>(List.of(tnt)));
+        explosionListener.capture(inner);
+        explosionListener.finalizeEvent(inner);
+
+        var innerPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(innerPrime.getBlock()).thenReturn(tnt);
+        Mockito.when(innerPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        explosionListener.captureTntPrime(innerPrime);
+        tntListener.capture(innerPrime);
+        explosionListener.finalizeTntPrime(innerPrime);
+        tntListener.finalizeEvent(innerPrime);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(
+                    PaperExplosionBlockChangeListener.EVENT_TYPE
+                ))
+                .count()
+        );
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(
+                    PaperTntPrimeListener.EVENT_TYPE
+                ))
+                .count()
+        );
+        Assertions.assertEquals(0, explosionListener.inFlightCount());
     }
 
     @Test
