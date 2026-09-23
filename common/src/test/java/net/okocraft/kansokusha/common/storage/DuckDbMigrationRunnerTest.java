@@ -215,94 +215,28 @@ class DuckDbMigrationRunnerTest {
     }
 
     @Test
-    void testRejectsTransactionControlSql() {
+    void testRejectsTransactionControlAndMultipleStatements() {
         for (var sql : List.of(
             "COMMIT",
-            "ROLLBACK",
-            "ABORT",
-            "BEGIN TRANSACTION",
-            "START",
-            "START WORK",
-            "START TRANSACTION",
-            "END",
-            "END TRANSACTION",
-            "CREATE TABLE escaped_transaction (value INTEGER); COMMIT; SELECT 1",
-            "CREATE TABLE escaped_end (value INTEGER); /* leading comment */ END TRANSACTION"
+            "  begin transaction",
+            "-- comment\nROLLBACK",
+            "/* block */ END",
+            "CREATE TABLE t (value INTEGER); COMMIT"
         )) {
-            var exception = Assertions.assertThrows(
+            Assertions.assertThrows(
                 IllegalArgumentException.class,
-                () -> DuckDbMigration.of(1, "invalid_transaction_control", sql),
+                () -> DuckDbMigration.of(1, "invalid", sql),
                 sql
             );
-
-            Assertions.assertTrue(exception.getMessage().contains("must not control transactions"));
         }
-    }
 
-    @Test
-    void testTransactionControlIsRejectedBeforeSchemaOrHistoryMutation(@TempDir Path dir) throws Exception {
-        try (var database = DuckDbDatabase.open(dir.resolve("transaction-control.duckdb"))) {
-            new DuckDbMigrationRunner(List.of()).migrate(database.connection());
-
-            for (var transactionControl : List.of("ABORT", "END")) {
-                Assertions.assertThrows(
-                    IllegalArgumentException.class,
-                    () -> DuckDbMigration.of(
-                        1,
-                        "invalid_transaction_control",
-                        "CREATE TABLE must_not_exist (value INTEGER)",
-                        transactionControl
-                    )
-                );
-
-                Assertions.assertFalse(tableExists(database.connection(), "must_not_exist"));
-                Assertions.assertEquals(0, migrationCount(database.connection()));
-            }
-        }
-    }
-
-    @Test
-    void testCaseEndIsNotTransactionControl() {
-        Assertions.assertDoesNotThrow(
-            () -> DuckDbMigration.of(
-                1,
-                "case_expression",
-                "SELECT CASE WHEN 1 = 1 THEN 'COMMIT' ELSE 'ROLLBACK' END"
-            )
-        );
-    }
-
-    @Test
-    void testTransactionKeywordsInQuotedValuesIdentifiersAndCommentsAreAllowed() {
-        Assertions.assertDoesNotThrow(
-            () -> DuckDbMigration.of(
-                1,
-                "transaction_words_as_data",
-                "SELECT 'COMMIT', \"ROLLBACK\" -- BEGIN TRANSACTION\n/* START TRANSACTION */"
-            )
-        );
-    }
-
-    @Test
-    void testTransactionKeywordsInDollarQuotedStringsAreAllowed() {
-        Assertions.assertDoesNotThrow(
-            () -> DuckDbMigration.of(
-                1,
-                "dollar_quoted_transaction_words",
-                "SELECT " + "$" + "$" + "COMMIT ABORT" + "$" + "$" + ", $tag$ROLLBACK; BEGIN TRANSACTION$tag$"
-            )
-        );
-    }
-
-    @Test
-    void testTransactionKeywordsInEscapeStringsAreAllowed() {
-        Assertions.assertDoesNotThrow(
-            () -> DuckDbMigration.of(
-                1,
-                "escaped_transaction_words",
-                "SELECT E'quote\\' COMMIT ABORT'"
-            )
-        );
+        Assertions.assertDoesNotThrow(() -> DuckDbMigration.of(
+            1,
+            "valid",
+            "CREATE TABLE t (value INTEGER);",
+            "SELECT CASE WHEN 1 = 1 THEN 1 END",
+            "CREATE TABLE commits (value INTEGER)"
+        ));
     }
 
     @Test

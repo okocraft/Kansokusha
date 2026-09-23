@@ -16,7 +16,7 @@ class DuckDbMigrationsTest {
     void testInitialSchemaMatchesV1Contract(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("schema.duckdb"))) {
             var connection = database.connection();
-            DuckDbMigrations.migrate(connection);
+            DuckDbMigrations.migrate(database);
 
             Assertions.assertEquals("initial_v1_schema", migrationName(connection, 1));
 
@@ -50,7 +50,7 @@ class DuckDbMigrationsTest {
     void testMetadataIdentityAndWorldScope(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("metadata.duckdb"))) {
             var connection = database.connection();
-            DuckDbMigrations.migrate(connection);
+            DuckDbMigrations.migrate(database);
 
             execute(connection, "INSERT INTO event_types (event_type_key) VALUES ('example:event')");
             var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");
@@ -111,7 +111,7 @@ class DuckDbMigrationsTest {
     void testMetadataConstraintsRejectInvalidRows(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("metadata-constraints.duckdb"))) {
             var connection = database.connection();
-            DuckDbMigrations.migrate(connection);
+            DuckDbMigrations.migrate(database);
 
             execute(connection, "INSERT INTO event_types (event_type_key) VALUES ('example:event')");
             var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");
@@ -184,7 +184,7 @@ class DuckDbMigrationsTest {
     void testEventOptionalFieldsAndLocationConstraint(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("events.duckdb"))) {
             var connection = database.connection();
-            DuckDbMigrations.migrate(connection);
+            DuckDbMigrations.migrate(database);
 
             execute(connection, "INSERT INTO event_types (event_type_key) VALUES ('example:event')");
             var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");

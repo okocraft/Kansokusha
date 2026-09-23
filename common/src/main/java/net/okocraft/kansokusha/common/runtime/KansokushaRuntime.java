@@ -170,7 +170,7 @@ public final class KansokushaRuntime implements AutoCloseable {
         }
         return switch (this.writer.state()) {
             case FAILED -> State.FAILED;
-            case DRAINING, STOPPING, STOPPED -> State.DRAINING;
+            case DRAINING, STOPPED -> State.DRAINING;
             case NEW, RUNNING -> State.RUNNING;
         };
     }

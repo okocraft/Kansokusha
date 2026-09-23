@@ -18,14 +18,7 @@ Kansokusha (観測者) is a plugin for Minecraft that logs player actions.
 Platform-specific jars such as `Kansokusha-Paper-x.x.x.jar` and
 `Kansokusha-Velocity-x.x.x.jar` are written to the `build/libs` directory.
 
-For the complete v1 verification sequence, including unit tests, packaged integration
-checks, and final artifact inspection, run:
-
-```shell
-./gradlew clean verifyV1
-```
-
-See `docs/verification/v1.md` for the verification scope and CI behavior.
+`build` also runs the unit tests and the packaged Paper and Velocity integration checks.
 
 ### Run a Paper server for debugging
 
@@ -49,16 +42,6 @@ This verification starts a real Velocity proxy with the shaded Kansokusha artifa
 the external API fixture, submits a fixture event through the public API, performs a
 normal proxy shutdown, then reopens the instance-local DuckDB file using the driver
 contained in the packaged artifact and verifies the flushed event.
-
-### Measure ingestion and resource usage
-
-```shell
-./gradlew :kansokusha-common:measureThroughput
-./gradlew :kansokusha-common:measureBoundedBuffer
-```
-
-See `docs/throughput-measurement.md` for parameters, measurement boundaries,
-resource metrics, and the bounded-buffer scenario.
 
 ### Reload retention policies
 
