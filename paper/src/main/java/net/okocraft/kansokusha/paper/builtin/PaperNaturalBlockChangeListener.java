@@ -237,10 +237,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             return;
         }
 
-        var deferred = new DeferredStructureGrow(
-            changedBlocks(event.getBlocks()),
-            snapshots
-        );
+        var deferred = new DeferredStructureGrow(event.getBlocks(), snapshots);
         synchronized (this.inFlight) {
             this.deferredStructureGrows.add(deferred);
         }
@@ -253,10 +250,10 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     @EventHandler(priority = EventPriority.MONITOR)
     public void discardFertilizedStructureGrow(BlockFertilizeEvent event) {
         Objects.requireNonNull(event, "event");
-        var changedBlocks = changedBlocks(event.getBlocks());
+        var fertilizedBlocks = event.getBlocks();
         synchronized (this.inFlight) {
             for (int i = this.deferredStructureGrows.size() - 1; i >= 0; i--) {
-                if (this.deferredStructureGrows.get(i).changedBlocks().equals(changedBlocks)) {
+                if (this.deferredStructureGrows.get(i).changedStates() == fertilizedBlocks) {
                     this.deferredStructureGrows.remove(i);
                     return;
                 }
@@ -364,17 +361,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
     }
 
-    private static List<ChangedBlock> changedBlocks(List<BlockState> states) {
-        var result = new ArrayList<ChangedBlock>(states.size());
-        for (var state : states) {
-            result.add(new ChangedBlock(
-                PaperKansokusha.key(state.getWorld().getKey()),
-                new BlockPosition(state.getX(), state.getY(), state.getZ())
-            ));
-        }
-        return List.copyOf(result);
-    }
-
     private static void scheduleNextTick(Location location, Runnable task) {
         var plugin = JavaPlugin.getProvidingPlugin(PaperNaturalBlockChangeListener.class);
         Bukkit.getRegionScheduler().run(plugin, location, ignored -> task.run());
@@ -384,11 +370,8 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         return new BlockPosition(block.getX(), block.getY(), block.getZ());
     }
 
-    private record ChangedBlock(Key worldKey, BlockPosition position) {
-    }
-
     private record DeferredStructureGrow(
-        List<ChangedBlock> changedBlocks,
+        List<BlockState> changedStates,
         List<Snapshot> snapshots
     ) {
     }
