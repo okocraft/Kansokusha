@@ -386,7 +386,6 @@ class AsyncBatchWriterServiceTest {
         service.drainAndStop();
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
         Assertions.assertEquals(BoundedEventIntake.State.CLOSED, intake.state());
         Assertions.assertEquals(1, reports.get());
         Assertions.assertSame(failure, reported.get());
@@ -418,7 +417,6 @@ class AsyncBatchWriterServiceTest {
         Assertions.assertTrue(reportedOnce.await(2, TimeUnit.SECONDS));
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
         Assertions.assertEquals(BoundedEventIntake.State.FAILED, intake.state());
         Assertions.assertEquals(1, reportCount.get());
         Assertions.assertSame(failure, reportedFailure.get());
@@ -455,7 +453,6 @@ class AsyncBatchWriterServiceTest {
         service.drainAndStop();
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(pipelineFailure, service.failureCause().orElseThrow());
         Assertions.assertEquals(List.of(reportingFailure), List.of(pipelineFailure.getSuppressed()));
     }
 
@@ -464,12 +461,13 @@ class AsyncBatchWriterServiceTest {
         var intake = intake(1);
         submit(intake, 1);
         var failure = new IllegalStateException("unchecked writer failure");
+        var reported = new AtomicReference<Throwable>();
         var service = new AsyncBatchWriterService(
             intake,
             events -> {
                 throw failure;
             },
-            NOOP_REPORTER,
+            reported::set,
             1,
             Duration.ofSeconds(1)
         );
@@ -478,7 +476,7 @@ class AsyncBatchWriterServiceTest {
         service.drainAndStop();
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
+        Assertions.assertSame(failure, reported.get());
     }
 
     @Test
@@ -486,12 +484,13 @@ class AsyncBatchWriterServiceTest {
         var intake = intake(1);
         submit(intake, 1);
         var failure = new AssertionError("fatal writer failure");
+        var reported = new AtomicReference<Throwable>();
         var service = new AsyncBatchWriterService(
             intake,
             events -> {
                 throw failure;
             },
-            NOOP_REPORTER,
+            reported::set,
             1,
             Duration.ofSeconds(1)
         );
@@ -500,7 +499,7 @@ class AsyncBatchWriterServiceTest {
         service.drainAndStop();
 
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
+        Assertions.assertSame(failure, reported.get());
     }
 
     @Test
@@ -529,7 +528,6 @@ class AsyncBatchWriterServiceTest {
         Assertions.assertTrue(reporterReturned.await(2, TimeUnit.SECONDS));
         service.drainAndStop();
         Assertions.assertEquals(AsyncBatchWriterService.State.FAILED, service.state());
-        Assertions.assertSame(failure, service.failureCause().orElseThrow());
     }
 
     private static BoundedEventIntake intake(int capacity) {

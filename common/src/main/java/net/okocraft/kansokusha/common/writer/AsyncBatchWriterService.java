@@ -12,7 +12,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @ApiStatus.Internal
@@ -29,8 +28,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
-    @Nullable
-    private volatile Throwable failureCause;
     @Nullable
     private Thread worker;
 
@@ -144,10 +141,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         return this.state;
     }
 
-    public Optional<Throwable> failureCause() {
-        return Optional.ofNullable(this.failureCause);
-    }
-
     private Thread newWorker() {
         return Thread.ofPlatform()
             .name("kansokusha-event-writer")
@@ -253,7 +246,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         this.intake.fail();
 
         synchronized (this.lifecycleMonitor) {
-            this.failureCause = failure;
             this.state = State.FAILED;
         }
 
