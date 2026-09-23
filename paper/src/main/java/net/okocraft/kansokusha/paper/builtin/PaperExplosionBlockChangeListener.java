@@ -198,33 +198,13 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
             return;
         }
 
-        var rawCounts = rawCounts(capture, finalBlocks);
-        var uniqueBlocks = uniqueFinalBlocks(capture, finalBlocks);
-
         if (capture.enderDragon() && yield != 0.0F) {
-            var candidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
-            var tntExplodes = Boolean.TRUE.equals(
-                capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
-            );
-            for (var entry : uniqueBlocks.entrySet()) {
-                var key = entry.getKey();
-                var liveBlock = normalizedBlock(capture, entry.getValue());
-                if (liveBlock.getType().isAir()) {
-                    continue;
-                }
-                var submission = submission(capture, key, preState(capture, key, liveBlock));
-                candidates.add(PaperExplosionTntCorrelation.candidate(
-                    capture.worldKey(),
-                    key.position(),
-                    rawCounts.getOrDefault(key, 1),
-                    submission,
-                    liveBlock.getType() == Material.TNT && tntExplodes
-                ));
-            }
-            PaperExplosionTntCorrelation.beginLegacyDragon(this.api, candidates);
+            beginDragonLegacyCorrelation(capture, finalBlocks);
             return;
         }
 
+        var rawCounts = rawCounts(capture, finalBlocks);
+        var uniqueBlocks = uniqueFinalBlocks(capture, finalBlocks);
         var modernCandidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
         var tntExplodes = Boolean.TRUE.equals(
             capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
@@ -255,6 +235,50 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
             this.api.submit(submission);
         }
         PaperExplosionTntCorrelation.beginModernDestroy(this.api, modernCandidates);
+    }
+
+    private void beginDragonLegacyCorrelation(
+        Capture capture,
+        List<Block> finalBlocks
+    ) {
+        var candidates = new ArrayList<PaperExplosionTntCorrelation.Candidate>();
+        var tntExplodes = Boolean.TRUE.equals(
+            capture.world().getGameRuleValue(GameRules.TNT_EXPLODES)
+        );
+        var submissions = new LinkedHashMap<BlockKey, EventSubmission>();
+
+        // EnderDragon's non-zero-yield path is different from ServerExplosion: Paper reads
+        // type/state from each raw list entry, but applies wasExploded/removeBlock at the
+        // same coordinates in the dragon's world. Preserve that raw entry order here.
+        for (var listedBlock : List.copyOf(finalBlocks)) {
+            var listedType = listedBlock.getType();
+            if (listedType.isAir()) {
+                continue;
+            }
+
+            var key = new BlockKey(capture.worldKey(), position(listedBlock));
+            var liveBlock = normalizedBlock(capture, listedBlock);
+            EventSubmission submission = null;
+            if (!liveBlock.getType().isAir()) {
+                submission = submissions.computeIfAbsent(
+                    key,
+                    ignored -> submission(
+                        capture,
+                        key,
+                        preState(capture, key, liveBlock)
+                    )
+                );
+            }
+
+            candidates.add(PaperExplosionTntCorrelation.candidate(
+                capture.worldKey(),
+                key.position(),
+                1,
+                submission,
+                listedType == Material.TNT && tntExplodes
+            ));
+        }
+        PaperExplosionTntCorrelation.beginLegacyDragon(this.api, candidates);
     }
 
     private void beginTriggerCorrelation(Capture capture, List<Block> finalBlocks) {

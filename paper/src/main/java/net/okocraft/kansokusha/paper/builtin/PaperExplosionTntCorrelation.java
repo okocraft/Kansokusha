@@ -13,9 +13,11 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.WeakHashMap;
 
@@ -175,23 +177,18 @@ final class PaperExplosionTntCorrelation {
 
     private static final class Operation {
         private final OperationKind kind;
-        private final Map<BlockKey, Item> items = new HashMap<>();
+        private final List<Item> items = new ArrayList<>();
+        private final Set<BlockKey> submittedBlocks = new HashSet<>();
 
         private Operation(OperationKind kind, List<Candidate> candidates) {
             this.kind = kind;
             for (var candidate : candidates) {
-                var item = new Item(candidate);
-                var previous = this.items.put(item.key, item);
-                if (previous != null) {
-                    throw new IllegalArgumentException(
-                        "Duplicate explosion correlation candidate: " + item.key
-                    );
-                }
+                this.items.add(new Item(candidate));
             }
         }
     }
 
-    private record Binding(Operation operation, Item item) {
+    private record Binding(Operation operation, Item item, boolean targetPresent) {
     }
 
     private record Finalization(Decision decision, @Nullable EventSubmission submission) {
@@ -229,7 +226,7 @@ final class PaperExplosionTntCorrelation {
             if (this.modernBindings.containsKey(event)) {
                 return;
             }
-            var binding = findBinding(event.getBlock(), false);
+            var binding = findBinding(event.getBlock(), false, true);
             if (binding != null) {
                 this.modernBindings.put(event, binding);
             }
@@ -241,7 +238,11 @@ final class PaperExplosionTntCorrelation {
         ) {
             var binding = this.legacyBindings.get(event);
             if (binding == null) {
-                binding = findBinding(event.getBlock(), true);
+                binding = findBinding(
+                    event.getBlock(),
+                    true,
+                    !event.getBlock().getType().isAir()
+                );
                 if (binding != null) {
                     this.legacyBindings.put(event, binding);
                 }
@@ -300,7 +301,11 @@ final class PaperExplosionTntCorrelation {
             return result;
         }
 
-        private @Nullable Binding findBinding(Block block, boolean legacy) {
+        private @Nullable Binding findBinding(
+            Block block,
+            boolean legacy,
+            boolean targetPresent
+        ) {
             var stack = this.stacks.get(Thread.currentThread());
             if (stack == null) {
                 return null;
@@ -319,9 +324,14 @@ final class PaperExplosionTntCorrelation {
                 ) {
                     continue;
                 }
-                var item = operation.items.get(key);
-                if (item != null && item.active && item.remaining > 0) {
-                    return new Binding(operation, item);
+                for (var item : operation.items) {
+                    if (
+                        item.key.equals(key)
+                            && item.active
+                            && item.remaining > 0
+                    ) {
+                        return new Binding(operation, item, targetPresent);
+                    }
                 }
             }
             return null;
@@ -357,11 +367,20 @@ final class PaperExplosionTntCorrelation {
                 return new Finalization(Decision.TRACKED_NO_PRIME, null);
             }
 
-            var submission = item.submission;
-            var recordTntPrime = item.recordTntPrime;
             var key = item.key;
+            var recordTntPrime = item.recordTntPrime;
+            EventSubmission submission = null;
+            if (
+                binding.targetPresent()
+                    && item.submission != null
+                    && operation.submittedBlocks.add(key)
+            ) {
+                submission = item.submission;
+            }
             deactivate(operation, item);
-            invalidateOtherOperations(Thread.currentThread(), operation, key);
+            if (binding.targetPresent()) {
+                invalidateOtherOperations(Thread.currentThread(), operation, key);
+            }
             prune(Thread.currentThread());
             return new Finalization(
                 recordTntPrime ? Decision.TRACKED_PRIME : Decision.TRACKED_NO_PRIME,
@@ -371,7 +390,7 @@ final class PaperExplosionTntCorrelation {
 
         private static void deactivate(Operation operation, Item item) {
             item.active = false;
-            operation.items.remove(item.key);
+            operation.items.remove(item);
         }
 
         private void invalidateOtherOperations(
@@ -387,10 +406,13 @@ final class PaperExplosionTntCorrelation {
                 if (operation == acceptedOperation) {
                     continue;
                 }
-                var item = operation.items.remove(changedBlock);
-                if (item != null) {
-                    item.active = false;
-                }
+                operation.items.removeIf(item -> {
+                    if (item.key.equals(changedBlock)) {
+                        item.active = false;
+                        return true;
+                    }
+                    return false;
+                });
             }
         }
 
