@@ -53,8 +53,6 @@ class KansokushaRuntimeTest {
         var proxy = KansokushaRuntime.start(proxyDir, (message, failure) -> failures.add(failure));
 
         try (paper; proxy) {
-            Assertions.assertEquals(KansokushaRuntime.State.RUNNING, paper.state());
-            Assertions.assertEquals(Optional.empty(), paper.failureCause());
             Assertions.assertEquals(Optional.of(PAPER_SERVER), paper.api().localServerKey());
             Assertions.assertEquals(Optional.empty(), proxy.api().localServerKey());
 
@@ -64,8 +62,6 @@ class KansokushaRuntimeTest {
             Assertions.assertEquals(SubmissionOutcome.ACCEPTED, proxy.api().submit(submission(PROXY_SERVER, 2)));
         }
 
-        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, paper.state());
-        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, proxy.state());
         Assertions.assertTrue(failures.isEmpty(), failures::toString);
 
         var paperDatabase = paperDir.resolve(KansokushaRuntime.DATABASE_FILENAME);
@@ -147,11 +143,11 @@ class KansokushaRuntimeTest {
 
             try {
                 var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-                while (runtime.state() != KansokushaRuntime.State.DRAINING && System.nanoTime() < deadline) {
+                while (intake.state() != BoundedEventIntake.State.DRAINING && System.nanoTime() < deadline) {
                     Thread.onSpinWait();
                 }
 
-                Assertions.assertEquals(KansokushaRuntime.State.DRAINING, runtime.state());
+                Assertions.assertEquals(BoundedEventIntake.State.DRAINING, intake.state());
                 Assertions.assertFalse(close.isDone());
                 releaseAccept.countDown();
                 Assertions.assertEquals(SubmissionOutcome.CLOSED, submit.get(2, TimeUnit.SECONDS));
@@ -162,7 +158,7 @@ class KansokushaRuntimeTest {
             }
         }
 
-        Assertions.assertEquals(KansokushaRuntime.State.CLOSED, runtime.state());
+        Assertions.assertEquals(AsyncBatchWriterService.State.STOPPED, writer.state());
     }
 
     @Test

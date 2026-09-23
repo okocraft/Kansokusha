@@ -65,7 +65,6 @@ class KansokushaRuntimeReloadTest {
                 IOException.class,
                 runtime::reloadRetentionPolicies
             );
-            Assertions.assertEquals(KansokushaRuntime.State.RUNNING, runtime.state());
             Assertions.assertEquals(
                 SubmissionOutcome.ACCEPTED,
                 runtime.api().submit(submission(3))

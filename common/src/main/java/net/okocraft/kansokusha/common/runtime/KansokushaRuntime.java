@@ -38,7 +38,6 @@ public final class KansokushaRuntime implements AutoCloseable {
     private final DuckDbDatabase database;
     private final ConfigurationReloader configurationReloader;
     private final AtomicBoolean closeStarted = new AtomicBoolean();
-    private volatile boolean closed;
 
     KansokushaRuntime(
         DefaultKansokushaApi api,
@@ -164,21 +163,6 @@ public final class KansokushaRuntime implements AutoCloseable {
         return this.api;
     }
 
-    public State state() {
-        if (this.closed) {
-            return State.CLOSED;
-        }
-        return switch (this.writer.state()) {
-            case FAILED -> State.FAILED;
-            case DRAINING, STOPPED -> State.DRAINING;
-            case NEW, RUNNING -> State.RUNNING;
-        };
-    }
-
-    public Optional<Throwable> failureCause() {
-        return this.writer.failureCause();
-    }
-
     public void reloadRetentionPolicies() throws IOException {
         if (this.closeStarted.get()) {
             throw new IllegalStateException(
@@ -214,8 +198,6 @@ public final class KansokushaRuntime implements AutoCloseable {
             this.database.close();
         } catch (SQLException | RuntimeException | Error e) {
             failure = suppress(failure, e);
-        } finally {
-            this.closed = true;
         }
 
         if (failure instanceof SQLException sqlException) {
@@ -290,12 +272,5 @@ public final class KansokushaRuntime implements AutoCloseable {
     private interface ConfigurationReloader {
 
         void reload() throws IOException;
-    }
-
-    public enum State {
-        RUNNING,
-        DRAINING,
-        FAILED,
-        CLOSED
     }
 }
