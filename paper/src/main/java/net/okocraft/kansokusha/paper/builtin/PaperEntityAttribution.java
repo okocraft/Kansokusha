@@ -76,9 +76,6 @@ record PaperEntityAttribution(
         if (entity instanceof Tameable tameable && ownerId == null) {
             ownerId = tameable.getOwnerUniqueId();
         }
-        if (subject == null && ownerId != null) {
-            subject = new PlayerSubject(ownerId);
-        }
 
         return new PaperEntityAttribution(
             entityId,
