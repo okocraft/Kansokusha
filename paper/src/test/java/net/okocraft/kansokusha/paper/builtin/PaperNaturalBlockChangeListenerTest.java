@@ -118,13 +118,13 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
-    void testAcceptedScaffoldingFallSubmitsFadeAfterEntityChange() throws Exception {
-        assertScaffoldingFallFinalization(false);
+    void testAcceptedScaffoldingFallIsReservedForEntityBlockChange() throws Exception {
+        assertScaffoldingFallReservedForEntityBlockChange(false);
     }
 
     @Test
-    void testCancelledScaffoldingFallDropsFade() throws Exception {
-        assertScaffoldingFallFinalization(true);
+    void testCancelledScaffoldingFallDoesNotLeakNaturalChange() throws Exception {
+        assertScaffoldingFallReservedForEntityBlockChange(true);
     }
 
     @Test
@@ -522,7 +522,7 @@ class PaperNaturalBlockChangeListenerTest {
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
-    private static void assertScaffoldingFallFinalization(boolean cancelled) throws Exception {
+    private static void assertScaffoldingFallReservedForEntityBlockChange(boolean cancelled) throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -559,22 +559,7 @@ class PaperNaturalBlockChangeListenerTest {
         listener.finalizeScaffoldingFall(entityChange);
 
         Assertions.assertEquals(0, listener.inFlightCount());
-        if (cancelled) {
-            Assertions.assertTrue(api.submissions.isEmpty());
-            return;
-        }
-
-        var submission = api.submissions.remove();
-        Assertions.assertEquals(
-            naturalPayload(
-                scaffoldingState,
-                Blocks.AIR.defaultBlockState(),
-                "block_fade",
-                null,
-                null
-            ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
-        );
+        Assertions.assertTrue(api.submissions.isEmpty());
     }
 
     private static void assertDispenserBonemealIsReservedForBlockFertilize(boolean cancelled) {

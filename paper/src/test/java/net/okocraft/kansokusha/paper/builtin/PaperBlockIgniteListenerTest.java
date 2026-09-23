@@ -149,6 +149,7 @@ class PaperBlockIgniteListenerTest {
         deferred.remove().run();
 
         Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertNull(api.submissions.element().subject());
         Assertions.assertEquals(0, listener.inFlightCount());
 
         var laterPlacement = Mockito.mock(BlockPlaceEvent.class);
@@ -158,6 +159,70 @@ class PaperBlockIgniteListenerTest {
         listener.finalizePlacement(laterPlacement);
 
         Assertions.assertEquals(1, api.submissions.size());
+    }
+
+    @Test
+    void testPlayerFireChargeGetsSubjectOnlyAfterAcceptedPlacement() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperBlockIgniteListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var target = PaperBlockEventTestSupport.block(
+            world, 15, 65, 15, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var player = player();
+        var ignite = Mockito.mock(BlockIgniteEvent.class);
+        Mockito.when(ignite.getBlock()).thenReturn(target);
+        Mockito.when(ignite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.FIREBALL);
+        Mockito.when(ignite.getIgnitingEntity()).thenReturn(player);
+        Mockito.when(ignite.getPlayer()).thenReturn(player);
+
+        listener.capture(ignite);
+        listener.finalizeEvent(ignite);
+
+        var placement = Mockito.mock(BlockPlaceEvent.class);
+        Mockito.when(placement.getPlayer()).thenReturn(player);
+        Mockito.when(placement.getBlockPlaced()).thenReturn(target);
+        Mockito.when(placement.canBuild()).thenReturn(true);
+        listener.finalizePlacement(placement);
+
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        deferred.remove().run();
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testPlayerOwnedArrowHasNoPlayerSubject() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var target = PaperBlockEventTestSupport.block(
+            PaperBlockEventTestSupport.world(),
+            16,
+            65,
+            16,
+            Blocks.AIR.defaultBlockState(),
+            Material.AIR
+        );
+        var player = player();
+        var ignite = Mockito.mock(BlockIgniteEvent.class);
+        Mockito.when(ignite.getBlock()).thenReturn(target);
+        Mockito.when(ignite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.ARROW);
+        Mockito.when(ignite.getIgnitingEntity()).thenReturn(player);
+        Mockito.when(ignite.getPlayer()).thenReturn(player);
+
+        listener.capture(ignite);
+        listener.finalizeEvent(ignite);
+
+        var submission = api.submissions.remove();
+        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test

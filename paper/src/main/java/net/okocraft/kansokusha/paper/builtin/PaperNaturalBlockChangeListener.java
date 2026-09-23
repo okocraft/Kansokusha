@@ -158,7 +158,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             synchronized (this.inFlight) {
                 this.pendingScaffoldingFades
                     .computeIfAbsent(key, ignored -> new ArrayDeque<>())
-                    .addLast(new PendingScaffoldingFade(snapshot, capture.postState()));
+                    .addLast(new PendingScaffoldingFade(capture.postState()));
             }
             return;
         }
@@ -219,7 +219,8 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         if (pending == null || event.isCancelled()) {
             return;
         }
-        submitSnapshots(List.of(pending.snapshot()));
+
+        // Falling scaffolding source removal is canonically owned by EntityChangeBlockEvent (#117).
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -680,7 +681,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     }
 
     private record PendingScaffoldingFade(
-        Snapshot snapshot,
         BlockData postState
     ) {
     }
