@@ -90,7 +90,16 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             snapshot = this.inFlight.remove(event);
         }
-        if (snapshot == null || event.isCancelled()) {
+        if (snapshot == null) {
+            return;
+        }
+        if (
+            event.getCause() == TNTPrimeEvent.PrimeCause.EXPLOSION
+                && PaperTntPrimeSuppression.consumeExplosion(this.api, event.getBlock())
+        ) {
+            return;
+        }
+        if (event.isCancelled()) {
             return;
         }
 
@@ -126,6 +135,7 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
             this.inFlight.clear();
             this.pendingFire.clear();
         }
+        PaperTntPrimeSuppression.clear(this.api);
     }
 
     int inFlightCount() {

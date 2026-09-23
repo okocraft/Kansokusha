@@ -15,33 +15,37 @@ import java.util.Objects;
 @NotNullByDefault
 final class PaperTntTransitionTracker<T> {
 
-    private final Map<BlockKey, ArrayDeque<T>> pending = new HashMap<>();
+    private final Map<CorrelationKey, ArrayDeque<T>> pending = new HashMap<>();
 
     void add(Key worldKey, BlockPosition position, T value) {
         Objects.requireNonNull(worldKey, "worldKey");
         Objects.requireNonNull(position, "position");
         Objects.requireNonNull(value, "value");
+        var key = new CorrelationKey(worldKey, position, Thread.currentThread());
         synchronized (this.pending) {
-            this.pending.computeIfAbsent(
-                new BlockKey(worldKey, position),
-                ignored -> new ArrayDeque<>()
-            ).addLast(value);
+            this.pending.computeIfAbsent(key, ignored -> new ArrayDeque<>()).addLast(value);
         }
     }
 
     @Nullable T remove(Block block) {
         Objects.requireNonNull(block, "block");
-        var key = new BlockKey(
+        return remove(
             PaperKansokusha.key(block.getWorld().getKey()),
             new BlockPosition(block.getX(), block.getY(), block.getZ())
         );
+    }
+
+    @Nullable T remove(Key worldKey, BlockPosition position) {
+        Objects.requireNonNull(worldKey, "worldKey");
+        Objects.requireNonNull(position, "position");
+        var key = new CorrelationKey(worldKey, position, Thread.currentThread());
         synchronized (this.pending) {
-            var queue = this.pending.get(key);
-            if (queue == null) {
+            var stack = this.pending.get(key);
+            if (stack == null) {
                 return null;
             }
-            var value = queue.pollFirst();
-            if (queue.isEmpty()) {
+            var value = stack.pollLast();
+            if (stack.isEmpty()) {
                 this.pending.remove(key);
             }
             return value;
@@ -57,13 +61,13 @@ final class PaperTntTransitionTracker<T> {
     int size() {
         synchronized (this.pending) {
             var size = 0;
-            for (var queue : this.pending.values()) {
-                size += queue.size();
+            for (var stack : this.pending.values()) {
+                size += stack.size();
             }
             return size;
         }
     }
 
-    private record BlockKey(Key worldKey, BlockPosition position) {
+    private record CorrelationKey(Key worldKey, BlockPosition position, Thread thread) {
     }
 }
