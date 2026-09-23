@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
@@ -22,10 +21,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -73,49 +70,24 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
     public void capture(BlockFertilizeEvent event) {
         Objects.requireNonNull(event, "event");
 
-        var occurredAt = this.clock.instant();
-        var sourcePosition = position(event.getBlock());
-        var player = event.getPlayer();
-        var subject = player == null ? null : new PlayerSubject(player.getUniqueId());
-        var transitions = new LinkedHashMap<BlockKey, Transition>();
-
+        var preStates = new LinkedHashMap<BlockKey, BlockData>();
         for (var state : event.getBlocks()) {
-            var worldKey = PaperKansokusha.key(state.getWorld().getKey());
-            var changedPosition = position(state);
-            var key = new BlockKey(worldKey, changedPosition);
-            var existing = transitions.get(key);
-            var preState = existing == null
-                ? state.getBlock().getBlockData().clone()
-                : existing.preState();
-            transitions.put(
-                key,
-                new Transition(
-                    worldKey,
-                    changedPosition,
-                    preState,
-                    state.getBlockData().clone()
-                )
+            preStates.putIfAbsent(
+                blockKey(state),
+                state.getBlock().getBlockData().clone()
             );
         }
 
-        var snapshots = new ArrayList<Snapshot>(transitions.size());
-        for (var transition : transitions.values()) {
-            snapshots.add(new Snapshot(
-                transition.worldKey(),
-                transition.position(),
-                PaperBlockEventPayloadCodec.encodeFertilize(
-                    transition.preState(),
-                    transition.postState(),
-                    SOURCE_EVENT,
-                    sourcePosition
-                )
-            ));
-        }
-
+        var player = event.getPlayer();
         synchronized (this.inFlight) {
             this.inFlight.put(
                 event,
-                new Capture(occurredAt, subject, List.copyOf(snapshots))
+                new Capture(
+                    this.clock.instant(),
+                    player == null ? null : new PlayerSubject(player.getUniqueId()),
+                    position(event.getBlock()),
+                    Map.copyOf(preStates)
+                )
             );
         }
     }
@@ -133,16 +105,37 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
             return;
         }
 
-        for (var snapshot : capture.snapshots()) {
+        var finalStatesByBlock = new LinkedHashMap<BlockKey, BlockState>();
+        for (var state : event.getBlocks()) {
+            finalStatesByBlock.put(blockKey(state), state);
+        }
+
+        for (var entry : finalStatesByBlock.entrySet()) {
+            var key = entry.getKey();
+            var state = entry.getValue();
+            var preState = capture.preStates().get(key);
+            if (preState == null) {
+                preState = state.getBlock().getBlockData().clone();
+            }
+            var postState = state.getBlockData().clone();
+            if (sameBlockData(preState, postState)) {
+                continue;
+            }
+
             this.api.submit(new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 capture.occurredAt(),
                 this.serverKey,
-                snapshot.worldKey(),
-                snapshot.position(),
+                key.worldKey(),
+                key.position(),
                 capture.subject(),
-                snapshot.payload()
+                PaperBlockEventPayloadCodec.encodeFertilize(
+                    preState,
+                    postState,
+                    SOURCE_EVENT,
+                    capture.sourcePosition()
+                )
             ));
         }
     }
@@ -173,6 +166,17 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
         }
     }
 
+    private static BlockKey blockKey(BlockState state) {
+        return new BlockKey(
+            PaperKansokusha.key(state.getWorld().getKey()),
+            position(state)
+        );
+    }
+
+    private static boolean sameBlockData(BlockData first, BlockData second) {
+        return first.getAsString().equals(second.getAsString());
+    }
+
     private static BlockPosition position(Block block) {
         return new BlockPosition(block.getX(), block.getY(), block.getZ());
     }
@@ -181,31 +185,17 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
         return new BlockPosition(state.getX(), state.getY(), state.getZ());
     }
 
-    private record BlockKey(
-        Key worldKey,
-        BlockPosition position
-    ) {
-    }
-
-    private record Transition(
-        Key worldKey,
-        BlockPosition position,
-        BlockData preState,
-        BlockData postState
-    ) {
-    }
-
     private record Capture(
         Instant occurredAt,
         @Nullable PlayerSubject subject,
-        List<Snapshot> snapshots
+        BlockPosition sourcePosition,
+        Map<BlockKey, BlockData> preStates
     ) {
     }
 
-    private record Snapshot(
+    private record BlockKey(
         Key worldKey,
-        BlockPosition position,
-        EventPayload payload
+        BlockPosition position
     ) {
     }
 }
