@@ -71,6 +71,62 @@ class PaperFertilizationEventRelationTest {
     }
 
     @Test
+    void testCocoaBonemealAcceptedListRemovalProducesNoStateChangeSubmission() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var clock = Clock.fixed(OCCURRED_AT, ZoneOffset.UTC);
+        var natural = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            clock,
+            (location, task) -> deferred.add(task)
+        );
+        var fertilizeListener = PaperBlockFertilizeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            clock
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var cocoa = PaperBlockEventTestSupport.block(
+            world, 18, 65, 18, Blocks.COCOA.defaultBlockState(), Material.COCOA
+        );
+        var grownState = PaperBlockEventTestSupport.state(
+            world,
+            cocoa,
+            18,
+            65,
+            18,
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                1
+            )
+        );
+        var grow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(grow.getBlock()).thenReturn(cocoa);
+        Mockito.when(grow.getNewState()).thenReturn(grownState);
+
+        natural.capture(grow);
+        natural.finalizeEvent(grow);
+
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        changedStates.add(grownState);
+        var fertilize = Mockito.mock(BlockFertilizeEvent.class);
+        Mockito.when(fertilize.getBlock()).thenReturn(cocoa);
+        Mockito.when(fertilize.getBlocks()).thenReturn(changedStates);
+
+        natural.capture(fertilize);
+        fertilizeListener.capture(fertilize);
+        changedStates.remove(grownState);
+        natural.discardFertilizedChanges(fertilize);
+        fertilizeListener.finalizeEvent(fertilize);
+        deferred.remove().run();
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, natural.inFlightCount());
+        Assertions.assertEquals(0, fertilizeListener.inFlightCount());
+    }
+
+    @Test
     void testCocoaBonemealGrowRemainsFertilizationOwnedAfterCancelledListRemoval() {
         assertCocoaBonemealGrowRemainsOwnedAfterListRemoval(true);
     }

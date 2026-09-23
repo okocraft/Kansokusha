@@ -92,6 +92,52 @@ final class PaperBlockEventPayloadCodec {
         return PaperPayloadNbtCodec.encode(payload);
     }
 
+    static EventPayload encodeSpongeAbsorb(
+        BlockData preState,
+        BlockPosition spongeOrigin
+    ) {
+        var payload = new CompoundTag();
+        payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
+        payload.put("sponge_origin", position(spongeOrigin));
+        return PaperPayloadNbtCodec.encode(payload);
+    }
+
+    static EventPayload encodeFertilize(
+        BlockData preState,
+        BlockData postState,
+        String sourceEvent,
+        BlockPosition sourcePosition
+    ) {
+        var payload = new CompoundTag();
+        payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
+        payload.put("post_state", PaperBlockStatePayloadCodec.blockState(postState));
+        payload.putString("source_event", Objects.requireNonNull(sourceEvent, "sourceEvent"));
+        payload.put("source", position(sourcePosition));
+        return PaperPayloadNbtCodec.encode(payload);
+    }
+
+    static EventPayload encodeCauldronLevelChange(
+        BlockData oldState,
+        BlockData newState,
+        String reason,
+        String actorKind,
+        @Nullable UUID entityId,
+        @Nullable String entityType
+    ) {
+        var payload = new CompoundTag();
+        payload.put("old_state", PaperBlockStatePayloadCodec.blockState(oldState));
+        payload.put("new_state", PaperBlockStatePayloadCodec.blockState(newState));
+        payload.putString("reason", Objects.requireNonNull(reason, "reason"));
+        payload.putString("actor_kind", Objects.requireNonNull(actorKind, "actorKind"));
+        if (entityId != null) {
+            payload.putString("actor_entity_uuid", entityId.toString());
+        }
+        if (entityType != null) {
+            payload.putString("actor_entity_type", entityType);
+        }
+        return PaperPayloadNbtCodec.encode(payload);
+    }
+
     private static EventPayload encodeNaturalChange(
         CompoundTag preState,
         CompoundTag postState,
