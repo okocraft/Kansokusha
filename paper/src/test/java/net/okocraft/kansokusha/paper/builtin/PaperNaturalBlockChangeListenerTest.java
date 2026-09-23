@@ -86,9 +86,15 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
-    void testFadeKeepsLowPriorityTargetStateWhenEventStateIsMutated() throws Exception {
+    void testFixedTargetFadeUsesStateActuallyAppliedAfterEventMutation() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = listener(api);
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
         var world = PaperBlockEventTestSupport.world();
         var block = PaperBlockEventTestSupport.block(
             world, 15, 70, 15, Blocks.ICE.defaultBlockState(), Material.ICE
@@ -104,6 +110,13 @@ class PaperNaturalBlockChangeListenerTest {
         Mockito.when(target.getBlockData()).thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
         listener.finalizeEvent(event);
 
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+        Assertions.assertEquals(1, deferred.size());
+
+        Mockito.when(block.getBlockData()).thenReturn(Blocks.WATER.defaultBlockState().asBlockData());
+        deferred.remove().run();
+
         var submission = api.submissions.remove();
         Assertions.assertEquals(
             naturalPayload(
@@ -115,6 +128,53 @@ class PaperNaturalBlockChangeListenerTest {
             ),
             PaperBlockStatePayloadCodec.decode(submission.payload())
         );
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testFireFadeUsesMutableEventStateActuallyAppliedByCaller() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 16, 70, 16, Blocks.FIRE.defaultBlockState(), Material.FIRE
+        );
+        var target = PaperBlockEventTestSupport.state(
+            world, block, 16, 70, 16, Blocks.AIR.defaultBlockState()
+        );
+        var event = Mockito.mock(BlockFadeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(target);
+
+        listener.capture(event);
+        Mockito.when(target.getBlockData()).thenReturn(Blocks.WATER.defaultBlockState().asBlockData());
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+        Assertions.assertEquals(1, deferred.size());
+
+        Mockito.when(block.getBlockData()).thenReturn(Blocks.WATER.defaultBlockState().asBlockData());
+        deferred.remove().run();
+
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            naturalPayload(
+                Blocks.FIRE.defaultBlockState(),
+                Blocks.WATER.defaultBlockState(),
+                "block_fade",
+                null,
+                null
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test

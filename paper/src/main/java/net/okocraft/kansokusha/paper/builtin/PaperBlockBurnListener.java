@@ -40,6 +40,8 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     private final Clock clock;
     private final Map<BlockBurnEvent, Snapshot> inFlight = new IdentityHashMap<>();
     private final Map<BlockKey, Snapshot> pendingTntBurns = new HashMap<>();
+    private final Map<com.destroystokyo.paper.event.block.TNTPrimeEvent, LegacyTntPrimeCapture>
+        legacyTntPrimeCaptures = new IdentityHashMap<>();
 
     private PaperBlockBurnListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -109,6 +111,21 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         removePendingTntBurn(event.getBlock());
     }
 
+    @EventHandler(priority = EventPriority.LOWEST)
+    @SuppressWarnings({"deprecation", "removal"})
+    public void captureTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
+            return;
+        }
+        synchronized (this.inFlight) {
+            this.legacyTntPrimeCaptures.put(
+                event,
+                new LegacyTntPrimeCapture(event.getBlock().getType() != Material.TNT)
+            );
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     @SuppressWarnings({"deprecation", "removal"})
     public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
@@ -116,8 +133,15 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
             return;
         }
+        LegacyTntPrimeCapture capture;
+        synchronized (this.inFlight) {
+            capture = this.legacyTntPrimeCaptures.remove(event);
+        }
         var snapshot = removePendingTntBurn(event.getBlock());
-        if (snapshot == null || event.isCancelled()) {
+        if (snapshot == null) {
+            return;
+        }
+        if (event.isCancelled() && (capture == null || !capture.alreadyBurned())) {
             return;
         }
         submit(snapshot);
@@ -128,12 +152,15 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         synchronized (this.inFlight) {
             this.inFlight.clear();
             this.pendingTntBurns.clear();
+            this.legacyTntPrimeCaptures.clear();
         }
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size() + this.pendingTntBurns.size();
+            return this.inFlight.size()
+                + this.pendingTntBurns.size()
+                + this.legacyTntPrimeCaptures.size();
         }
     }
 
@@ -180,6 +207,9 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     }
 
     private record BlockKey(Key worldKey, BlockPosition position) {
+    }
+
+    private record LegacyTntPrimeCapture(boolean alreadyBurned) {
     }
 
     private record Snapshot(

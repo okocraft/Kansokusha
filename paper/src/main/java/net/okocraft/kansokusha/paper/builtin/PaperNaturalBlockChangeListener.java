@@ -63,6 +63,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private final BiConsumer<Location, Runnable> nextTickExecutor;
     private final Map<Event, Capture> inFlight = new IdentityHashMap<>();
     private final List<DeferredChange> deferredChanges = new ArrayList<>();
+    private final List<DeferredFade> deferredFades = new ArrayList<>();
     private final Map<ScaffoldingFadeKey, ArrayDeque<PendingScaffoldingFade>> pendingScaffoldingFades =
         new HashMap<>();
 
@@ -117,25 +118,16 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         var block = event.getBlock();
         var preState = block.getBlockData().clone();
         var postState = event.getNewState().getBlockData().clone();
-        var snapshot = new Snapshot(
-            this.clock.instant(),
-            this.serverKey,
-            PaperKansokusha.key(block.getWorld().getKey()),
-            position(block),
-            PaperBlockEventPayloadCodec.encodeNaturalChange(
-                preState,
-                postState,
-                "block_fade",
-                null,
-                null
-            )
-        );
         put(
             event,
             new FadeCapture(
-                snapshot,
-                awaitsScaffoldingEntityChange(preState),
-                postState
+                this.clock.instant(),
+                this.serverKey,
+                PaperKansokusha.key(block.getWorld().getKey()),
+                position(block),
+                preState,
+                postState,
+                awaitsScaffoldingEntityChange(preState)
             )
         );
     }
@@ -149,11 +141,10 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
 
         if (capture.awaitsScaffoldingEntityChange()) {
-            var snapshot = capture.snapshot();
             var key = new ScaffoldingFadeKey(
                 Thread.currentThread(),
-                snapshot.worldKey(),
-                snapshot.position()
+                capture.worldKey(),
+                capture.position()
             );
             synchronized (this.inFlight) {
                 this.pendingScaffoldingFades
@@ -163,7 +154,13 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             return;
         }
 
-        submitSnapshots(List.of(capture.snapshot()));
+        var finalPostState = event.getNewState().getBlockData().clone();
+        if (sameBlockData(capture.postState(), finalPostState)) {
+            submitSnapshots(List.of(fadeSnapshot(capture, capture.postState())));
+            return;
+        }
+
+        deferFade(event.getBlock(), capture, finalPostState);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -446,6 +443,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         synchronized (this.inFlight) {
             this.inFlight.clear();
             this.deferredChanges.clear();
+            this.deferredFades.clear();
             this.pendingScaffoldingFades.clear();
         }
     }
@@ -456,7 +454,10 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             for (var queue : this.pendingScaffoldingFades.values()) {
                 scaffoldingFadeCount += queue.size();
             }
-            return this.inFlight.size() + this.deferredChanges.size() + scaffoldingFadeCount;
+            return this.inFlight.size()
+                + this.deferredChanges.size()
+                + this.deferredFades.size()
+                + scaffoldingFadeCount;
         }
     }
 
@@ -530,6 +531,54 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
                 finalPostState
             ),
             List.of(snapshot)
+        );
+    }
+
+    private void deferFade(Block block, FadeCapture capture, BlockData mutablePostState) {
+        var deferred = new DeferredFade(block, capture, mutablePostState);
+        synchronized (this.inFlight) {
+            this.deferredFades.add(deferred);
+        }
+        this.nextTickExecutor.accept(location(block), () -> finalizeDeferredFade(deferred));
+    }
+
+    private void finalizeDeferredFade(DeferredFade deferred) {
+        synchronized (this.inFlight) {
+            var found = false;
+            for (int i = 0; i < this.deferredFades.size(); i++) {
+                if (this.deferredFades.get(i) == deferred) {
+                    this.deferredFades.remove(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return;
+            }
+        }
+
+        var actualState = deferred.block().getBlockData();
+        var capture = deferred.capture();
+        if (sameBlockData(actualState, deferred.mutablePostState())) {
+            submitSnapshots(List.of(fadeSnapshot(capture, deferred.mutablePostState())));
+        } else if (sameBlockData(actualState, capture.postState())) {
+            submitSnapshots(List.of(fadeSnapshot(capture, capture.postState())));
+        }
+    }
+
+    private static Snapshot fadeSnapshot(FadeCapture capture, BlockData postState) {
+        return new Snapshot(
+            capture.occurredAt(),
+            capture.serverKey(),
+            capture.worldKey(),
+            capture.position(),
+            PaperBlockEventPayloadCodec.encodeNaturalChange(
+                capture.preState(),
+                postState,
+                "block_fade",
+                null,
+                null
+            )
         );
     }
 
@@ -642,9 +691,13 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     }
 
     private record FadeCapture(
-        Snapshot snapshot,
-        boolean awaitsScaffoldingEntityChange,
-        BlockData postState
+        Instant occurredAt,
+        Key serverKey,
+        Key worldKey,
+        BlockPosition position,
+        BlockData preState,
+        BlockData postState,
+        boolean awaitsScaffoldingEntityChange
     ) implements Capture {
     }
 
@@ -689,6 +742,13 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         BlockKey block,
         BlockData preState,
         BlockData postState
+    ) {
+    }
+
+    private record DeferredFade(
+        Block block,
+        FadeCapture capture,
+        BlockData mutablePostState
     ) {
     }
 

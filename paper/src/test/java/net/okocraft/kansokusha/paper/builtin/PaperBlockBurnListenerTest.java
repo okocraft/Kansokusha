@@ -164,6 +164,40 @@ class PaperBlockBurnListenerTest {
     }
 
     @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testCancelledPaperTntPrimeSubmitsWhenTntWasAlreadyReplacedByFire() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var burned = PaperBlockEventTestSupport.block(
+            world, 8, 70, 8, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var burn = Mockito.mock(BlockBurnEvent.class);
+        Mockito.when(burn.getBlock()).thenReturn(burned);
+        listener.capture(burn);
+        listener.finalizeEvent(burn);
+
+        var bukkitPrime = Mockito.mock(org.bukkit.event.block.TNTPrimeEvent.class);
+        Mockito.when(bukkitPrime.getBlock()).thenReturn(burned);
+        Mockito.when(bukkitPrime.getCause())
+            .thenReturn(org.bukkit.event.block.TNTPrimeEvent.PrimeCause.FIRE);
+        listener.finalizeTntPrime(bukkitPrime);
+
+        Mockito.when(burned.getType()).thenReturn(Material.FIRE);
+        var paperPrime = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(paperPrime.getBlock()).thenReturn(burned);
+        Mockito.when(paperPrime.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE);
+        Mockito.when(paperPrime.isCancelled()).thenReturn(true);
+
+        listener.captureTntPrime(paperPrime);
+        listener.finalizeTntPrime(paperPrime);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testCancelledBurnDropsSnapshot() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
