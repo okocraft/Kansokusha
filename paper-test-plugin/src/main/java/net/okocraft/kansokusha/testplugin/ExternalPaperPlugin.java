@@ -1,5 +1,18 @@
 package net.okocraft.kansokusha.testplugin;
 
+import com.mojang.authlib.GameProfile;
+import io.papermc.paper.event.block.PlayerShearBlockEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SweetBerryBushBlock;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
@@ -10,6 +23,12 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
+import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.PrintWriter;
@@ -19,6 +38,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 public final class ExternalPaperPlugin extends JavaPlugin {
 
@@ -33,6 +53,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
 
         try {
             var result = registerAndSubmit();
+            verifyBuiltInPlatformSemantics();
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> verifyAfterShutdown(result), "kansokusha-external-api-fixture")
             );
@@ -69,6 +90,74 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         }
 
         return new Result(api, definition, submission);
+    }
+
+    private void verifyBuiltInPlatformSemantics() {
+        var craftServer = (CraftServer) this.getServer();
+        var level = ((CraftWorld) Bukkit.getWorlds().getFirst()).getHandle();
+        var player = new ServerPlayer(
+            craftServer.getServer(),
+            level,
+            new GameProfile(
+                UUID.fromString("123e4567-e89b-12d3-a456-426614174001"),
+                "KansokushaFixture"
+            ),
+            ClientInformation.createDefault()
+        );
+        var probe = new PlatformEventProbe();
+        this.getServer().getPluginManager().registerEvents(probe, this);
+
+        var base = new BlockPos(128, 80, 128);
+        player.setPos(base.getX() + 0.5, base.getY(), base.getZ() + 0.5);
+
+        var breakPos = base;
+        level.setBlockAndUpdate(breakPos, Blocks.STONE.defaultBlockState());
+        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        var beforeBreak = probe.snapshot();
+        if (!player.gameMode.destroyBlock(breakPos)) {
+            throw new AssertionError("Fixture normal block break did not succeed.");
+        }
+        probe.assertDelta("normal break", beforeBreak, 1, 0, 0);
+
+        var harvestPos = base.offset(1, 0, 0);
+        level.setBlockAndUpdate(
+            harvestPos,
+            Blocks.SWEET_BERRY_BUSH.defaultBlockState()
+                .setValue(SweetBerryBushBlock.AGE, SweetBerryBushBlock.MAX_AGE)
+        );
+        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        var beforeHarvest = probe.snapshot();
+        player.gameMode.useItemOn(
+            player,
+            level,
+            ItemStack.EMPTY,
+            InteractionHand.MAIN_HAND,
+            hit(harvestPos)
+        );
+        probe.assertDelta("berry harvest", beforeHarvest, 0, 1, 0);
+
+        var shearPos = base.offset(2, 0, 0);
+        level.setBlockAndUpdate(shearPos, Blocks.PUMPKIN.defaultBlockState());
+        var shears = new ItemStack(Items.SHEARS);
+        player.setItemInHand(InteractionHand.MAIN_HAND, shears);
+        var beforeShear = probe.snapshot();
+        player.gameMode.useItemOn(
+            player,
+            level,
+            shears,
+            InteractionHand.MAIN_HAND,
+            hit(shearPos)
+        );
+        probe.assertDelta("pumpkin shear", beforeShear, 0, 0, 1);
+    }
+
+    private static BlockHitResult hit(BlockPos pos) {
+        return new BlockHitResult(
+            Vec3.atCenterOf(pos),
+            Direction.UP,
+            pos,
+            false
+        );
     }
 
     private void verifyAfterShutdown(Result result) {
@@ -109,5 +198,61 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         net.okocraft.kansokusha.api.event.EventTypeDefinition definition,
         EventSubmission submission
     ) {
+    }
+
+    private static final class PlatformEventProbe implements Listener {
+
+        private int blockBreak;
+        private int harvest;
+        private int shear;
+
+        @EventHandler
+        public void onBlockBreak(BlockBreakEvent event) {
+            this.blockBreak++;
+        }
+
+        @EventHandler
+        public void onHarvest(PlayerHarvestBlockEvent event) {
+            this.harvest++;
+        }
+
+        @EventHandler
+        public void onShear(PlayerShearBlockEvent event) {
+            this.shear++;
+        }
+
+        Snapshot snapshot() {
+            return new Snapshot(this.blockBreak, this.harvest, this.shear);
+        }
+
+        void assertDelta(
+            String action,
+            Snapshot before,
+            int expectedBlockBreak,
+            int expectedHarvest,
+            int expectedShear
+        ) {
+            var actualBlockBreak = this.blockBreak - before.blockBreak();
+            var actualHarvest = this.harvest - before.harvest();
+            var actualShear = this.shear - before.shear();
+            if (
+                actualBlockBreak != expectedBlockBreak
+                    || actualHarvest != expectedHarvest
+                    || actualShear != expectedShear
+            ) {
+                throw new AssertionError(
+                    action
+                        + " emitted unexpected platform events: blockBreak="
+                        + actualBlockBreak
+                        + ", harvest="
+                        + actualHarvest
+                        + ", shear="
+                        + actualShear
+                );
+            }
+        }
+
+        private record Snapshot(int blockBreak, int harvest, int shear) {
+        }
     }
 }
