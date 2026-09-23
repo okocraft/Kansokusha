@@ -100,7 +100,7 @@ class DuckDbRetentionCleanerTest {
 
     private static DuckDbDatabase open(Path file) throws Exception {
         var database = DuckDbDatabase.open(file);
-        DuckDbMigrations.migrate(database.connection());
+        DuckDbMigrations.migrate(database);
         return database;
     }
 

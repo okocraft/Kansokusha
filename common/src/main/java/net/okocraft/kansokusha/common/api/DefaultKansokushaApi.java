@@ -6,8 +6,7 @@ import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
-import net.okocraft.kansokusha.common.event.registry.RegistrationStatus;
-import net.okocraft.kansokusha.common.event.registry.RuntimeEventTypeRegistry;
+import net.okocraft.kansokusha.common.event.registry.InMemoryRuntimeEventTypeRegistry;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -19,21 +18,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @NotNullByDefault
 public final class DefaultKansokushaApi implements KansokushaApi, AutoCloseable {
 
-    private final RuntimeEventTypeRegistry registry;
+    private final InMemoryRuntimeEventTypeRegistry registry;
     private final EventIntake intake;
     private final Optional<Key> localServerKey;
     private final AtomicBoolean closed = new AtomicBoolean();
 
-    public DefaultKansokushaApi(RuntimeEventTypeRegistry registry, EventIntake intake) {
+    public DefaultKansokushaApi(InMemoryRuntimeEventTypeRegistry registry, EventIntake intake) {
         this(registry, intake, Optional.empty());
     }
 
-    public DefaultKansokushaApi(RuntimeEventTypeRegistry registry, EventIntake intake, Key localServerKey) {
+    public DefaultKansokushaApi(InMemoryRuntimeEventTypeRegistry registry, EventIntake intake, Key localServerKey) {
         this(registry, intake, Optional.of(Objects.requireNonNull(localServerKey, "localServerKey")));
     }
 
     private DefaultKansokushaApi(
-        RuntimeEventTypeRegistry registry, EventIntake intake, Optional<Key> localServerKey
+        InMemoryRuntimeEventTypeRegistry registry, EventIntake intake, Optional<Key> localServerKey
     ) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.intake = Objects.requireNonNull(intake, "intake");
@@ -52,11 +51,7 @@ public final class DefaultKansokushaApi implements KansokushaApi, AutoCloseable 
             return RegistrationOutcome.CLOSED;
         }
 
-        return switch (this.registry.register(definition)) {
-            case REGISTERED -> RegistrationOutcome.REGISTERED;
-            case ALREADY_REGISTERED -> RegistrationOutcome.ALREADY_REGISTERED;
-            case CONFLICT -> RegistrationOutcome.CONFLICT;
-        };
+        return this.registry.register(definition);
     }
 
     @Override

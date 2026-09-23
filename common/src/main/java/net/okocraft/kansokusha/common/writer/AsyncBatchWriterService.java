@@ -351,7 +351,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     }
 
     private void transitionToFailed(Throwable failure) {
-        this.intake.fail(failure);
+        this.intake.fail();
 
         synchronized (this.lifecycleMonitor) {
             this.failureCause = failure;

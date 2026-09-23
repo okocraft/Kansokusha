@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.common.storage;
 
-import java.sql.Connection;
 import java.sql.SQLException;
 
 public final class DuckDbMigrations {
@@ -83,9 +82,5 @@ public final class DuckDbMigrations {
             RUNNER.migrate(connection);
             return null;
         });
-    }
-
-    public static void migrate(Connection connection) throws SQLException {
-        RUNNER.migrate(connection);
     }
 }
