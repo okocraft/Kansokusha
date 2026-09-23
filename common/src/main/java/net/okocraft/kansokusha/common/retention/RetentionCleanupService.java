@@ -110,7 +110,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
         try {
             this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
-        } catch (VirtualMachineError | LinkageError | ThreadDeath e) {
+        } catch (VirtualMachineError | LinkageError e) {
             this.reportFatalFailure(e);
             this.failFatally();
             throw e;
@@ -128,7 +128,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     private void reportFailure(Throwable failure) {
         try {
             this.failureReporter.report(failure);
-        } catch (VirtualMachineError | LinkageError | ThreadDeath fatalReportingFailure) {
+        } catch (VirtualMachineError | LinkageError fatalReportingFailure) {
             this.failFatally();
             throw fatalReportingFailure;
         } catch (Throwable reportingFailure) {
