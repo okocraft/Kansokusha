@@ -199,6 +199,43 @@ class PaperBlockIgniteListenerTest {
     }
 
     @Test
+    void testPlayerOwnedGenericProjectileClassifiedAsFlintAndSteelHasNoPlayerSubject() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperBlockIgniteListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var target = PaperBlockEventTestSupport.block(
+            PaperBlockEventTestSupport.world(),
+            16,
+            65,
+            16,
+            Blocks.AIR.defaultBlockState(),
+            Material.AIR
+        );
+        var player = player();
+        var ignite = Mockito.mock(BlockIgniteEvent.class);
+        Mockito.when(ignite.getBlock()).thenReturn(target);
+        Mockito.when(ignite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL);
+        Mockito.when(ignite.getIgnitingEntity()).thenReturn(player);
+        Mockito.when(ignite.getPlayer()).thenReturn(player);
+
+        listener.capture(ignite);
+        listener.finalizeEvent(ignite);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, deferred.size());
+        deferred.remove().run();
+
+        var submission = api.submissions.remove();
+        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testPlayerOwnedArrowHasNoPlayerSubject() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);

@@ -115,7 +115,7 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            directPlayerSubject(cause, playerId),
+            null,
             payload,
             awaitsPlayerPlacement(cause, playerId) ? playerId : null
         );
@@ -239,15 +239,6 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         if (queue.isEmpty()) {
             this.pendingPlayerPlacements.remove(key);
         }
-    }
-
-    private static @Nullable PlayerSubject directPlayerSubject(
-        BlockIgniteEvent.IgniteCause cause,
-        @Nullable UUID playerId
-    ) {
-        return playerId != null && cause == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL
-            ? new PlayerSubject(playerId)
-            : null;
     }
 
     private static Snapshot withPlayerSubject(Snapshot snapshot, UUID playerId) {
