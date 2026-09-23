@@ -77,7 +77,8 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     static EventPayload expectedBucketPostState(
         String operation,
         Material bucket,
-        BlockData preState
+        BlockData preState,
+        boolean waterEvaporates
     ) {
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(bucket, "bucket");
@@ -87,7 +88,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         if ("fill".equals(operation)) {
             expected = expectedAfterFill(preState);
         } else if ("empty".equals(operation)) {
-            expected = expectedAfterEmpty(bucket, preState);
+            expected = expectedAfterEmpty(bucket, preState, waterEvaporates);
         } else {
             throw new IllegalArgumentException("Unknown bucket operation: " + operation);
         }
@@ -222,13 +223,20 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         return Blocks.AIR.defaultBlockState().asBlockData();
     }
 
-    private static BlockData expectedAfterEmpty(Material bucket, BlockData preState) {
+    private static BlockData expectedAfterEmpty(
+        Material bucket,
+        BlockData preState,
+        boolean waterEvaporates
+    ) {
         if (isCauldron(preState.getMaterial())) {
             return switch (bucket) {
                 case LAVA_BUCKET -> Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData();
                 case POWDER_SNOW_BUCKET -> fullPowderSnowCauldron();
                 default -> fullWaterCauldron();
             };
+        }
+        if (isWaterBucket(bucket) && waterEvaporates) {
+            return preState;
         }
         if (isWaterBucket(bucket) && preState instanceof Waterlogged waterlogged) {
             var expected = preState.clone();
