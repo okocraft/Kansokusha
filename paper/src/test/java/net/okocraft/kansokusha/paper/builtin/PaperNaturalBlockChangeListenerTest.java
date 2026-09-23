@@ -493,6 +493,7 @@ class PaperNaturalBlockChangeListenerTest {
         var fertilize = Mockito.mock(BlockFertilizeEvent.class);
         Mockito.when(fertilize.getBlocks()).thenReturn(changedStates);
         Mockito.when(fertilize.isCancelled()).thenReturn(cancelled);
+        listener.capture(fertilize);
         listener.discardFertilizedChanges(fertilize);
 
         deferred.remove().run();
