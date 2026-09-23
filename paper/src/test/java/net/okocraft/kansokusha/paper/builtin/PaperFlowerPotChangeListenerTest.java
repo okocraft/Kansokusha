@@ -2,6 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
 import net.kyori.adventure.key.Key;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.Items;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.SubmissionOutcome;
@@ -11,6 +13,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Assertions;
@@ -39,7 +42,12 @@ class PaperFlowerPotChangeListenerTest {
     void testInsertAndRemoveRecordBeforeAndAfterContents() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
-        var insertItem = ItemStack.of(Material.POPPY, 64);
+        var nmsInsertItem = new net.minecraft.world.item.ItemStack(Items.POPPY, 64);
+        nmsInsertItem.set(
+            DataComponents.CUSTOM_NAME,
+            net.minecraft.network.chat.Component.literal("not stored by flower pot")
+        );
+        var insertItem = CraftItemStack.asBukkitCopy(nmsInsertItem);
         var insert = event(10, insertItem, true, false);
         var removeItem = ItemStack.of(Material.DANDELION, 1);
         var remove = event(20, removeItem, false, false);
@@ -64,6 +72,9 @@ class PaperFlowerPotChangeListenerTest {
         );
         Assertions.assertEquals(Material.POPPY, inserted.getType());
         Assertions.assertEquals(1, inserted.getAmount());
+        Assertions.assertNull(
+            CraftItemStack.asNMSCopy(inserted).get(DataComponents.CUSTOM_NAME)
+        );
 
         var removePayload = PaperAdditionalBuiltInPayloadCodec.decode(byX.get(20).payload());
         Assertions.assertEquals("remove", string(removePayload, "action"));
