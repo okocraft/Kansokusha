@@ -69,10 +69,10 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
 
         var preStates = new LinkedHashMap<BlockKey, BlockData>();
         for (var state : event.getBlocks()) {
-            preStates.putIfAbsent(
-                blockKey(state),
-                state.getBlock().getBlockData().clone()
-            );
+            var key = blockKey(state);
+            if (!preStates.containsKey(key)) {
+                preStates.put(key, state.getBlock().getBlockData().clone());
+            }
         }
 
         synchronized (this.inFlight) {
