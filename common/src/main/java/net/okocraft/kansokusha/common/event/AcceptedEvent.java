@@ -18,9 +18,5 @@ public record AcceptedEvent(
         Objects.requireNonNull(submission, "submission");
         Objects.requireNonNull(retentionPolicyKey, "retentionPolicyKey");
         Objects.requireNonNull(expiresAt, "expiresAt");
-
-        if (expiresAt.getNano() % 1_000_000 != 0) {
-            throw new IllegalArgumentException("expiresAt must have millisecond precision");
-        }
     }
 }

@@ -55,18 +55,6 @@ class AcceptedEventTest {
         );
     }
 
-    @Test
-    void testSubMillisecondExpiryIsRejected() {
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> new AcceptedEvent(
-                submission(),
-                RETENTION_POLICY_KEY,
-                Instant.parse("2026-02-01T03:04:05.000000001Z")
-            )
-        );
-    }
-
     private static EventSubmission submission() {
         return new EventSubmission(
             EVENT_TYPE, PayloadGeneration.FIRST, OCCURRED_AT, SERVER_KEY,

@@ -48,21 +48,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     ) {
         this.cleaner = Objects.requireNonNull(cleaner, "cleaner");
         this.failureReporter = Objects.requireNonNull(failureReporter, "failureReporter");
-        Objects.requireNonNull(interval, "interval");
-        if (interval.isZero() || interval.isNegative()) {
-            throw new IllegalArgumentException("interval must be positive.");
-        }
-        if (interval.getNano() % 1_000_000 != 0) {
-            throw new IllegalArgumentException("interval must use whole milliseconds.");
-        }
-        try {
-            this.intervalMillis = interval.toMillis();
-        } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("interval exceeds the supported millisecond range.", e);
-        }
-        if (maxRowsPerPass <= 0) {
-            throw new IllegalArgumentException("maxRowsPerPass must be positive.");
-        }
+        this.intervalMillis = interval.toMillis();
         this.maxRowsPerPass = maxRowsPerPass;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.executor = Objects.requireNonNull(executor, "executor");
@@ -124,7 +110,7 @@ public final class RetentionCleanupService implements AutoCloseable {
 
         try {
             this.cleaner.deleteExpired(this.clock.instant(), this.maxRowsPerPass);
-        } catch (VirtualMachineError | LinkageError | ThreadDeath e) {
+        } catch (VirtualMachineError | LinkageError e) {
             this.reportFatalFailure(e);
             this.failFatally();
             throw e;
@@ -142,7 +128,7 @@ public final class RetentionCleanupService implements AutoCloseable {
     private void reportFailure(Throwable failure) {
         try {
             this.failureReporter.report(failure);
-        } catch (VirtualMachineError | LinkageError | ThreadDeath fatalReportingFailure) {
+        } catch (VirtualMachineError | LinkageError fatalReportingFailure) {
             this.failFatally();
             throw fatalReportingFailure;
         } catch (Throwable reportingFailure) {

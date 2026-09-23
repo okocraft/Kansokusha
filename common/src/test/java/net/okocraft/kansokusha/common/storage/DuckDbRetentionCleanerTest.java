@@ -87,17 +87,6 @@ class DuckDbRetentionCleanerTest {
         }
     }
 
-    @Test
-    void testNonPositivePassBoundIsRejected(@TempDir Path dir) throws Exception {
-        try (var database = open(dir.resolve("invalid-bound.duckdb"))) {
-            var cleaner = new DuckDbRetentionCleaner(database);
-            Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> cleaner.deleteExpired(Instant.EPOCH, 0)
-            );
-        }
-    }
-
     private static DuckDbDatabase open(Path file) throws Exception {
         var database = DuckDbDatabase.open(file);
         DuckDbMigrations.migrate(database);

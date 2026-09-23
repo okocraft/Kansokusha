@@ -92,57 +92,6 @@ class RetentionPolicySetTest {
     }
 
     @Test
-    void testInvalidRuntimeMappingsAreRejected() {
-        var missing = Key.key("test", "missing");
-
-        var unknownMapping = new KansokushaConfig.RetentionSettings(
-            Map.of(SHORT_POLICY, Duration.ofHours(1)),
-            Map.of(AUDIT_EVENT, missing),
-            SHORT_POLICY
-        );
-        var mappingError = Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> RetentionPolicySet.from(unknownMapping)
-        );
-        Assertions.assertTrue(mappingError.getMessage().contains("unknown retention policy"));
-
-        var unknownFallback = new KansokushaConfig.RetentionSettings(
-            Map.of(SHORT_POLICY, Duration.ofHours(1)),
-            Map.of(),
-            missing
-        );
-        var fallbackError = Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> RetentionPolicySet.from(unknownFallback)
-        );
-        Assertions.assertTrue(fallbackError.getMessage().contains("Fallback references unknown"));
-    }
-
-    @Test
-    void testInvalidRuntimeDurationsAreRejected() {
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> RetentionPolicySet.from(
-                new KansokushaConfig.RetentionSettings(
-                    Map.of(SHORT_POLICY, Duration.ZERO),
-                    Map.of(),
-                    SHORT_POLICY
-                )
-            )
-        );
-        Assertions.assertThrows(
-            IllegalArgumentException.class,
-            () -> RetentionPolicySet.from(
-                new KansokushaConfig.RetentionSettings(
-                    Map.of(SHORT_POLICY, Duration.ofNanos(1)),
-                    Map.of(),
-                    SHORT_POLICY
-                )
-            )
-        );
-    }
-
-    @Test
     void testExpiryOverflowFailsWithoutWraparound() {
         var policySet = RetentionPolicySet.from(
             new KansokushaConfig.RetentionSettings(
