@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.testplugin;
 
 import io.papermc.paper.event.block.PlayerShearBlockEvent;
+import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
@@ -15,8 +16,12 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -47,6 +52,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
 
         try {
             var result = registerAndSubmit();
+            verifyBuiltInListenerWiring();
             verifyBuiltInPlatformSemantics();
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> verifyAfterShutdown(result), "kansokusha-external-api-fixture")
@@ -84,6 +90,44 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         }
 
         return new Result(api, definition, submission);
+    }
+
+    private void verifyBuiltInListenerWiring() {
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperSignChangeListener",
+            SignChangeEvent.getHandlerList()
+        );
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperBucketListener",
+            PlayerBucketEmptyEvent.getHandlerList()
+        );
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperBucketListener",
+            PlayerBucketFillEvent.getHandlerList()
+        );
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperBlockHarvestListener",
+            PlayerHarvestBlockEvent.getHandlerList()
+        );
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperBlockHarvestListener",
+            PlayerShearBlockEvent.getHandlerList()
+        );
+        assertRegisteredListener(
+            "net.okocraft.kansokusha.paper.builtin.PaperFlowerPotChangeListener",
+            PlayerFlowerPotManipulateEvent.getHandlerList()
+        );
+    }
+
+    private static void assertRegisteredListener(String listenerClass, HandlerList handlers) {
+        var registered = Arrays.stream(handlers.getRegisteredListeners())
+            .anyMatch(listener ->
+                listener.getPlugin().getName().equals("Kansokusha")
+                    && listener.getListener().getClass().getName().equals(listenerClass)
+            );
+        if (!registered) {
+            throw new AssertionError("Kansokusha listener was not registered: " + listenerClass);
+        }
     }
 
     private void verifyBuiltInPlatformSemantics() throws ReflectiveOperationException {
