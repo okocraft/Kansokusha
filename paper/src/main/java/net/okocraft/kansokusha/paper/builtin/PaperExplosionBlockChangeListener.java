@@ -82,7 +82,7 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
                 this.serverKey,
                 world,
                 worldKey,
-                snapshotPreStates(worldKey, event.blockList()),
+                snapshotPreStates(world, worldKey, event.blockList()),
                 event.getExplosionResult(),
                 false,
                 new ExplosionSource(
@@ -326,14 +326,17 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     }
 
     private static Map<BlockKey, BlockData> snapshotPreStates(
+        World world,
         Key worldKey,
         List<Block> blocks
     ) {
         var result = new LinkedHashMap<BlockKey, BlockData>();
         for (var block : blocks) {
+            var position = position(block);
+            var liveBlock = normalizedBlock(world, worldKey, block);
             result.putIfAbsent(
-                new BlockKey(worldKey, position(block)),
-                block.getBlockData().clone()
+                new BlockKey(worldKey, position),
+                liveBlock.getBlockData().clone()
             );
         }
         return Map.copyOf(result);
@@ -354,13 +357,19 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     }
 
     private static Block normalizedBlock(Capture capture, Block listedBlock) {
-        if (
-            PaperKansokusha.key(listedBlock.getWorld().getKey()).equals(capture.worldKey())
-        ) {
+        return normalizedBlock(capture.world(), capture.worldKey(), listedBlock);
+    }
+
+    private static Block normalizedBlock(
+        World world,
+        Key worldKey,
+        Block listedBlock
+    ) {
+        if (PaperKansokusha.key(listedBlock.getWorld().getKey()).equals(worldKey)) {
             return listedBlock;
         }
         var position = position(listedBlock);
-        return capture.world().getBlockAt(position.x(), position.y(), position.z());
+        return world.getBlockAt(position.x(), position.y(), position.z());
     }
 
     private static BlockPosition position(Block block) {

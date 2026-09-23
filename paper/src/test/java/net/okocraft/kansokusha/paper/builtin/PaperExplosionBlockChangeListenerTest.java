@@ -4,6 +4,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.ExplosionResult;
 import org.bukkit.GameRules;
 import org.bukkit.NamespacedKey;
