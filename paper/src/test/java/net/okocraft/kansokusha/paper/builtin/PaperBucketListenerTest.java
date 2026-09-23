@@ -177,13 +177,44 @@ class PaperBucketListenerTest {
             ItemStack.of(Material.WATER_BUCKET, 1),
             false
         );
+        var refillWaterCauldron = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            36,
+            Blocks.WATER_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 1)
+                .asBlockData(),
+            Material.WATER_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
+        var replaceLavaCauldronWithWater = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            37,
+            Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData(),
+            Material.WATER_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
+        var replacePowderSnowCauldronWithLava = bucketEvent(
+            PlayerBucketEmptyEvent.class,
+            38,
+            Blocks.POWDER_SNOW_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 2)
+                .asBlockData(),
+            Material.LAVA_BUCKET,
+            ItemStack.of(Material.BUCKET, 1),
+            false
+        );
 
         for (var fixture : List.of(
             waterlog,
             unwaterlog,
             lavaCauldron,
             powderSnowCauldron,
-            fillFromWaterCauldron
+            fillFromWaterCauldron,
+            refillWaterCauldron,
+            replaceLavaCauldronWithWater,
+            replacePowderSnowCauldronWithLava
         )) {
             capture(listener, fixture);
             finish(listener, fixture);
@@ -203,6 +234,17 @@ class PaperBucketListenerTest {
                 .setValue(LayeredCauldronBlock.LEVEL, 3)
         );
         assertExpectedState(byX.get(35), Blocks.CAULDRON.defaultBlockState());
+        assertExpectedState(
+            byX.get(36),
+            Blocks.WATER_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 3)
+        );
+        assertExpectedState(
+            byX.get(37),
+            Blocks.WATER_CAULDRON.defaultBlockState()
+                .setValue(LayeredCauldronBlock.LEVEL, 3)
+        );
+        assertExpectedState(byX.get(38), Blocks.LAVA_CAULDRON.defaultBlockState());
     }
 
     @Test
