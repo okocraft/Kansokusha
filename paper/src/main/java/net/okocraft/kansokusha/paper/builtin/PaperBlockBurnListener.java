@@ -22,7 +22,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +38,8 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     private final Key serverKey;
     private final Clock clock;
     private final Map<BlockBurnEvent, Snapshot> inFlight = new IdentityHashMap<>();
-    private final Map<BlockKey, Snapshot> pendingTntBurns = new HashMap<>();
+    private final PaperTntTransitionTracker<Snapshot> pendingTntBurns =
+        new PaperTntTransitionTracker<>();
     private final Map<com.destroystokyo.paper.event.block.TNTPrimeEvent, LegacyTntPrimeCapture>
         legacyTntPrimeCaptures = new IdentityHashMap<>();
 
@@ -91,12 +91,7 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
             return;
         }
         if (snapshot.awaitTntPrime()) {
-            synchronized (this.inFlight) {
-                this.pendingTntBurns.put(
-                    new BlockKey(snapshot.worldKey(), snapshot.position()),
-                    snapshot
-                );
-            }
+            this.pendingTntBurns.add(snapshot.worldKey(), snapshot.position(), snapshot);
             return;
         }
         submit(snapshot);
@@ -184,11 +179,7 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     }
 
     private @Nullable Snapshot removePendingTntBurn(Block block) {
-        synchronized (this.inFlight) {
-            return this.pendingTntBurns.remove(
-                new BlockKey(PaperKansokusha.key(block.getWorld().getKey()), position(block))
-            );
-        }
+        return this.pendingTntBurns.remove(block);
     }
 
     private static @Nullable SourceBlock source(@Nullable Block block) {
@@ -210,9 +201,6 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     }
 
     private record SourceBlock(BlockPosition position, BlockData state) {
-    }
-
-    private record BlockKey(Key worldKey, BlockPosition position) {
     }
 
     private record LegacyTntPrimeCapture(boolean alreadyBurned) {

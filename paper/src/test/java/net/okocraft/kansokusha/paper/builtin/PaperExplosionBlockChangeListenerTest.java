@@ -4,6 +4,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -12,6 +13,7 @@ import org.bukkit.entity.Ghast;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.TNTPrimeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -105,6 +107,71 @@ class PaperExplosionBlockChangeListenerTest {
         );
         Mockito.verify(first, Mockito.times(1)).getBlockData();
         Mockito.verify(added, Mockito.times(1)).getBlockData();
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testExplosionTntWaitsForPrimeResult() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var sourceBlock = PaperBlockEventTestSupport.block(
+            world, 40, 64, 39, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var sourceState = PaperBlockEventTestSupport.state(
+            world,
+            sourceBlock,
+            40,
+            64,
+            39,
+            Blocks.RESPAWN_ANCHOR.defaultBlockState()
+        );
+        var stone = PaperBlockEventTestSupport.block(
+            world, 40, 64, 40, Blocks.STONE.defaultBlockState(), Material.STONE
+        );
+        var cancelledTnt = PaperBlockEventTestSupport.block(
+            world, 41, 64, 40, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var primedTnt = PaperBlockEventTestSupport.block(
+            world, 42, 64, 40, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var event = Mockito.mock(BlockExplodeEvent.class);
+        Mockito.when(event.getExplodedBlockState()).thenReturn(sourceState);
+        Mockito.when(event.blockList())
+            .thenReturn(new ArrayList<>(List.of(stone, cancelledTnt, primedTnt)));
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(2, listener.inFlightCount());
+
+        var cancelledPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(cancelledPrime.getBlock()).thenReturn(cancelledTnt);
+        Mockito.when(cancelledPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        Mockito.when(cancelledPrime.isCancelled()).thenReturn(true);
+        listener.finalizeTntPrime(cancelledPrime);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var acceptedPrime = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(acceptedPrime.getBlock()).thenReturn(primedTnt);
+        Mockito.when(acceptedPrime.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.EXPLOSION);
+        listener.finalizeTntPrime(acceptedPrime);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        var byX = submissionsByX(api);
+        Assertions.assertTrue(byX.containsKey(40));
+        Assertions.assertFalse(byX.containsKey(41));
+        Assertions.assertTrue(byX.containsKey(42));
+        Assertions.assertEquals(OCCURRED_AT, byX.get(40).occurredAt());
+        Assertions.assertEquals(OCCURRED_AT, byX.get(42).occurredAt());
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 

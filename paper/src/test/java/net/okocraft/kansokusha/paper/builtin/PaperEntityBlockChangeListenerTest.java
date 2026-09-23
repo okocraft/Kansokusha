@@ -7,6 +7,8 @@ import org.bukkit.Material;
 import org.bukkit.entity.Enderman;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Zombie;
 import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.junit.jupiter.api.Assertions;
@@ -113,20 +115,72 @@ class PaperEntityBlockChangeListenerTest {
     }
 
     @Test
-    void testSpecificEntityBreakDoorSubclassIsNotRecordedByFallback() {
+    void testProjectileTntTransitionIsOwnedByTntPrime() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperEntityBlockChangeListener.register(
             api,
             PaperBlockEventTestSupport.SERVER_KEY
         );
-        var event = Mockito.mock(EntityBreakDoorEvent.class);
+        var world = PaperBlockEventTestSupport.world();
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 20, 64, 20, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var projectile = Mockito.mock(Projectile.class);
+        Mockito.when(projectile.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(projectile.getType()).thenReturn(EntityType.ARROW);
+        var event = Mockito.mock(EntityChangeBlockEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(tnt);
+        Mockito.when(event.getEntity()).thenReturn(projectile);
+        Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
         listener.capture(event);
         listener.finalizeEvent(event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
-        Mockito.verify(event, Mockito.never()).getBlock();
+    }
+
+    @Test
+    void testEntityBreakDoorSubclassIsRecordedByFallback() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperEntityBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var door = PaperBlockEventTestSupport.block(
+            world, 21, 64, 20, Blocks.OAK_DOOR.defaultBlockState(), Material.OAK_DOOR
+        );
+        var actorId = UUID.fromString("123e4567-e89b-12d3-a456-426614174022");
+        var zombie = Mockito.mock(Zombie.class);
+        Mockito.when(zombie.getUniqueId()).thenReturn(actorId);
+        Mockito.when(zombie.getType()).thenReturn(EntityType.ZOMBIE);
+        var event = Mockito.mock(EntityBreakDoorEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(door);
+        Mockito.when(event.getEntity()).thenReturn(zombie);
+        Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
+
+        listener.capture(event);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
+        Assertions.assertEquals(new BlockPosition(21, 64, 20), submission.position());
+        Assertions.assertNull(submission.subject());
+        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            PaperBlockStatePayloadCodec.blockState(Blocks.OAK_DOOR.defaultBlockState().asBlockData()),
+            payload.get("before")
+        );
+        Assertions.assertEquals(
+            PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData()),
+            payload.get("to")
+        );
+        Assertions.assertEquals(actorId.toString(), payload.getString("actor_entity_uuid").orElseThrow());
+        Assertions.assertEquals("ZOMBIE", payload.getString("actor_entity_type").orElseThrow());
+        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test

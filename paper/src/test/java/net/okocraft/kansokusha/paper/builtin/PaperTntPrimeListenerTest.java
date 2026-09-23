@@ -92,6 +92,62 @@ class PaperTntPrimeListenerTest {
     }
 
     @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testFirePrimeWaitsForLegacyPaperGate() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperTntPrimeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 30, 64, 30, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var modern = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(modern.getBlock()).thenReturn(tnt);
+        Mockito.when(modern.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.FIRE);
+
+        listener.capture(modern);
+        listener.finalizeEvent(modern);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        var legacy = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(legacy.getBlock()).thenReturn(tnt);
+        Mockito.when(legacy.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE);
+        listener.finalizeTntPrime(legacy);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testCancelledLegacyFirePrimeDropsPendingPrime() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperTntPrimeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
+        var world = PaperBlockEventTestSupport.world();
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 31, 64, 31, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var modern = Mockito.mock(TNTPrimeEvent.class);
+        Mockito.when(modern.getBlock()).thenReturn(tnt);
+        Mockito.when(modern.getCause()).thenReturn(TNTPrimeEvent.PrimeCause.FIRE);
+
+        listener.capture(modern);
+        listener.finalizeEvent(modern);
+
+        var legacy = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(legacy.getBlock()).thenReturn(tnt);
+        Mockito.when(legacy.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE);
+        Mockito.when(legacy.isCancelled()).thenReturn(true);
+        listener.finalizeTntPrime(legacy);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testCancelledPrimeDoesNotSubmit() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperTntPrimeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);

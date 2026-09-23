@@ -9,12 +9,15 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.GameRules;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.TNTPrimeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -40,6 +43,8 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     private final Key serverKey;
     private final Clock clock;
     private final Map<Event, Capture> inFlight = new IdentityHashMap<>();
+    private final PaperTntTransitionTracker<EventSubmission> pendingTntChanges =
+        new PaperTntTransitionTracker<>();
 
     private PaperExplosionBlockChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -120,16 +125,30 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
         finalizeExplosion(event, event.isCancelled(), event.blockList());
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void finalizeTntPrime(TNTPrimeEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (event.getCause() != TNTPrimeEvent.PrimeCause.EXPLOSION) {
+            return;
+        }
+        var submission = this.pendingTntChanges.remove(event.getBlock());
+        if (submission == null || event.isCancelled()) {
+            return;
+        }
+        this.api.submit(submission);
+    }
+
     @Override
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
         }
+        this.pendingTntChanges.clear();
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size();
+            return this.inFlight.size() + this.pendingTntChanges.size();
         }
     }
 
@@ -148,7 +167,7 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
                 preState = block.getBlockData().clone();
             }
             var source = capture.source();
-            this.api.submit(new EventSubmission(
+            var submission = new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 capture.occurredAt(),
@@ -167,7 +186,14 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
                     source.blockState(),
                     source.actor()
                 )
-            ));
+            );
+            if (block.getType() == Material.TNT) {
+                if (Boolean.TRUE.equals(block.getWorld().getGameRuleValue(GameRules.TNT_EXPLODES))) {
+                    this.pendingTntChanges.add(key.worldKey(), key.position(), submission);
+                }
+                continue;
+            }
+            this.api.submit(submission);
         }
     }
 

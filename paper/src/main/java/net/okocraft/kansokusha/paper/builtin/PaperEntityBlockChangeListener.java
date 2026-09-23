@@ -10,10 +10,11 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -60,12 +61,17 @@ public final class PaperEntityBlockChangeListener implements PaperInFlightListen
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(EntityChangeBlockEvent event) {
         Objects.requireNonNull(event, "event");
-        if (event instanceof EntityBreakDoorEvent) {
+        var block = event.getBlock();
+        var actor = event.getEntity();
+        var to = event.getBlockData().clone();
+        if (
+            block.getType() == Material.TNT
+                && actor instanceof Projectile
+                && to.getMaterial().isAir()
+        ) {
             return;
         }
 
-        var block = event.getBlock();
-        var actor = event.getEntity();
         var actorId = actor.getUniqueId();
         var snapshot = new Snapshot(
             this.clock.instant(),
@@ -75,7 +81,7 @@ public final class PaperEntityBlockChangeListener implements PaperInFlightListen
             actor instanceof Player ? new PlayerSubject(actorId) : null,
             PaperWorldMutationPayloadCodec.encodeEntityBlockChange(
                 block.getBlockData().clone(),
-                event.getBlockData().clone(),
+                to,
                 actorId,
                 actor.getType().name()
             )
