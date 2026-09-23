@@ -8,5 +8,5 @@ jobs:
       java-version: '25'
       package-name: Kansokusha-Build-${{ github.run_number }}
       artifact-directory: "./build/libs"
-      build-arguments: verifyV1
+      build-arguments: build
       upload-test-results: true
