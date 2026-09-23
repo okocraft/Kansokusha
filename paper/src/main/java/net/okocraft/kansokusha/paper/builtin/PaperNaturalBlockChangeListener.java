@@ -42,6 +42,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -165,8 +166,8 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         submitSnapshots(List.of(capture.snapshot()));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeScaffoldingFall(EntityChangeBlockEvent event) {
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void captureScaffoldingFall(EntityChangeBlockEvent event) {
         Objects.requireNonNull(event, "event");
         if (!(event.getEntity() instanceof FallingBlock fallingBlock)) {
             return;
@@ -176,27 +177,41 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
 
         var block = event.getBlock();
-        var key = new ScaffoldingFadeKey(
-            Thread.currentThread(),
-            PaperKansokusha.key(block.getWorld().getKey()),
-            position(block)
+        put(
+            event,
+            new ScaffoldingEntityChangeCapture(
+                new ScaffoldingFadeKey(
+                    Thread.currentThread(),
+                    PaperKansokusha.key(block.getWorld().getKey()),
+                    position(block)
+                ),
+                event.getBlockData().clone()
+            )
         );
-        var eventTarget = event.getBlockData();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void finalizeScaffoldingFall(EntityChangeBlockEvent event) {
+        Objects.requireNonNull(event, "event");
+        var capture = remove(event, ScaffoldingEntityChangeCapture.class);
+        if (capture == null) {
+            return;
+        }
 
         PendingScaffoldingFade pending = null;
         synchronized (this.inFlight) {
-            var queue = this.pendingScaffoldingFades.get(key);
+            var queue = this.pendingScaffoldingFades.get(capture.key());
             if (queue != null) {
                 for (var iterator = queue.descendingIterator(); iterator.hasNext();) {
                     var candidate = iterator.next();
-                    if (sameBlockData(candidate.postState(), eventTarget)) {
+                    if (sameBlockData(candidate.postState(), capture.targetState())) {
                         pending = candidate;
                         iterator.remove();
                         break;
                     }
                 }
                 if (queue.isEmpty()) {
-                    this.pendingScaffoldingFades.remove(key);
+                    this.pendingScaffoldingFades.remove(capture.key());
                 }
             }
         }
@@ -337,9 +352,15 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
             return;
         }
 
-        var snapshots = new ArrayList<Snapshot>(finalStates.size());
+        var finalStatesByBlock = new LinkedHashMap<BlockKey, BlockState>();
         for (var state : finalStates) {
-            var key = blockKey(state);
+            finalStatesByBlock.put(blockKey(state), state);
+        }
+
+        var snapshots = new ArrayList<Snapshot>(finalStatesByBlock.size());
+        for (var entry : finalStatesByBlock.entrySet()) {
+            var key = entry.getKey();
+            var state = entry.getValue();
             var preState = capture.preStates().get(key);
             if (preState == null) {
                 preState = state.getBlock().getBlockData().clone();
@@ -650,6 +671,12 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         Key worldKey,
         BlockPosition position
     ) {
+    }
+
+    private record ScaffoldingEntityChangeCapture(
+        ScaffoldingFadeKey key,
+        BlockData targetState
+    ) implements Capture {
     }
 
     private record PendingScaffoldingFade(

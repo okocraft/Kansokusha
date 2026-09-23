@@ -365,6 +365,56 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testStructureGrowCoalescesDuplicatePositionsToFinalState() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 110, 70, 5, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var first = PaperBlockEventTestSupport.state(
+            world, block, 110, 70, 5, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var last = PaperBlockEventTestSupport.state(
+            world, block, 110, 70, 5, Blocks.BIRCH_LOG.defaultBlockState()
+        );
+        var states = new ArrayList<org.bukkit.block.BlockState>();
+        states.add(first);
+
+        var event = Mockito.mock(StructureGrowEvent.class);
+        Mockito.when(event.getBlocks()).thenReturn(states);
+        Mockito.when(event.getSpecies()).thenReturn(TreeType.TREE);
+        Mockito.when(event.isFromBonemeal()).thenReturn(false);
+
+        listener.capture(event);
+        states.add(last);
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, deferred.size());
+        deferred.remove().run();
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            naturalPayload(
+                Blocks.AIR.defaultBlockState(),
+                Blocks.BIRCH_LOG.defaultBlockState(),
+                "structure_grow",
+                "tree",
+                null
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+    }
+
+    @Test
     void testBonemealStructureGrowIsReservedForBlockFertilize() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
@@ -504,6 +554,8 @@ class PaperNaturalBlockChangeListenerTest {
             Blocks.AIR.defaultBlockState().asBlockData()
         );
         entityChange.setCancelled(cancelled);
+        listener.captureScaffoldingFall(entityChange);
+        Mockito.when(fallingBlock.getBlockData()).thenReturn(Blocks.SAND.defaultBlockState().asBlockData());
         listener.finalizeScaffoldingFall(entityChange);
 
         Assertions.assertEquals(0, listener.inFlightCount());
