@@ -99,6 +99,7 @@ public final class PaperBucketListener implements PaperInFlightListener {
         Objects.requireNonNull(event, "event");
         var changedBlock = event.getBlock();
         var clickedBlock = event.getBlockClicked();
+        var preBlockData = changedBlock.getBlockData();
         var snapshot = new Snapshot(
             eventType,
             operation,
@@ -113,11 +114,11 @@ public final class PaperBucketListener implements PaperInFlightListener {
             clickedBlock.getX(),
             clickedBlock.getY(),
             clickedBlock.getZ(),
-            PaperAdditionalBuiltInPayloadCodec.snapshotBlockState(changedBlock.getBlockData()),
+            PaperAdditionalBuiltInPayloadCodec.snapshotBlockState(preBlockData),
             PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
                 operation,
                 event.getBucket(),
-                changedBlock.getBlockData()
+                preBlockData
             ),
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
