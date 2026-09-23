@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockFertilizeEvent;
@@ -23,6 +24,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,17 +77,35 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
         var sourcePosition = position(event.getBlock());
         var player = event.getPlayer();
         var subject = player == null ? null : new PlayerSubject(player.getUniqueId());
-        var changedStates = event.getBlocks();
-        var snapshots = new ArrayList<Snapshot>(changedStates.size());
+        var transitions = new LinkedHashMap<BlockKey, Transition>();
 
-        for (var state : changedStates) {
-            var block = state.getBlock();
+        for (var state : event.getBlocks()) {
+            var worldKey = PaperKansokusha.key(state.getWorld().getKey());
+            var changedPosition = position(state);
+            var key = new BlockKey(worldKey, changedPosition);
+            var existing = transitions.get(key);
+            var preState = existing == null
+                ? state.getBlock().getBlockData().clone()
+                : existing.preState();
+            transitions.put(
+                key,
+                new Transition(
+                    worldKey,
+                    changedPosition,
+                    preState,
+                    state.getBlockData().clone()
+                )
+            );
+        }
+
+        var snapshots = new ArrayList<Snapshot>(transitions.size());
+        for (var transition : transitions.values()) {
             snapshots.add(new Snapshot(
-                PaperKansokusha.key(state.getWorld().getKey()),
-                position(state),
+                transition.worldKey(),
+                transition.position(),
                 PaperBlockEventPayloadCodec.encodeFertilize(
-                    block.getBlockData().clone(),
-                    state.getBlockData().clone(),
+                    transition.preState(),
+                    transition.postState(),
                     SOURCE_EVENT,
                     sourcePosition
                 )
@@ -159,6 +179,20 @@ public final class PaperBlockFertilizeListener implements PaperInFlightListener 
 
     private static BlockPosition position(BlockState state) {
         return new BlockPosition(state.getX(), state.getY(), state.getZ());
+    }
+
+    private record BlockKey(
+        Key worldKey,
+        BlockPosition position
+    ) {
+    }
+
+    private record Transition(
+        Key worldKey,
+        BlockPosition position,
+        BlockData preState,
+        BlockData postState
+    ) {
     }
 
     private record Capture(
