@@ -43,13 +43,13 @@ class PaperSignChangeListenerTest {
     void testNonCancelledSignChangeUsesLowestBeforeAndMonitorFinalLines() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
-        var before = new ArrayList<>(List.of(
+        var before = new ArrayList<Component>(List.of(
             Component.text("before-0"),
             Component.text("before-1"),
             Component.text("before-2"),
             Component.text("before-3")
         ));
-        var after = new ArrayList<>(List.of(
+        var after = new ArrayList<Component>(List.of(
             Component.text("draft-0"),
             Component.text("draft-1"),
             Component.text("draft-2"),
