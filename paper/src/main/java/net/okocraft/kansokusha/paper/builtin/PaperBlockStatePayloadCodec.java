@@ -1,7 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -11,10 +10,6 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Objects;
 
@@ -29,7 +24,7 @@ public final class PaperBlockStatePayloadCodec {
     }
 
     public static EventPayload encodeBlockBreak(BlockData blockData) {
-        return encode(blockState(blockData));
+        return PaperPayloadNbtCodec.encode(blockState(blockData));
     }
 
     public static EventPayload encodeBlockPlace(
@@ -39,7 +34,7 @@ public final class PaperBlockStatePayloadCodec {
         var payload = new CompoundTag();
         payload.put(REPLACED_STATE_KEY, blockState(replacedBlockData));
         payload.put(PLACED_STATE_KEY, blockState(placedBlockData));
-        return encode(payload);
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     static CompoundTag blockState(BlockData blockData) {
@@ -50,24 +45,8 @@ public final class PaperBlockStatePayloadCodec {
         return NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState());
     }
 
-    static EventPayload encode(CompoundTag tag) {
-        var bytes = new ByteArrayOutputStream();
-        try (var output = new DataOutputStream(bytes)) {
-            NbtIo.write(Objects.requireNonNull(tag, "tag"), output);
-        } catch (IOException e) {
-            throw new AssertionError("Unexpected in-memory NBT encoding failure.", e);
-        }
-        return EventPayload.copyOf(bytes.toByteArray());
-    }
-
     static CompoundTag decode(EventPayload payload) throws IOException {
-        try (
-            var input = new DataInputStream(
-                new ByteArrayInputStream(Objects.requireNonNull(payload, "payload").copyBytes())
-            )
-        ) {
-            return NbtIo.read(input);
-        }
+        return PaperPayloadNbtCodec.decode(payload);
     }
 
     private static BlockState toMinecraftState(BlockData blockData) {

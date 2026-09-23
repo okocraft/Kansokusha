@@ -13,7 +13,6 @@ import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.BlockState;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockMultiPlaceEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.jetbrains.annotations.ApiStatus;
@@ -29,7 +28,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBlockPlaceListener implements Listener {
+public final class PaperBlockPlaceListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_place");
     private static final EventTypeDefinition DEFINITION =
@@ -129,7 +128,8 @@ public final class PaperBlockPlaceListener implements Listener {
         }
     }
 
-    public void clear() {
+    @Override
+    public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
         }

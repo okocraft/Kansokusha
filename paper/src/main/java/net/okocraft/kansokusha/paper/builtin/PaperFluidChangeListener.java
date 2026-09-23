@@ -13,7 +13,6 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -27,7 +26,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperFluidChangeListener implements Listener {
+public final class PaperFluidChangeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "fluid_change");
     private static final EventTypeDefinition DEFINITION =
@@ -109,7 +108,8 @@ public final class PaperFluidChangeListener implements Listener {
         ));
     }
 
-    public void clear() {
+    @Override
+    public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
         }

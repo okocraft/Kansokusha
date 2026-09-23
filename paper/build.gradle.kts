@@ -22,6 +22,8 @@ dependencies {
 
     compileOnlyApi(libs.paper)
     testImplementation(libs.paper)
+    testImplementation(libs.slf4j.api)
+    testRuntimeOnly(libs.slf4j.simple)
 
     paperweight.paperDevBundle(libs.versions.paper.get())
 }
@@ -32,6 +34,11 @@ bundler {
 }
 
 tasks {
+    test {
+        systemProperty("org.slf4j.simpleLogger.cacheOutputStream", "true")
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+    }
+
     runServer {
         minecraftVersion(minecraftVersion)
         systemProperty("com.mojang.eula.agree", "true")

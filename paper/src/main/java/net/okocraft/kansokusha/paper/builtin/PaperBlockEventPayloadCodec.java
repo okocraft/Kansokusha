@@ -37,7 +37,7 @@ final class PaperBlockEventPayloadCodec {
         if (entityType != null) {
             payload.putString("actor_entity_type", entityType);
         }
-        return PaperBlockStatePayloadCodec.encode(payload);
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     static EventPayload encodeBurn(
@@ -48,7 +48,7 @@ final class PaperBlockEventPayloadCodec {
         var payload = new CompoundTag();
         payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
         putSourceBlock(payload, sourcePosition, sourceState);
-        return PaperBlockStatePayloadCodec.encode(payload);
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     static EventPayload encodeNaturalChange(
@@ -89,7 +89,7 @@ final class PaperBlockEventPayloadCodec {
         );
         payload.put("source", position(sourcePosition));
         payload.put("destination", position(destinationPosition));
-        return PaperBlockStatePayloadCodec.encode(payload);
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     private static EventPayload encodeNaturalChange(
@@ -109,7 +109,7 @@ final class PaperBlockEventPayloadCodec {
         if (sourcePosition != null) {
             payload.put("source", position(sourcePosition));
         }
-        return PaperBlockStatePayloadCodec.encode(payload);
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     private static void putSourceBlock(

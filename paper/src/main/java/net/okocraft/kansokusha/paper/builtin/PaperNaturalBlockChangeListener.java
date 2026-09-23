@@ -15,7 +15,6 @@ import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
@@ -38,7 +37,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperNaturalBlockChangeListener implements Listener {
+public final class PaperNaturalBlockChangeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "natural_block_change");
     private static final EventTypeDefinition DEFINITION =
@@ -205,7 +204,8 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         finalizeEvent((Event) event, event);
     }
 
-    public void clear() {
+    @Override
+    public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
         }

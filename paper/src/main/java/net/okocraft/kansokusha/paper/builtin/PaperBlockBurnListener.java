@@ -13,7 +13,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -27,7 +26,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBlockBurnListener implements Listener {
+public final class PaperBlockBurnListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_burn");
     private static final EventTypeDefinition DEFINITION =
@@ -96,7 +95,8 @@ public final class PaperBlockBurnListener implements Listener {
         ));
     }
 
-    public void clear() {
+    @Override
+    public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
         }
