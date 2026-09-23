@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import org.bukkit.block.data.BlockData;
@@ -28,7 +29,7 @@ public final class PaperBlockStatePayloadCodec {
     }
 
     public static EventPayload encodeBlockBreak(BlockData blockData) {
-        return encode(NbtUtils.writeBlockState(toMinecraftState(blockData)));
+        return encode(blockState(blockData));
     }
 
     public static EventPayload encodeBlockPlace(
@@ -36,15 +37,27 @@ public final class PaperBlockStatePayloadCodec {
         BlockData placedBlockData
     ) {
         var payload = new CompoundTag();
-        payload.put(
-            REPLACED_STATE_KEY,
-            NbtUtils.writeBlockState(toMinecraftState(replacedBlockData))
-        );
-        payload.put(
-            PLACED_STATE_KEY,
-            NbtUtils.writeBlockState(toMinecraftState(placedBlockData))
-        );
+        payload.put(REPLACED_STATE_KEY, blockState(replacedBlockData));
+        payload.put(PLACED_STATE_KEY, blockState(placedBlockData));
         return encode(payload);
+    }
+
+    static CompoundTag blockState(BlockData blockData) {
+        return NbtUtils.writeBlockState(toMinecraftState(blockData));
+    }
+
+    static CompoundTag airBlockState() {
+        return NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState());
+    }
+
+    static EventPayload encode(CompoundTag tag) {
+        var bytes = new ByteArrayOutputStream();
+        try (var output = new DataOutputStream(bytes)) {
+            NbtIo.write(Objects.requireNonNull(tag, "tag"), output);
+        } catch (IOException e) {
+            throw new AssertionError("Unexpected in-memory NBT encoding failure.", e);
+        }
+        return EventPayload.copyOf(bytes.toByteArray());
     }
 
     static CompoundTag decode(EventPayload payload) throws IOException {
@@ -64,15 +77,5 @@ public final class PaperBlockStatePayloadCodec {
             );
         }
         return craftBlockData.getState();
-    }
-
-    private static EventPayload encode(CompoundTag tag) {
-        var bytes = new ByteArrayOutputStream();
-        try (var output = new DataOutputStream(bytes)) {
-            NbtIo.write(tag, output);
-        } catch (IOException e) {
-            throw new AssertionError("Unexpected in-memory NBT encoding failure.", e);
-        }
-        return EventPayload.copyOf(bytes.toByteArray());
     }
 }
