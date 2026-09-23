@@ -26,11 +26,9 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     private final long maxBatchDelayNanos;
     private final NanoClock clock;
     private final EventPoller poller;
-    private final WorkerInterrupter workerInterrupter;
     private final Object lifecycleMonitor = new Object();
 
     private volatile State state = State.NEW;
-    private volatile boolean stopRequested;
     @Nullable
     private volatile Throwable failureCause;
     @Nullable
@@ -50,8 +48,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             maxBatchSize,
             maxBatchDelay,
             System::nanoTime,
-            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS),
-            Thread::interrupt
+            (source, timeoutNanos) -> source.awaitNext(timeoutNanos, TimeUnit.NANOSECONDS)
         );
     }
 
@@ -63,28 +60,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         Duration maxBatchDelay,
         NanoClock clock,
         EventPoller poller
-    ) {
-        this(
-            intake,
-            writer,
-            failureReporter,
-            maxBatchSize,
-            maxBatchDelay,
-            clock,
-            poller,
-            Thread::interrupt
-        );
-    }
-
-    AsyncBatchWriterService(
-        BoundedEventIntake intake,
-        EventBatchWriter writer,
-        PipelineFailureReporter failureReporter,
-        int maxBatchSize,
-        Duration maxBatchDelay,
-        NanoClock clock,
-        EventPoller poller,
-        WorkerInterrupter workerInterrupter
     ) {
         if (maxBatchSize <= 0) {
             throw new IllegalArgumentException("maxBatchSize must be positive.");
@@ -111,7 +86,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         this.maxBatchDelayNanos = delayNanos;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.poller = Objects.requireNonNull(poller, "poller");
-        this.workerInterrupter = Objects.requireNonNull(workerInterrupter, "workerInterrupter");
     }
 
     public void start() {
@@ -126,42 +100,18 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
     }
 
-    public void requestStop() {
-        Thread threadToInterrupt = null;
-
-        synchronized (this.lifecycleMonitor) {
-            if (this.state == State.NEW) {
-                this.stopRequested = true;
-                this.state = State.STOPPED;
-                return;
-            }
-            if (this.state != State.RUNNING) {
-                return;
-            }
-
-            this.stopRequested = true;
-            this.state = State.STOPPING;
-            threadToInterrupt = this.worker;
-        }
-
-        if (threadToInterrupt != null) {
-            this.workerInterrupter.interrupt(threadToInterrupt);
-        }
-    }
-
     public void beginDraining() {
         this.intake.beginDraining();
 
         synchronized (this.lifecycleMonitor) {
             switch (this.state) {
-                case NEW, STOPPED -> {
-                    this.stopRequested = false;
+                case NEW -> {
                     this.state = State.DRAINING;
                     this.worker = this.newWorker();
                     this.worker.start();
                 }
                 case RUNNING -> this.state = State.DRAINING;
-                case DRAINING, STOPPING, FAILED -> {
+                case DRAINING, STOPPED, FAILED -> {
                 }
             }
         }
@@ -176,30 +126,10 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         }
 
         var interrupted = joinUninterruptibly(threadToJoin);
-        threadToJoin = this.resumeDrainAfterForceStop();
-        interrupted |= joinUninterruptibly(threadToJoin);
-
         this.intake.close();
 
         if (interrupted) {
             Thread.currentThread().interrupt();
-        }
-    }
-
-    @Nullable
-    private Thread resumeDrainAfterForceStop() {
-        synchronized (this.lifecycleMonitor) {
-            if (this.state == State.STOPPED && this.intake.size() > 0) {
-                this.stopRequested = false;
-                this.state = State.DRAINING;
-                this.worker = this.newWorker();
-                this.worker.start();
-                return this.worker;
-            }
-            if (this.state == State.DRAINING) {
-                return this.worker;
-            }
-            return null;
         }
     }
 
@@ -208,19 +138,8 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         this.drainAndStop();
     }
 
-    public void awaitStopped() throws InterruptedException {
-        final Thread currentWorker;
-        synchronized (this.lifecycleMonitor) {
-            currentWorker = this.worker;
-        }
-        if (currentWorker != null && currentWorker != Thread.currentThread()) {
-            currentWorker.join();
-        }
-    }
-
     private boolean isDrainRequested() {
-        return this.state == State.DRAINING
-            && this.intake.state() == BoundedEventIntake.State.DRAINING;
+        return this.intake.state() != BoundedEventIntake.State.RUNNING;
     }
 
     static boolean joinUninterruptibly(@Nullable Thread thread) {
@@ -296,19 +215,17 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     @Nullable
     private AcceptedEvent awaitFirstEvent() {
         while (true) {
-            if (this.stopRequested && !this.isDrainRequested()) {
-                return null;
-            }
             if (this.isDrainRequested()) {
                 return this.intake.poll();
             }
 
             try {
-                return this.intake.awaitNext();
-            } catch (InterruptedException e) {
-                if (this.stopRequested && !this.isDrainRequested()) {
-                    return null;
+                var event = this.intake.awaitNext();
+                if (event != null) {
+                    return event;
                 }
+            } catch (InterruptedException ignored) {
+                // Keep waiting until an event arrives or draining begins.
             }
         }
     }
@@ -316,7 +233,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
     private void fillTimedBatch(List<AcceptedEvent> batch) {
         var batchStartedAt = this.clock.nanoTime();
 
-        while (batch.size() < this.maxBatchSize && !this.stopRequested && !this.isDrainRequested()) {
+        while (batch.size() < this.maxBatchSize && !this.isDrainRequested()) {
             var elapsed = this.clock.nanoTime() - batchStartedAt;
             var remaining = this.maxBatchDelayNanos - elapsed;
             if (remaining <= 0) {
@@ -327,7 +244,7 @@ public final class AsyncBatchWriterService implements AutoCloseable {
             try {
                 next = this.poller.poll(this.intake, remaining);
             } catch (InterruptedException e) {
-                if (this.stopRequested || this.isDrainRequested()) {
+                if (this.isDrainRequested()) {
                     break;
                 }
                 continue;
@@ -381,7 +298,6 @@ public final class AsyncBatchWriterService implements AutoCloseable {
         NEW,
         RUNNING,
         DRAINING,
-        STOPPING,
         STOPPED,
         FAILED
     }
@@ -397,11 +313,5 @@ public final class AsyncBatchWriterService implements AutoCloseable {
 
         @Nullable
         AcceptedEvent poll(BoundedEventIntake intake, long timeoutNanos) throws InterruptedException;
-    }
-
-    @FunctionalInterface
-    interface WorkerInterrupter {
-
-        void interrupt(Thread worker);
     }
 }
