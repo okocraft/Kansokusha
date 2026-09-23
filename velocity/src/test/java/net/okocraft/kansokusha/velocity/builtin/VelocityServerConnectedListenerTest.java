@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.time.Clock;
@@ -33,6 +34,7 @@ class VelocityServerConnectedListenerTest {
         var api = api();
         var listener = VelocityServerConnectedListener.register(
             api,
+            Mockito.mock(Logger.class),
             Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
 
@@ -44,7 +46,7 @@ class VelocityServerConnectedListenerTest {
 
         Assertions.assertEquals(VelocityServerConnectedListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(VelocityServerKeyCodec.encode("lobby"), submission.serverKey());
+        Assertions.assertEquals(VelocityServerKeyCodec.encode("lobby").orElseThrow(), submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
@@ -58,6 +60,7 @@ class VelocityServerConnectedListenerTest {
         var api = api();
         var listener = VelocityServerConnectedListener.register(
             api,
+            Mockito.mock(Logger.class),
             Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
 
@@ -67,14 +70,14 @@ class VelocityServerConnectedListenerTest {
         Mockito.verify(api).submit(captor.capture());
         var submission = captor.getValue();
 
-        Assertions.assertEquals(VelocityServerKeyCodec.encode("game"), submission.serverKey());
+        Assertions.assertEquals(VelocityServerKeyCodec.encode("game").orElseThrow(), submission.serverKey());
         Assertions.assertEquals(
-            VelocityServerKeyCodec.encode("lobby"),
+            VelocityServerKeyCodec.encode("lobby").orElseThrow(),
             VelocityServerConnectedPayloadCodec.decode(submission.payload()).orElseThrow()
         );
         Assertions.assertFalse(
             new String(submission.payload().copyBytes(), java.nio.charset.StandardCharsets.UTF_8)
-                .contains(VelocityServerKeyCodec.encode("game").asString())
+                .contains(VelocityServerKeyCodec.encode("game").orElseThrow().asString())
         );
     }
 
@@ -83,12 +86,27 @@ class VelocityServerConnectedListenerTest {
         var api = api();
         Mockito.when(api.submit(Mockito.any()))
             .thenReturn(SubmissionOutcome.INGESTION_UNAVAILABLE);
-        var listener = VelocityServerConnectedListener.register(api);
+        var listener = VelocityServerConnectedListener.register(api, Mockito.mock(Logger.class));
 
         Assertions.assertDoesNotThrow(
             () -> listener.onServerConnected(event("game", "lobby"))
         );
         Mockito.verify(api).submit(Mockito.any());
+    }
+
+    @Test
+    void testInvalidServerNamesAreSkippedAndWarnedOnce() {
+        var api = api();
+        var logger = Mockito.mock(Logger.class);
+        var listener = VelocityServerConnectedListener.register(api, logger);
+
+        listener.onServerConnected(event("東京", null));
+        listener.onServerConnected(event("東京", null));
+        listener.onServerConnected(event("lobby", "東京"));
+
+        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
+        Mockito.verify(logger, Mockito.times(1))
+            .warn(Mockito.anyString(), Mockito.eq("東京"));
     }
 
     @Test
@@ -99,7 +117,7 @@ class VelocityServerConnectedListenerTest {
 
         var failure = Assertions.assertThrows(
             IllegalStateException.class,
-            () -> VelocityServerConnectedListener.register(api)
+            () -> VelocityServerConnectedListener.register(api, Mockito.mock(Logger.class))
         );
 
         Assertions.assertTrue(failure.getMessage().contains("kansokusha:server_connected"));
