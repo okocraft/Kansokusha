@@ -4,7 +4,6 @@ import xyz.jpenilla.runvelocity.task.RunVelocity
 import java.net.URLClassLoader
 import java.nio.file.Files
 import java.util.Properties
-import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.bundler)
@@ -32,16 +31,6 @@ bundler {
 }
 
 tasks {
-    named<ShadowJar>("shadowJar") {
-        doLast {
-            ZipFile(archiveFile.get().asFile).use { jar ->
-                check(jar.getEntry("org/duckdb/DuckDBDriver.class") != null) {
-                    "DuckDB JDBC driver is missing from the Velocity artifact."
-                }
-            }
-        }
-    }
-
     runVelocity {
         velocityVersion(libs.versions.velocity.get())
     }

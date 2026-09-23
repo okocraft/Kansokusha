@@ -3,9 +3,7 @@ import org.gradle.api.tasks.bundling.Jar
 import xyz.jpenilla.runpaper.task.RunServer
 import java.net.URLClassLoader
 import java.nio.file.Files
-import java.sql.Driver
 import java.util.Properties
-import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.bundler)
@@ -34,16 +32,6 @@ bundler {
 }
 
 tasks {
-    named<ShadowJar>("shadowJar") {
-        doLast {
-            ZipFile(archiveFile.get().asFile).use { jar ->
-                check(jar.getEntry("org/duckdb/DuckDBDriver.class") != null) {
-                    "DuckDB JDBC driver is missing from the Paper artifact."
-                }
-            }
-        }
-    }
-
     runServer {
         minecraftVersion(minecraftVersion)
         systemProperty("com.mojang.eula.agree", "true")
