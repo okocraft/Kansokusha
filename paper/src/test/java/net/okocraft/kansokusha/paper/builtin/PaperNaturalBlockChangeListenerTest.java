@@ -84,6 +84,38 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testFadeKeepsLowPriorityTargetStateWhenEventStateIsMutated() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 15, 70, 15, Blocks.ICE.defaultBlockState(), Material.ICE
+        );
+        var target = PaperBlockEventTestSupport.state(
+            world, block, 15, 70, 15, Blocks.WATER.defaultBlockState()
+        );
+        var event = Mockito.mock(BlockFadeEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(target);
+
+        listener.capture(event);
+        Mockito.when(target.getBlockData()).thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
+        listener.finalizeEvent(event);
+
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(
+            naturalPayload(
+                Blocks.ICE.defaultBlockState(),
+                Blocks.WATER.defaultBlockState(),
+                "block_fade",
+                null,
+                null
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+    }
+
+    @Test
     void testInheritedGrowHandlersDoNotReplaceSpreadSemantics() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);

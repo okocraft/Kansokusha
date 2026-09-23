@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 
 class PaperFertilizationEventRelationTest {
@@ -34,7 +35,10 @@ class PaperFertilizationEventRelationTest {
 
         fixture.listener().capture(structure);
         fixture.listener().finalizeEvent(structure);
-        fixture.listener().discardFertilizedChanges(fertilize(fixture.changedStates(), false));
+        dispatchFertilize(
+            fixture.listener(),
+            fertilize(fixture.changedStates(), false)
+        );
 
         Assertions.assertTrue(fixture.api().submissions.isEmpty());
         Assertions.assertTrue(fixture.deferred().isEmpty());
@@ -59,6 +63,16 @@ class PaperFertilizationEventRelationTest {
     @Test
     void testCocoaBonemealGrowIsOwnedByCancelledFertilization() {
         assertCocoaBonemealGrowIsOwnedByFertilization(true);
+    }
+
+    @Test
+    void testCocoaBonemealGrowRemainsFertilizationOwnedAfterAcceptedListRemoval() {
+        assertCocoaBonemealGrowRemainsOwnedAfterListRemoval(false);
+    }
+
+    @Test
+    void testCocoaBonemealGrowRemainsFertilizationOwnedAfterCancelledListRemoval() {
+        assertCocoaBonemealGrowRemainsOwnedAfterListRemoval(true);
     }
 
     @Test
@@ -94,7 +108,8 @@ class PaperFertilizationEventRelationTest {
         Assertions.assertEquals(1, fixture.deferred().size());
         Assertions.assertEquals(1, fixture.listener().inFlightCount());
 
-        fixture.listener().discardFertilizedChanges(
+        dispatchFertilize(
+            fixture.listener(),
             fertilize(fixture.changedStates(), cancelled)
         );
         fixture.deferred().remove().run();
@@ -133,9 +148,51 @@ class PaperFertilizationEventRelationTest {
         Assertions.assertEquals(1, deferred.size());
         Assertions.assertEquals(1, listener.inFlightCount());
 
-        listener.discardFertilizedChanges(
+        dispatchFertilize(
+            listener,
             fertilize(List.of(grownState), cancelled)
         );
+        deferred.remove().run();
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static void assertCocoaBonemealGrowRemainsOwnedAfterListRemoval(
+        boolean cancelled
+    ) {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = listener(api, deferred);
+        var world = PaperBlockEventTestSupport.world();
+        var cocoa = PaperBlockEventTestSupport.block(
+            world, 16, 65, 16, Blocks.COCOA.defaultBlockState(), Material.COCOA
+        );
+        var grownState = PaperBlockEventTestSupport.state(
+            world,
+            cocoa,
+            16,
+            65,
+            16,
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                1
+            )
+        );
+        var grow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(grow.getBlock()).thenReturn(cocoa);
+        Mockito.when(grow.getNewState()).thenReturn(grownState);
+
+        listener.capture(grow);
+        listener.finalizeEvent(grow);
+
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        changedStates.add(grownState);
+        var fertilize = fertilize(changedStates, cancelled);
+
+        listener.capture(fertilize);
+        changedStates.remove(grownState);
+        listener.discardFertilizedChanges(fertilize);
         deferred.remove().run();
 
         Assertions.assertTrue(api.submissions.isEmpty());
@@ -170,7 +227,8 @@ class PaperFertilizationEventRelationTest {
         Assertions.assertEquals(1, deferred.size());
         Assertions.assertEquals(1, listener.inFlightCount());
 
-        listener.discardFertilizedChanges(
+        dispatchFertilize(
+            listener,
             fertilize(List.of(spreadState), cancelled)
         );
         deferred.remove().run();
@@ -229,7 +287,8 @@ class PaperFertilizationEventRelationTest {
         Assertions.assertEquals(2, deferred.size());
         Assertions.assertEquals(2, listener.inFlightCount());
 
-        listener.discardFertilizedChanges(
+        dispatchFertilize(
+            listener,
             fertilize(List.of(attachedStem, fruitState), cancelled)
         );
         while (!deferred.isEmpty()) {
@@ -237,6 +296,70 @@ class PaperFertilizationEventRelationTest {
         }
 
         Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
+    void testEarlierNaturalGrowthAtSamePositionIsNotClaimedByLaterFertilization() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = listener(api, deferred);
+        var world = PaperBlockEventTestSupport.world();
+        var cocoa = PaperBlockEventTestSupport.block(
+            world, 40, 65, 40, Blocks.COCOA.defaultBlockState(), Material.COCOA
+        );
+
+        var naturalState = PaperBlockEventTestSupport.state(
+            world,
+            cocoa,
+            40,
+            65,
+            40,
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                1
+            )
+        );
+        var naturalGrow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(naturalGrow.getBlock()).thenReturn(cocoa);
+        Mockito.when(naturalGrow.getNewState()).thenReturn(naturalState);
+        listener.capture(naturalGrow);
+        listener.finalizeEvent(naturalGrow);
+
+        Mockito.when(cocoa.getBlockData()).thenReturn(
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                1
+            ).asBlockData()
+        );
+
+        var fertilizedState = PaperBlockEventTestSupport.state(
+            world,
+            cocoa,
+            40,
+            65,
+            40,
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                2
+            )
+        );
+        var fertilizedGrow = Mockito.mock(BlockGrowEvent.class);
+        Mockito.when(fertilizedGrow.getBlock()).thenReturn(cocoa);
+        Mockito.when(fertilizedGrow.getNewState()).thenReturn(fertilizedState);
+        listener.capture(fertilizedGrow);
+        listener.finalizeEvent(fertilizedGrow);
+
+        dispatchFertilize(
+            listener,
+            fertilize(List.of(fertilizedState), false)
+        );
+
+        while (!deferred.isEmpty()) {
+            deferred.remove().run();
+        }
+
+        Assertions.assertEquals(1, api.submissions.size());
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
@@ -277,6 +400,14 @@ class PaperFertilizationEventRelationTest {
             Mockito.when(event.getBlocks()).thenReturn(fixture.changedStates());
         }
         return event;
+    }
+
+    private static void dispatchFertilize(
+        PaperNaturalBlockChangeListener listener,
+        BlockFertilizeEvent event
+    ) {
+        listener.capture(event);
+        listener.discardFertilizedChanges(event);
     }
 
     private static BlockFertilizeEvent fertilize(
