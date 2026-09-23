@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
@@ -11,6 +10,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -70,8 +71,9 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
 
         var block = event.getBlock();
         var entity = event.getEntity();
-        var subject = entity instanceof Player player
-            ? new PlayerSubject(player.getUniqueId())
+        var entityId = entity == null ? null : entity.getUniqueId();
+        var subject = entity instanceof Player
+            ? new PlayerSubject(Objects.requireNonNull(entityId))
             : null;
         var actorKind = entity == null
             ? "none"
@@ -82,14 +84,11 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
             subject,
-            PaperBlockEventPayloadCodec.encodeCauldronLevelChange(
-                block.getBlockData().clone(),
-                event.getNewState().getBlockData().clone(),
-                event.getReason().name(),
-                actorKind,
-                entity == null ? null : entity.getUniqueId(),
-                entity == null ? null : entity.getType().name()
-            )
+            block.getBlockData().clone(),
+            event.getReason().name(),
+            actorKind,
+            entityId,
+            entity == null ? null : entity.getType().name()
         );
 
         synchronized (this.inFlight) {
@@ -110,6 +109,14 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
             return;
         }
 
+        var payload = PaperBlockEventPayloadCodec.encodeCauldronLevelChange(
+            snapshot.oldState(),
+            event.getNewState().getBlockData().clone(),
+            snapshot.reason(),
+            snapshot.actorKind(),
+            snapshot.entityId(),
+            snapshot.entityType()
+        );
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -118,7 +125,7 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
             snapshot.worldKey(),
             snapshot.position(),
             snapshot.subject(),
-            snapshot.payload()
+            payload
         ));
     }
 
@@ -158,7 +165,11 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
         Key worldKey,
         BlockPosition position,
         @Nullable PlayerSubject subject,
-        EventPayload payload
+        BlockData oldState,
+        String reason,
+        String actorKind,
+        @Nullable UUID entityId,
+        @Nullable String entityType
     ) {
     }
 }
