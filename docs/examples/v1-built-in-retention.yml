@@ -13,6 +13,16 @@ retention:
       policy: kansokusha:audit
     - event-type: kansokusha:block_place
       policy: kansokusha:audit
+    - event-type: kansokusha:sign_change
+      policy: kansokusha:audit
+    - event-type: kansokusha:bucket_empty
+      policy: kansokusha:audit
+    - event-type: kansokusha:bucket_fill
+      policy: kansokusha:audit
+    - event-type: kansokusha:block_harvest
+      policy: kansokusha:audit
+    - event-type: kansokusha:flower_pot_change
+      policy: kansokusha:audit
     - event-type: kansokusha:server_connected
       policy: kansokusha:session
   fallback-policy: kansokusha:default
