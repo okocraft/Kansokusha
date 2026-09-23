@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
@@ -11,6 +10,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.SpongeAbsorbEvent;
@@ -19,9 +19,8 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -68,27 +67,22 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
     public void capture(SpongeAbsorbEvent event) {
         Objects.requireNonNull(event, "event");
 
-        var occurredAt = this.clock.instant();
-        var spongeOrigin = position(event.getBlock());
-        var affected = event.getBlocks();
-        var snapshots = new ArrayList<Snapshot>(affected.size());
-
-        for (var state : affected) {
-            var block = state.getBlock();
-            snapshots.add(new Snapshot(
-                PaperKansokusha.key(state.getWorld().getKey()),
-                position(state),
-                PaperBlockEventPayloadCodec.encodeSpongeAbsorb(
-                    block.getBlockData().clone(),
-                    spongeOrigin
-                )
-            ));
+        var preStates = new LinkedHashMap<BlockKey, BlockData>();
+        for (var state : event.getBlocks()) {
+            preStates.putIfAbsent(
+                blockKey(state),
+                state.getBlock().getBlockData().clone()
+            );
         }
 
         synchronized (this.inFlight) {
             this.inFlight.put(
                 event,
-                new Capture(occurredAt, List.copyOf(snapshots))
+                new Capture(
+                    this.clock.instant(),
+                    position(event.getBlock()),
+                    Map.copyOf(preStates)
+                )
             );
         }
     }
@@ -106,16 +100,31 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
             return;
         }
 
-        for (var snapshot : capture.snapshots()) {
+        var finalStatesByBlock = new LinkedHashMap<BlockKey, BlockState>();
+        for (var state : event.getBlocks()) {
+            finalStatesByBlock.put(blockKey(state), state);
+        }
+
+        for (var entry : finalStatesByBlock.entrySet()) {
+            var key = entry.getKey();
+            var state = entry.getValue();
+            var preState = capture.preStates().get(key);
+            if (preState == null) {
+                preState = state.getBlock().getBlockData().clone();
+            }
+
             this.api.submit(new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 capture.occurredAt(),
                 this.serverKey,
-                snapshot.worldKey(),
-                snapshot.position(),
+                key.worldKey(),
+                key.position(),
                 null,
-                snapshot.payload()
+                PaperBlockEventPayloadCodec.encodeSpongeAbsorb(
+                    preState,
+                    capture.spongeOrigin()
+                )
             ));
         }
     }
@@ -146,6 +155,13 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
         }
     }
 
+    private static BlockKey blockKey(BlockState state) {
+        return new BlockKey(
+            PaperKansokusha.key(state.getWorld().getKey()),
+            position(state)
+        );
+    }
+
     private static BlockPosition position(Block block) {
         return new BlockPosition(block.getX(), block.getY(), block.getZ());
     }
@@ -156,14 +172,14 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
 
     private record Capture(
         Instant occurredAt,
-        List<Snapshot> snapshots
+        BlockPosition spongeOrigin,
+        Map<BlockKey, BlockData> preStates
     ) {
     }
 
-    private record Snapshot(
+    private record BlockKey(
         Key worldKey,
-        BlockPosition position,
-        EventPayload payload
+        BlockPosition position
     ) {
     }
 }
