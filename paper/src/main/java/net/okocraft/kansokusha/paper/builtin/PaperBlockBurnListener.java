@@ -91,7 +91,9 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
             return;
         }
         if (snapshot.awaitTntPrime()) {
-            this.pendingTntBurns.add(snapshot.worldKey(), snapshot.position(), snapshot);
+            synchronized (this.inFlight) {
+                this.pendingTntBurns.add(snapshot.worldKey(), snapshot.position(), snapshot);
+            }
             return;
         }
         submit(snapshot);
@@ -179,7 +181,9 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     }
 
     private @Nullable Snapshot removePendingTntBurn(Block block) {
-        return this.pendingTntBurns.remove(block);
+        synchronized (this.inFlight) {
+            return this.pendingTntBurns.remove(block);
+        }
     }
 
     private static @Nullable SourceBlock source(@Nullable Block block) {

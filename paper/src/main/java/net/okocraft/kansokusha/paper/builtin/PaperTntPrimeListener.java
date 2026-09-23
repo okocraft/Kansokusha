@@ -95,7 +95,9 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         }
 
         if (snapshot.awaitLegacyFire()) {
-            this.pendingFire.add(snapshot.worldKey(), snapshot.position(), snapshot);
+            synchronized (this.inFlight) {
+                this.pendingFire.add(snapshot.worldKey(), snapshot.position(), snapshot);
+            }
             return;
         }
         submit(snapshot);
@@ -108,7 +110,10 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
             return;
         }
-        var snapshot = this.pendingFire.remove(event.getBlock());
+        Snapshot snapshot;
+        synchronized (this.inFlight) {
+            snapshot = this.pendingFire.remove(event.getBlock());
+        }
         if (snapshot == null || event.isCancelled()) {
             return;
         }
@@ -119,8 +124,8 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
+            this.pendingFire.clear();
         }
-        this.pendingFire.clear();
     }
 
     int inFlightCount() {

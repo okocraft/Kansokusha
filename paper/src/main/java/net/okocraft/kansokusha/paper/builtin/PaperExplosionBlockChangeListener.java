@@ -131,7 +131,10 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
         if (event.getCause() != TNTPrimeEvent.PrimeCause.EXPLOSION) {
             return;
         }
-        var submission = this.pendingTntChanges.remove(event.getBlock());
+        EventSubmission submission;
+        synchronized (this.inFlight) {
+            submission = this.pendingTntChanges.remove(event.getBlock());
+        }
         if (submission == null || event.isCancelled()) {
             return;
         }
@@ -142,8 +145,8 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
+            this.pendingTntChanges.clear();
         }
-        this.pendingTntChanges.clear();
     }
 
     int inFlightCount() {
@@ -189,7 +192,9 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
             );
             if (block.getType() == Material.TNT) {
                 if (Boolean.TRUE.equals(block.getWorld().getGameRuleValue(GameRules.TNT_EXPLODES))) {
-                    this.pendingTntChanges.add(key.worldKey(), key.position(), submission);
+                    synchronized (this.inFlight) {
+                        this.pendingTntChanges.add(key.worldKey(), key.position(), submission);
+                    }
                 }
                 continue;
             }
