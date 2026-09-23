@@ -9,17 +9,20 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockBurnEvent;
+import org.bukkit.event.block.TNTPrimeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -36,6 +39,7 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     private final Key serverKey;
     private final Clock clock;
     private final Map<BlockBurnEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    private final Map<BlockKey, Snapshot> pendingTntBurns = new HashMap<>();
 
     private PaperBlockBurnListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -62,6 +66,7 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
+            block.getType() == Material.TNT,
             PaperBlockEventPayloadCodec.encodeBurn(
                 block.getBlockData(),
                 source == null ? null : source.position(),
@@ -83,6 +88,56 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         if (snapshot == null || event.isCancelled()) {
             return;
         }
+        if (snapshot.awaitTntPrime()) {
+            synchronized (this.inFlight) {
+                this.pendingTntBurns.put(
+                    new BlockKey(snapshot.worldKey(), snapshot.position()),
+                    snapshot
+                );
+            }
+            return;
+        }
+        submit(snapshot);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void finalizeTntPrime(TNTPrimeEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (event.getCause() != TNTPrimeEvent.PrimeCause.FIRE || !event.isCancelled()) {
+            return;
+        }
+        removePendingTntBurn(event.getBlock());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    @SuppressWarnings({"deprecation", "removal"})
+    public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
+            return;
+        }
+        var snapshot = removePendingTntBurn(event.getBlock());
+        if (snapshot == null || event.isCancelled()) {
+            return;
+        }
+        submit(snapshot);
+    }
+
+    @Override
+    public void clearInFlightState() {
+        synchronized (this.inFlight) {
+            this.inFlight.clear();
+            this.pendingTntBurns.clear();
+        }
+    }
+
+    int inFlightCount() {
+        synchronized (this.inFlight) {
+            return this.inFlight.size() + this.pendingTntBurns.size();
+        }
+    }
+
+    private void submit(Snapshot snapshot) {
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -95,16 +150,11 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
         ));
     }
 
-    @Override
-    public void clearInFlightState() {
+    private @Nullable Snapshot removePendingTntBurn(Block block) {
         synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
-    }
-
-    int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size();
+            return this.pendingTntBurns.remove(
+                new BlockKey(PaperKansokusha.key(block.getWorld().getKey()), position(block))
+            );
         }
     }
 
@@ -129,11 +179,15 @@ public final class PaperBlockBurnListener implements PaperInFlightListener {
     private record SourceBlock(BlockPosition position, BlockData state) {
     }
 
+    private record BlockKey(Key worldKey, BlockPosition position) {
+    }
+
     private record Snapshot(
         Instant occurredAt,
         Key serverKey,
         Key worldKey,
         BlockPosition position,
+        boolean awaitTntPrime,
         EventPayload payload
     ) {
     }

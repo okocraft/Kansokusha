@@ -9,6 +9,8 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.event.Cancellable;
@@ -16,12 +18,14 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
 import org.bukkit.event.world.StructureGrowEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -34,6 +38,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -46,22 +51,49 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
+    private final BiConsumer<Location, Runnable> nextTickExecutor;
     private final Map<Event, List<Snapshot>> inFlight = new IdentityHashMap<>();
+    private final List<DeferredStructureGrow> deferredStructureGrows = new ArrayList<>();
 
-    private PaperNaturalBlockChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
+    private PaperNaturalBlockChangeListener(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Location, Runnable> nextTickExecutor
+    ) {
         this.api = Objects.requireNonNull(api, "api");
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.nextTickExecutor = Objects.requireNonNull(nextTickExecutor, "nextTickExecutor");
     }
 
     public static PaperNaturalBlockChangeListener register(KansokushaApi api, Key serverKey) {
-        return register(api, serverKey, Clock.systemUTC());
+        var plugin = JavaPlugin.getProvidingPlugin(PaperNaturalBlockChangeListener.class);
+        return register(
+            api,
+            serverKey,
+            Clock.systemUTC(),
+            (location, task) -> Bukkit.getRegionScheduler().run(
+                plugin,
+                location,
+                ignored -> task.run()
+            )
+        );
     }
 
     static PaperNaturalBlockChangeListener register(
         KansokushaApi api,
         Key serverKey,
         Clock clock
+    ) {
+        return register(api, serverKey, clock, (location, task) -> task.run());
+    }
+
+    static PaperNaturalBlockChangeListener register(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Location, Runnable> nextTickExecutor
     ) {
         Objects.requireNonNull(api, "api");
         var outcome = api.registerEventType(DEFINITION);
@@ -70,7 +102,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
                 "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
             );
         }
-        return new PaperNaturalBlockChangeListener(api, serverKey, clock);
+        return new PaperNaturalBlockChangeListener(api, serverKey, clock, nextTickExecutor);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -201,19 +233,53 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(StructureGrowEvent event) {
-        finalizeEvent((Event) event, event);
+        Objects.requireNonNull(event, "event");
+        List<Snapshot> snapshots;
+        synchronized (this.inFlight) {
+            snapshots = this.inFlight.remove(event);
+        }
+        if (snapshots == null || event.isCancelled()) {
+            return;
+        }
+
+        var deferred = new DeferredStructureGrow(
+            changedBlocks(event.getBlocks()),
+            snapshots
+        );
+        synchronized (this.inFlight) {
+            this.deferredStructureGrows.add(deferred);
+        }
+        this.nextTickExecutor.accept(
+            event.getLocation(),
+            () -> finalizeDeferredStructureGrow(deferred)
+        );
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void discardFertilizedStructureGrow(BlockFertilizeEvent event) {
+        Objects.requireNonNull(event, "event");
+        var changedBlocks = changedBlocks(event.getBlocks());
+        synchronized (this.inFlight) {
+            for (int i = this.deferredStructureGrows.size() - 1; i >= 0; i--) {
+                if (this.deferredStructureGrows.get(i).changedBlocks().equals(changedBlocks)) {
+                    this.deferredStructureGrows.remove(i);
+                    return;
+                }
+            }
+        }
     }
 
     @Override
     public void clearInFlightState() {
         synchronized (this.inFlight) {
             this.inFlight.clear();
+            this.deferredStructureGrows.clear();
         }
     }
 
     int inFlightCount() {
         synchronized (this.inFlight) {
-            return this.inFlight.size();
+            return this.inFlight.size() + this.deferredStructureGrows.size();
         }
     }
 
@@ -274,8 +340,57 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         }
     }
 
+    private void finalizeDeferredStructureGrow(DeferredStructureGrow deferred) {
+        synchronized (this.inFlight) {
+            var found = false;
+            for (int i = 0; i < this.deferredStructureGrows.size(); i++) {
+                if (this.deferredStructureGrows.get(i) == deferred) {
+                    this.deferredStructureGrows.remove(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return;
+            }
+        }
+
+        for (var snapshot : deferred.snapshots()) {
+            this.api.submit(new EventSubmission(
+                EVENT_TYPE,
+                PayloadGeneration.FIRST,
+                snapshot.occurredAt(),
+                snapshot.serverKey(),
+                snapshot.worldKey(),
+                snapshot.position(),
+                null,
+                snapshot.payload()
+            ));
+        }
+    }
+
+    private static List<ChangedBlock> changedBlocks(List<BlockState> states) {
+        var result = new ArrayList<ChangedBlock>(states.size());
+        for (var state : states) {
+            result.add(new ChangedBlock(
+                PaperKansokusha.key(state.getWorld().getKey()),
+                new BlockPosition(state.getX(), state.getY(), state.getZ())
+            ));
+        }
+        return List.copyOf(result);
+    }
+
     private static BlockPosition position(Block block) {
         return new BlockPosition(block.getX(), block.getY(), block.getZ());
+    }
+
+    private record ChangedBlock(Key worldKey, BlockPosition position) {
+    }
+
+    private record DeferredStructureGrow(
+        List<ChangedBlock> changedBlocks,
+        List<Snapshot> snapshots
+    ) {
     }
 
     private record Snapshot(

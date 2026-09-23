@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
 import org.bukkit.TreeType;
 import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
@@ -21,6 +22,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -244,10 +246,12 @@ class PaperNaturalBlockChangeListenerTest {
             OCCURRED_AT.plusSeconds(1),
             OCCURRED_AT.plusSeconds(2)
         );
+        var deferred = new ArrayDeque<Runnable>();
         var listener = PaperNaturalBlockChangeListener.register(
             api,
             PaperBlockEventTestSupport.SERVER_KEY,
-            clock
+            clock,
+            (location, task) -> deferred.add(task)
         );
         var world = PaperBlockEventTestSupport.world();
         var blocks = new ArrayList<org.bukkit.block.Block>();
@@ -284,6 +288,11 @@ class PaperNaturalBlockChangeListenerTest {
                 .thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
         }
         listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+        Assertions.assertEquals(1, deferred.size());
+        deferred.remove().run();
 
         Assertions.assertEquals(3, api.submissions.size());
         var byX = byX(api.submissions);
@@ -322,6 +331,16 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
+    void testDispenserBonemealAcceptedFertilizeOwnsStructureChanges() {
+        assertDispenserBonemealIsReservedForBlockFertilize(false);
+    }
+
+    @Test
+    void testDispenserBonemealCancelledFertilizeDropsStructureChanges() {
+        assertDispenserBonemealIsReservedForBlockFertilize(true);
+    }
+
+    @Test
     void testFinalCancellationDropsCapturedChanges() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
@@ -357,6 +376,47 @@ class PaperNaturalBlockChangeListenerTest {
         Mockito.when(structure.isCancelled()).thenReturn(true);
         listener.capture(structure);
         listener.finalizeEvent(structure);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    private static void assertDispenserBonemealIsReservedForBlockFertilize(boolean cancelled) {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var deferred = new ArrayDeque<Runnable>();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
+            (location, task) -> deferred.add(task)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 8, 64, 8, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
+        );
+        var state = PaperBlockEventTestSupport.state(
+            world, block, 8, 64, 8, Blocks.OAK_LOG.defaultBlockState()
+        );
+        var changedStates = List.of(state);
+
+        var structure = Mockito.mock(StructureGrowEvent.class);
+        Mockito.when(structure.isFromBonemeal()).thenReturn(false);
+        Mockito.when(structure.getSpecies()).thenReturn(TreeType.TREE);
+        Mockito.when(structure.getBlocks()).thenReturn(changedStates);
+
+        listener.capture(structure);
+        listener.finalizeEvent(structure);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, listener.inFlightCount());
+        Assertions.assertEquals(1, deferred.size());
+
+        var fertilize = Mockito.mock(BlockFertilizeEvent.class);
+        Mockito.when(fertilize.getBlocks()).thenReturn(changedStates);
+        Mockito.when(fertilize.isCancelled()).thenReturn(cancelled);
+        listener.discardFertilizedStructureGrow(fertilize);
+
+        deferred.remove().run();
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
