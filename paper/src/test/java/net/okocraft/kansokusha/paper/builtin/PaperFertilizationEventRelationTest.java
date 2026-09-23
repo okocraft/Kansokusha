@@ -102,7 +102,15 @@ class PaperFertilizationEventRelationTest {
             world, 12, 65, 12, Blocks.COCOA.defaultBlockState(), Material.COCOA
         );
         var grownState = PaperBlockEventTestSupport.state(
-            world, cocoa, 12, 65, 12, Blocks.COCOA.defaultBlockState()
+            world,
+            cocoa,
+            12,
+            65,
+            12,
+            Blocks.COCOA.defaultBlockState().setValue(
+                net.minecraft.world.level.block.CocoaBlock.AGE,
+                1
+            )
         );
         var grow = Mockito.mock(BlockGrowEvent.class);
         Mockito.when(grow.getBlock()).thenReturn(cocoa);
