@@ -104,6 +104,25 @@ class PaperBlockPlaceListenerTest {
     }
 
     @Test
+    void testClearInFlightStateDropsCapturedSnapshot() {
+        var api = new RecordingApi();
+        var listener = listener(api);
+        var fixture = single(
+            Blocks.STONE.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState(),
+            1, 64, 1, false, true
+        );
+
+        listener.capture(fixture.event());
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        listener.clearInFlightState();
+        listener.finalizeEvent(fixture.event());
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testMultiPlaceAttemptsEverySnapshotWithOneTimestamp() throws Exception {
         var api = new RecordingApi(
             SubmissionOutcome.ACCEPTED,

@@ -104,6 +104,28 @@ class PaperBlockBreakListenerTest {
     }
 
     @Test
+    void testClearInFlightStateDropsCapturedSnapshot() {
+        var api = Mockito.mock(KansokushaApi.class);
+        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.REGISTERED);
+
+        var listener = PaperBlockBreakListener.register(
+            api,
+            SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var event = event(Blocks.STONE.defaultBlockState().asBlockData(), false);
+
+        listener.capture(event);
+        Assertions.assertEquals(1, listener.inFlightCount());
+
+        listener.clearInFlightState();
+        listener.finalizeEvent(event);
+
+        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testRegistrationConflictFailsBeforeListenerCreation() {
         var api = Mockito.mock(KansokushaApi.class);
         Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.CONFLICT);
