@@ -28,7 +28,7 @@ class PaperSpongeAbsorbListenerTest {
     }
 
     @Test
-    void testAffectedBlocksShareOccurredAtAndKeepLowestPreState() throws Exception {
+    void testFinalAffectedBlocksShareOccurredAtAndKeepLowestPreState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperSpongeAbsorbListener.register(
             api,
@@ -73,7 +73,6 @@ class PaperSpongeAbsorbListenerTest {
 
         Mockito.when(water.getBlockData()).thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
         Mockito.when(slab.getBlockData()).thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
-        changedStates.clear();
 
         listener.finalizeEvent(event);
 
@@ -108,6 +107,79 @@ class PaperSpongeAbsorbListenerTest {
 
         Mockito.verify(water, Mockito.times(1)).getBlockData();
         Mockito.verify(slab, Mockito.times(1)).getBlockData();
+    }
+
+    @Test
+    void testRemovedAffectedBlockIsNotSubmitted() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperSpongeAbsorbListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var sponge = PaperBlockEventTestSupport.block(
+            world, 20, 64, 20, Blocks.SPONGE.defaultBlockState(), Material.SPONGE
+        );
+        var water = PaperBlockEventTestSupport.block(
+            world, 21, 64, 20, Blocks.WATER.defaultBlockState(), Material.WATER
+        );
+        var cleared = PaperBlockEventTestSupport.state(
+            world, water, 21, 64, 20, Blocks.AIR.defaultBlockState()
+        );
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        changedStates.add(cleared);
+        var event = Mockito.mock(SpongeAbsorbEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(sponge);
+        Mockito.when(event.getBlocks()).thenReturn(changedStates);
+
+        listener.capture(event);
+        changedStates.clear();
+        listener.finalizeEvent(event);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(water, Mockito.times(1)).getBlockData();
+    }
+
+    @Test
+    void testAddedAffectedBlockUsesMonitorLivePreState() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperSpongeAbsorbListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var sponge = PaperBlockEventTestSupport.block(
+            world, 30, 64, 30, Blocks.SPONGE.defaultBlockState(), Material.SPONGE
+        );
+        var water = PaperBlockEventTestSupport.block(
+            world, 31, 64, 30, Blocks.WATER.defaultBlockState(), Material.WATER
+        );
+        var cleared = PaperBlockEventTestSupport.state(
+            world, water, 31, 64, 30, Blocks.AIR.defaultBlockState()
+        );
+        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
+        var event = Mockito.mock(SpongeAbsorbEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(sponge);
+        Mockito.when(event.getBlocks()).thenReturn(changedStates);
+
+        listener.capture(event);
+        changedStates.add(cleared);
+        listener.finalizeEvent(event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
+        Assertions.assertEquals(new BlockPosition(31, 64, 30), submission.position());
+        Assertions.assertEquals(
+            spongePayload(
+                Blocks.WATER.defaultBlockState(),
+                new BlockPosition(30, 64, 30)
+            ),
+            PaperBlockStatePayloadCodec.decode(submission.payload())
+        );
+        Mockito.verify(water, Mockito.times(1)).getBlockData();
     }
 
     @Test
