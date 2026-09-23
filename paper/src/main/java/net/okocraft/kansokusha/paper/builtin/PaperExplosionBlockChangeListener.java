@@ -118,7 +118,7 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
                 this.serverKey,
                 world,
                 worldKey,
-                snapshotPreStates(worldKey, event.blockList()),
+                snapshotPreStates(world, worldKey, event.blockList()),
                 event.getExplosionResult(),
                 event.getEntity() instanceof EnderDragon,
                 new ExplosionSource(
