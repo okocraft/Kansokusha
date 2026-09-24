@@ -168,7 +168,7 @@ generation 1 payload は次を持つ。
 
 block-changing bucket operation のみを対象とする。牛・ヤギの搾乳等、Paper が `BlockFace.SELF` で発火する non-block `PlayerBucketFillEvent` は記録しない。
 
-LOWEST で changed block の pre-state と operation metadata を immutable snapshot にし、同じ pre-state、bucket operation、および changed block 座標の `EnvironmentAttributes.WATER_EVAPORATES` から vanilla の直接的な expected post-state を導出する。expected post-state は MONITOR の live block から取得しない。
+LOWEST で changed block の pre-state と operation metadata を immutable snapshot にする。
 
 generation 1 payload は次を持つ。
 
@@ -176,11 +176,10 @@ generation 1 payload は次を持つ。
 - `bucket`, `hand`, `face`
 - `clicked_x`, `clicked_y`, `clicked_z`
 - `pre_state`: LOWEST の changed block state
-- `expected_post_state`: 成立した bucket operation が直接作る expected block state
 - `initial_result_item`: LOWEST の event result item
 - `final_result_item`: MONITOR の final event result item
 
-`expected_post_state` は source fluid / powder snow、waterlogged state、empty / water / lava / powder-snow cauldron family 間の vanilla bucket transition を表す。cauldron への empty は現在の cauldron content に関係なく bucket 種別から destination cauldron state を導出する。通常 block への water-family bucket empty で `WATER_EVAPORATES` が true の場合、Paper の直接処理は block mutation を行わないため `expected_post_state = pre_state` とする。後続 physics、上記以外の environment effect、別 event による mutation までを final world state として保証するものではない。
+bucket operation 後の block state は記録しない。vanilla の bucket 処理（waterlogged、cauldron、`WATER_EVAPORATES` 等）を Kansokusha 側で再現せず、`pre_state` と `bucket` から解釈する。
 
 ## `kansokusha:block_harvest`
 
