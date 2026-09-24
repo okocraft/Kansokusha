@@ -271,7 +271,8 @@ class PaperPlayerStateListenerTest {
         Mockito.when(player.getRespawnLocation()).thenReturn(null);
         var event = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getLocation()).thenReturn(new Location(world("spawn"), 3.5, 70, 4.5));
+        var spawnWorld = world("spawn");
+        Mockito.when(event.getLocation()).thenReturn(new Location(spawnWorld, 3.5, 70, 4.5));
         Mockito.when(event.isForced()).thenReturn(true);
         Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.RESPAWN_ANCHOR);
         Mockito.when(event.isCancelled()).thenReturn(false);
