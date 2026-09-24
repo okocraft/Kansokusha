@@ -13,11 +13,9 @@ import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.World;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -56,7 +54,6 @@ public final class ExternalPaperPlugin extends JavaPlugin {
             var result = registerAndSubmit();
             verifyBuiltInListenerWiring();
             verifyBuiltInPlatformSemantics();
-            verifyWaterEvaporationBucketSemantics();
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> verifyAfterShutdown(result), "kansokusha-external-api-fixture")
             );
@@ -177,45 +174,6 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         probe.assertDelta("pumpkin shear", beforeShear, 0, 0, 1);
     }
 
-    private void verifyWaterEvaporationBucketSemantics()
-        throws ReflectiveOperationException {
-        var world = Bukkit.getWorlds().stream()
-            .filter(candidate -> candidate.getEnvironment() == World.Environment.NETHER)
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("Nether world was not loaded."));
-        var server = invoke(this.getServer(), "getServer");
-        var level = invoke(world, "getHandle");
-        var player = newServerPlayer(server, level);
-        var bukkitPlayer = (Player) invoke(player, "getBukkitEntity");
-        var gameMode = field(player, "gameMode");
-
-        int x = 160;
-        int y = Math.max(world.getMinHeight() + 8, 80);
-        int z = 160;
-        invoke(player, "setPos", x + 0.5, (double) y, z + 0.5);
-
-        var clicked = world.getBlockAt(x, y, z);
-        clicked.setType(Material.NETHERRACK, false);
-        var target = world.getBlockAt(x, y + 1, z);
-        target.setType(Material.AIR, false);
-
-        var probe = new WaterEvaporationProbe(x, y + 1, z);
-        this.getServer().getPluginManager().registerEvents(probe, this);
-
-        bukkitPlayer.getInventory().setItemInMainHand(new ItemStack(Material.WATER_BUCKET));
-        if (!emptyBucket(gameMode, player, level, x, y, z)) {
-            throw new AssertionError("Paper BucketItem#emptyContents returned false.");
-        }
-
-        probe.assertObserved();
-        if (target.getType() != Material.AIR) {
-            throw new AssertionError(
-                "Water bucket mutated the target block in a WATER_EVAPORATES environment: "
-                    + target.getType()
-            );
-        }
-    }
-
     private static Object newServerPlayer(Object server, Object level)
         throws ReflectiveOperationException {
         var profileClass = Class.forName("com.mojang.authlib.GameProfile");
@@ -235,41 +193,6 @@ public final class ExternalPaperPlugin extends JavaPlugin {
             level,
             profile,
             clientInformation
-        );
-    }
-
-    private static boolean emptyBucket(
-        Object gameMode,
-        Object player,
-        Object level,
-        int x,
-        int y,
-        int z
-    ) throws ReflectiveOperationException {
-        var mainHand = Class.forName("net.minecraft.world.InteractionHand")
-            .getField("MAIN_HAND")
-            .get(null);
-        var itemStack = invoke(player, "getMainHandItem");
-        var bucketItem = invoke(itemStack, "getItem");
-        var clickedPos = blockPos(x, y, z);
-        var targetPos = blockPos(x, y + 1, z);
-        var direction = Class.forName("net.minecraft.core.Direction")
-            .getField("UP")
-            .get(null);
-        var hitResult = blockHitResult(clickedPos, x, y, z);
-        return Boolean.TRUE.equals(
-            invoke(
-                bucketItem,
-                "emptyContents",
-                player,
-                level,
-                targetPos,
-                hitResult,
-                direction,
-                clickedPos,
-                itemStack,
-                mainHand
-            )
         );
     }
 
@@ -425,79 +348,6 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         net.okocraft.kansokusha.api.event.EventTypeDefinition definition,
         EventSubmission submission
     ) {
-    }
-
-    private static final class WaterEvaporationProbe implements Listener {
-
-        private final int x;
-        private final int y;
-        private final int z;
-        private boolean observed;
-        private Throwable failure;
-
-        private WaterEvaporationProbe(int x, int y, int z) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-        }
-
-        @EventHandler(priority = EventPriority.HIGHEST)
-        public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-            if (
-                event.getBlock().getX() != this.x
-                    || event.getBlock().getY() != this.y
-                    || event.getBlock().getZ() != this.z
-            ) {
-                return;
-            }
-
-            this.observed = true;
-            try {
-                var kansokushaListener = Arrays.stream(
-                    PlayerBucketEmptyEvent.getHandlerList().getRegisteredListeners()
-                )
-                    .filter(listener -> listener.getPlugin().getName().equals("Kansokusha"))
-                    .map(listener -> listener.getListener())
-                    .filter(listener -> listener.getClass().getName().equals(
-                        "net.okocraft.kansokusha.paper.builtin.PaperBucketListener"
-                    ))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError(
-                        "Kansokusha bucket listener was not registered."
-                    ));
-                var inFlight = (java.util.Map<?, ?>) field(kansokushaListener, "inFlight");
-                var snapshot = inFlight.get(event);
-                if (snapshot == null) {
-                    throw new AssertionError(
-                        "Kansokusha did not capture the bucket event at LOWEST."
-                    );
-                }
-
-                var preState = (EventPayload) invoke(snapshot, "preState");
-                var expectedPostState = (EventPayload) invoke(snapshot, "expectedPostState");
-                if (!Arrays.equals(preState.copyBytes(), expectedPostState.copyBytes())) {
-                    throw new AssertionError(
-                        "WATER_EVAPORATES bucket expected_post_state did not preserve pre_state."
-                    );
-                }
-            } catch (Throwable failure) {
-                this.failure = failure;
-            }
-        }
-
-        private void assertObserved() {
-            if (!this.observed) {
-                throw new AssertionError(
-                    "Water bucket did not emit PlayerBucketEmptyEvent in the Nether fixture."
-                );
-            }
-            if (this.failure != null) {
-                throw new AssertionError(
-                    "Water evaporation bucket snapshot verification failed.",
-                    this.failure
-                );
-            }
-        }
     }
 
     private static final class PlatformEventProbe implements Listener {

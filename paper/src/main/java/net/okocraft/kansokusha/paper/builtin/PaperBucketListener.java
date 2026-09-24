@@ -1,8 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
@@ -13,9 +11,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
-import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
@@ -103,7 +99,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
         Objects.requireNonNull(event, "event");
         var changedBlock = event.getBlock();
         var clickedBlock = event.getBlockClicked();
-        var preBlockData = changedBlock.getBlockData();
         var snapshot = new Snapshot(
             eventType,
             operation,
@@ -118,13 +113,7 @@ public final class PaperBucketListener implements PaperInFlightListener {
             clickedBlock.getX(),
             clickedBlock.getY(),
             clickedBlock.getZ(),
-            PaperAdditionalBuiltInPayloadCodec.snapshotBlockState(preBlockData),
-            PaperAdditionalBuiltInPayloadCodec.expectedBucketPostState(
-                operation,
-                event.getBucket(),
-                preBlockData,
-                waterEvaporates(changedBlock)
-            ),
+            PaperAdditionalBuiltInPayloadCodec.snapshotBlockState(changedBlock.getBlockData()),
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
 
@@ -153,7 +142,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
             snapshot.clickedY(),
             snapshot.clickedZ(),
             snapshot.preState(),
-            snapshot.expectedPostState(),
             snapshot.initialResultItem(),
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
@@ -169,19 +157,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
                 payload
             )
         );
-    }
-
-    private static boolean waterEvaporates(Block block) {
-        var world = block.getWorld();
-        if (!(world instanceof CraftWorld craftWorld)) {
-            return false;
-        }
-        return craftWorld.getHandle()
-            .environmentAttributes()
-            .getValue(
-                EnvironmentAttributes.WATER_EVAPORATES,
-                new BlockPos(block.getX(), block.getY(), block.getZ())
-            );
     }
 
     private static void requireRegistration(KansokushaApi api, EventTypeDefinition definition) {
@@ -212,7 +187,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
         int clickedY,
         int clickedZ,
         EventPayload preState,
-        EventPayload expectedPostState,
         EventPayload initialResultItem
     ) {
     }
