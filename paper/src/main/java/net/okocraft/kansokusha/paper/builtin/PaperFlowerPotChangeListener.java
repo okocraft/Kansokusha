@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerTakeLecternBookEvent;
+import org.bukkit.event.player.PlayerStatisticIncrementEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -52,7 +53,10 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
     }
 
     public static PaperFlowerPotChangeListener register(KansokushaApi api, Key serverKey) {
-        return register(api, serverKey, Clock.systemUTC());
+        var clock = Clock.systemUTC();
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
+        var playerItemAuditListener = PaperPlayerItemAuditListener.register(api, serverKey);
+        return new PaperFlowerPotChangeListener(api, serverKey, clock, playerItemAuditListener);
     }
 
     static PaperFlowerPotChangeListener register(KansokushaApi api, Key serverKey, Clock clock) {
@@ -160,6 +164,11 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizePurchase(PlayerPurchaseEvent event) {
         this.playerItemAuditListener.finalizePurchase(event);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void confirmTrade(PlayerStatisticIncrementEvent event) {
+        this.playerItemAuditListener.confirmTrade(event);
     }
 
     @Override
