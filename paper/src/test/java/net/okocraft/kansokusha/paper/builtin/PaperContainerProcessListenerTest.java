@@ -161,6 +161,43 @@ class PaperContainerProcessListenerTest {
     }
 
     @Test
+    void testFurnaceNonCancelledEventDoesNotClaimOutputInsertionSuccess() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var furnaceBlock = block(world, 50, Material.FURNACE);
+        var furnaceInventory = Mockito.mock(FurnaceInventory.class);
+        configureInventory(furnaceInventory, InventoryType.FURNACE, 3, furnaceBlock);
+        attachInventory(furnaceBlock, furnaceInventory, Material.FURNACE);
+
+        Mockito.when(furnaceInventory.getResult()).thenReturn(
+            ItemStack.of(Material.DIAMOND, 1)
+        );
+        var eventResult = new ItemStack[]{ItemStack.of(Material.IRON_INGOT, 1)};
+        var furnace = Mockito.mock(FurnaceSmeltEvent.class);
+        Mockito.when(furnace.getBlock()).thenReturn(furnaceBlock);
+        Mockito.when(furnace.getSource()).thenReturn(ItemStack.of(Material.RAW_IRON, 1));
+        Mockito.when(furnace.getResult()).thenAnswer(ignored -> eventResult[0]);
+        Mockito.when(furnace.isCancelled()).thenReturn(false);
+
+        listener.captureFurnace(furnace);
+        eventResult[0] = ItemStack.of(Material.GOLD_INGOT, 1);
+        listener.finalizeFurnace(furnace);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var payload = PaperPayloadNbtCodec.decode(api.submissions.remove().payload());
+        Assertions.assertEquals(
+            "non_cancelled_container_process_event",
+            string(payload, "semantics")
+        );
+        Assertions.assertEquals("furnace_smelt", string(payload, "process_kind"));
+        var results = payload.getListOrEmpty("event_result_items");
+        var result = PaperItemStackPayloadCodec.decode((CompoundTag) results.get(0));
+        Assertions.assertEquals(Material.GOLD_INGOT, result.getType());
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+    @Test
     void testCancelledProcessesDoNotSubmitAndPlayerCraftingIsNotHandled() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
@@ -296,12 +333,16 @@ class PaperContainerProcessListenerTest {
     ) throws Exception {
         Assertions.assertNotNull(submission);
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            "non_cancelled_container_process_event",
+            string(payload, "semantics")
+        );
         Assertions.assertEquals(kind, string(payload, "process_kind"));
         var inputs = payload.getListOrEmpty("input_items");
         var input = PaperItemStackPayloadCodec.decode((CompoundTag) inputs.get(0));
         Assertions.assertEquals(initialInputType, input.getType());
         Assertions.assertEquals(initialInputAmount, input.getAmount());
-        var results = payload.getListOrEmpty("final_result_items");
+        var results = payload.getListOrEmpty("event_result_items");
         var result = PaperItemStackPayloadCodec.decode((CompoundTag) results.get(0));
         Assertions.assertEquals(finalResultType, result.getType());
     }
