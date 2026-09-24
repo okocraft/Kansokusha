@@ -11,6 +11,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -83,7 +84,7 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
             this.serverKey,
             snapshot.worldKey(),
             null,
-            null,
+            PaperAdministrativeSource.subject(snapshot.source()),
             PaperAdministrativePayloadCodec.encodeDifficultyChange(
                 PaperAdministrativePayloadCodec.enumName(snapshot.before()),
                 PaperAdministrativePayloadCodec.enumName(after),
@@ -106,7 +107,7 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
         Key worldKey,
         Difficulty before,
         boolean hardcore,
-        PaperAdministrativeSource.Snapshot source
+        @Nullable PaperAdministrativeSource.Snapshot source
     ) {
     }
 }
