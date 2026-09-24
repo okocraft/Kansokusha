@@ -1,7 +1,5 @@
 package net.okocraft.kansokusha.paper.builtin;
 
-import io.papermc.paper.event.entity.EntityBreakByEntityEvent;
-import io.papermc.paper.event.entity.EntityBreakEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
@@ -41,11 +39,12 @@ class PaperEntityBreakListenerTest {
         var world = PaperBlockEventTestSupport.world();
         var target = entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 8.25, 64, -2.75);
         var breaker = entity(world, EntityType.ZOMBIE, BREAKER_ID, 9, 64, -2);
-        var event = Mockito.mock(EntityBreakByEntityEvent.class);
-        Mockito.when(event.getEntity()).thenReturn(target);
-        Mockito.when(event.getRemover()).thenReturn(breaker);
-        Mockito.when(event.getCause()).thenReturn(EntityBreakEvent.RemoveCause.ENTITY);
-        Mockito.when(event.getDamageSource()).thenReturn(damageSource(DamageType.MOB_ATTACK, false));
+        var event = new PaperGenericEntityBreakEventFixture(
+            target,
+            breaker,
+            damageSource(DamageType.MOB_ATTACK, false),
+            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
+        );
 
         listener.captureGeneric(event);
         Mockito.when(target.getLocation()).thenReturn(new Location(world, 99, 99, 99));
@@ -110,18 +109,13 @@ class PaperEntityBreakListenerTest {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
-        var generic = Mockito.mock(EntityBreakByEntityEvent.class);
-        Mockito.when(generic.getEntity()).thenReturn(
-            entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 1, 2, 3)
+        var generic = new PaperGenericEntityBreakEventFixture(
+            entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 1, 2, 3),
+            entity(world, EntityType.ZOMBIE, BREAKER_ID, 2, 2, 3),
+            damageSource(DamageType.MOB_ATTACK, false),
+            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
         );
-        Mockito.when(generic.getRemover()).thenReturn(
-            entity(world, EntityType.ZOMBIE, BREAKER_ID, 2, 2, 3)
-        );
-        Mockito.when(generic.getCause()).thenReturn(EntityBreakEvent.RemoveCause.ENTITY);
-        Mockito.when(generic.getDamageSource()).thenReturn(
-            damageSource(DamageType.MOB_ATTACK, false)
-        );
-        Mockito.when(generic.isCancelled()).thenReturn(true);
+        generic.setCancelled(true);
 
         var hanging = Mockito.mock(HangingBreakByEntityEvent.class);
         Mockito.when(hanging.getEntity()).thenReturn(
