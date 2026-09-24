@@ -20,7 +20,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
-import org.bukkit.event.player.PlayerSpawnChangeEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -147,6 +147,46 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
+    void testPortalPreflightIsIgnoredAndOnlyFinalTeleportIsRecorded() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = teleportListener(api);
+        var portal = Mockito.mock(PlayerPortalEvent.class);
+
+        listener.capture(portal);
+        listener.finalizeEvent(portal);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
+        Mockito.verify(portal, Mockito.never()).getPlayer();
+        Mockito.verify(portal, Mockito.never()).getTo();
+        Mockito.verify(portal, Mockito.never()).isCancelled();
+
+        var from = new Location(world("from"), 8.5, 64, 8.5);
+        var destination = new Location(world("nether"), 1.5, 70, 1.5);
+        var finalTeleport = teleportEvent(
+            player(destination.getWorld(), 1.5, 70, 1.5),
+            from,
+            destination,
+            Set.of()
+        );
+        Mockito.when(finalTeleport.getCause())
+            .thenReturn(PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
+
+        listener.capture(finalTeleport);
+        listener.finalizeEvent(finalTeleport);
+
+        var submission = onlySubmission(api);
+        assertCommon(
+            submission,
+            PaperPlayerTeleportListener.EVENT_TYPE,
+            Key.key("example", "nether"),
+            new BlockPosition(1, 70, 1)
+        );
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("nether_portal", payload.getString("cause").orElseThrow());
+    }
+
+    @Test
     void testGameModeRecordsEstablishedOldToFinalNewState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerGameModeChangeListener.register(
@@ -202,7 +242,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testSpawnChangeRepresentsSetAndNullClearWithFinalTarget() throws Exception {
+    void testSpawnChangeUsesFinalPlayerSetSpawnValuesBeforeStateApplication() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -212,11 +252,11 @@ class PaperPlayerStateListenerTest {
         var finalSpawn = new Location(world("final_spawn"), 50.5, 80.25, 60.125, 90, 0);
         var player = player(world("current"), 0, 64, 0);
         Mockito.when(player.getRespawnLocation()).thenReturn(oldSpawn);
-        var setEvent = Mockito.mock(PlayerSpawnChangeEvent.class);
+        var setEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(setEvent.getPlayer()).thenReturn(player);
-        Mockito.when(setEvent.getNewSpawn()).thenReturn(initialSpawn, finalSpawn);
+        Mockito.when(setEvent.getLocation()).thenReturn(initialSpawn, finalSpawn);
         Mockito.when(setEvent.isForced()).thenReturn(false, true);
-        Mockito.when(setEvent.getCause()).thenReturn(PlayerSpawnChangeEvent.Cause.BED);
+        Mockito.when(setEvent.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.BED);
         Mockito.when(setEvent.isCancelled()).thenReturn(false);
 
         listener.capture(setEvent);
@@ -242,13 +282,17 @@ class PaperPlayerStateListenerTest {
         );
         Assertions.assertTrue(setPayload.getBooleanOr("forced", false));
         Assertions.assertEquals("bed", setPayload.getString("cause").orElseThrow());
+        Assertions.assertEquals(
+            "player_set_spawn",
+            setPayload.getString("source_event").orElseThrow()
+        );
 
         Mockito.when(player.getRespawnLocation()).thenReturn(finalSpawn);
-        var clearEvent = Mockito.mock(PlayerSpawnChangeEvent.class);
+        var clearEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(clearEvent.getPlayer()).thenReturn(player);
-        Mockito.when(clearEvent.getNewSpawn()).thenReturn(null);
+        Mockito.when(clearEvent.getLocation()).thenReturn(null);
         Mockito.when(clearEvent.isForced()).thenReturn(false);
-        Mockito.when(clearEvent.getCause()).thenReturn(PlayerSpawnChangeEvent.Cause.PLUGIN);
+        Mockito.when(clearEvent.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
         Mockito.when(clearEvent.isCancelled()).thenReturn(false);
 
         listener.capture(clearEvent);
@@ -262,48 +306,18 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testLegacySpawnCompatibilityPathUsesSameEventTypeAndNullSchema() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperLegacyPlayerSetSpawnListener.register(
-            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
-        );
-        var player = player(world("current"), 0, 64, 0);
-        Mockito.when(player.getRespawnLocation()).thenReturn(null);
-        var event = Mockito.mock(PlayerSetSpawnEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-        var spawnWorld = world("spawn");
-        Mockito.when(event.getLocation()).thenReturn(new Location(spawnWorld, 3.5, 70, 4.5));
-        Mockito.when(event.isForced()).thenReturn(true);
-        Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.RESPAWN_ANCHOR);
-        Mockito.when(event.isCancelled()).thenReturn(false);
-
-        listener.capture(event);
-        listener.finalizeEvent(event);
-
-        var submission = onlySubmission(api);
-        Assertions.assertEquals(PaperPlayerSpawnChangeListener.EVENT_TYPE, submission.eventType());
-        var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(optionalLocationTag(null), payload.getCompoundOrEmpty("before"));
-        Assertions.assertEquals("respawn_anchor", payload.getString("cause").orElseThrow());
-        Assertions.assertEquals(
-            "legacy_player_set_spawn",
-            payload.getString("source_event").orElseThrow()
-        );
-    }
-
-    @Test
-    void testCancelledSpawnChangeIsNotRecorded() throws Exception {
+    void testCancelledFinalPlayerSetSpawnIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
         );
         var player = player(world("world"), 1, 2, 3);
         Mockito.when(player.getRespawnLocation()).thenReturn(null);
-        var event = Mockito.mock(PlayerSpawnChangeEvent.class);
+        var event = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getNewSpawn()).thenReturn(null);
+        Mockito.when(event.getLocation()).thenReturn(new Location(world("spawn"), 4, 5, 6));
         Mockito.when(event.isForced()).thenReturn(false);
-        Mockito.when(event.getCause()).thenReturn(PlayerSpawnChangeEvent.Cause.PLUGIN);
+        Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
         listener.capture(event);

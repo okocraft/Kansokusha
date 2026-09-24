@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -47,6 +48,9 @@ public final class PaperPlayerTeleportListener implements PaperInFlightListener 
     @EventHandler(priority = EventPriority.LOWEST)
     public void capture(PlayerTeleportEvent event) {
         Objects.requireNonNull(event, "event");
+        if (event instanceof PlayerPortalEvent) {
+            return;
+        }
         var player = event.getPlayer();
         var initialTo = event.getTo();
         var snapshot = new Snapshot(
@@ -65,6 +69,9 @@ public final class PaperPlayerTeleportListener implements PaperInFlightListener 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(PlayerTeleportEvent event) {
         Objects.requireNonNull(event, "event");
+        if (event instanceof PlayerPortalEvent) {
+            return;
+        }
         var snapshot = this.inFlight.remove(event);
         if (snapshot == null || event.isCancelled()) {
             return;
