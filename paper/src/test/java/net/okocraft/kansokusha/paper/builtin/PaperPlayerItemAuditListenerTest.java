@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+@SuppressWarnings("removal")
 class PaperPlayerItemAuditListenerTest {
 
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-25T00:00:00Z");
@@ -387,20 +388,32 @@ class PaperPlayerItemAuditListenerTest {
         var world = PaperBlockEventTestSupport.world();
         var player = player(world, 1, 65, 1);
 
+        var droppedItem = item(
+            world,
+            ITEM_ID,
+            1,
+            65,
+            1,
+            ItemStack.of(Material.STONE, 1)
+        );
         var drop = Mockito.mock(PlayerDropItemEvent.class);
         Mockito.when(drop.getPlayer()).thenReturn(player);
-        Mockito.when(drop.getItemDrop()).thenReturn(
-            item(world, ITEM_ID, 1, 65, 1, ItemStack.of(Material.STONE, 1))
-        );
+        Mockito.when(drop.getItemDrop()).thenReturn(droppedItem);
         Mockito.when(drop.isCancelled()).thenReturn(true);
         listener.captureDrop(drop);
         listener.finalizeDrop(drop);
 
+        var pickedItem = item(
+            world,
+            ITEM_ID,
+            2,
+            65,
+            2,
+            ItemStack.of(Material.STONE, 1)
+        );
         var pickup = Mockito.mock(EntityPickupItemEvent.class);
         Mockito.when(pickup.getEntity()).thenReturn(player);
-        Mockito.when(pickup.getItem()).thenReturn(
-            item(world, ITEM_ID, 2, 65, 2, ItemStack.of(Material.STONE, 1))
-        );
+        Mockito.when(pickup.getItem()).thenReturn(pickedItem);
         Mockito.when(pickup.isCancelled()).thenReturn(true);
         listener.capturePickup(pickup);
         listener.finalizePickup(pickup);
