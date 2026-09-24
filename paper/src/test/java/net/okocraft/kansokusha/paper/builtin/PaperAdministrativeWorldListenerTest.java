@@ -59,7 +59,7 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(event.getWorld()).thenReturn(world);
         Mockito.doReturn(rule).when(event).getGameRule();
         Mockito.when(event.getCommandSender()).thenReturn(player);
-        Mockito.when(event.getValue()).thenReturn("true");
+        Mockito.when(event.getValue()).thenReturn("false");
         Mockito.when(event.isCancelled()).thenReturn(false);
 
         listener.capture(event);
