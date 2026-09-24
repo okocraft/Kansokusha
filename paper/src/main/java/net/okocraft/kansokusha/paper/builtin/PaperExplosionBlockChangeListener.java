@@ -271,6 +271,9 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
             }
 
             var listedWorldKey = PaperKansokusha.key(listedBlock.getWorld().getKey());
+            // Accepted legacy processing removes the target in the Dragon world. This
+            // flag identifies later raw entries whose live listed block will therefore
+            // become AIR; foreign-world entries remain live and must stay correlated.
             candidates.add(PaperExplosionTntCorrelation.candidate(
                 capture.worldKey(),
                 key.position(),
