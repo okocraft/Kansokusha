@@ -180,6 +180,7 @@ class PaperEntityStateChangeListenerTest {
             "minecraft:armor_stand"
         );
 
+        Mockito.when(holder.getType()).thenReturn(EntityType.ARMOR_STAND);
         var unleashTarget = stubEntity(
             Mockito.mock(Leashable.class),
             world,
@@ -477,8 +478,9 @@ class PaperEntityStateChangeListenerTest {
             0
         );
         var event = Mockito.mock(PlayerNameEntityEvent.class);
+        var namingPlayer = player(world);
         Mockito.when(event.getEntity()).thenReturn(target);
-        Mockito.when(event.getPlayer()).thenReturn(player(world));
+        Mockito.when(event.getPlayer()).thenReturn(namingPlayer);
         Mockito.when(event.getName()).thenReturn(null);
 
         listener.captureNameChange(event);
