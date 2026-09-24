@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.testplugin;
 
 import io.papermc.paper.event.block.PlayerShearBlockEvent;
 import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
+import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
@@ -12,43 +13,148 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.geysermc.mcprotocollib.auth.SessionService;
+import org.geysermc.mcprotocollib.network.factory.ClientNetworkSessionFactory;
+import org.geysermc.mcprotocollib.protocol.MinecraftConstants;
+import org.geysermc.mcprotocollib.protocol.MinecraftProtocol;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
-public final class ExternalPaperPlugin extends JavaPlugin {
+public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
 
     private static final NamespacedKey EVENT_TYPE =
         new NamespacedKey("fixture", "custom_event");
+    private static final String SESSION_PLAYER_NAME = "KansokuFixture";
+    private static final Component INITIAL_KICK_REASON =
+        Component.text("kansokusha session fixture");
+    private static final Component FINAL_KICK_REASON =
+        Component.text("kansokusha final session fixture");
 
+    private final List<String> sessionEvents = new ArrayList<>();
+    private volatile boolean sessionSemanticsVerified;
+    private volatile Throwable failure;
     private Path resultFile;
 
     @Override
     public void onEnable() {
         this.resultFile = Path.of(System.getProperty("kansokusha.external-api-fixture.result"));
 
+        final Result result;
         try {
-            var result = registerAndSubmit();
+            result = registerAndSubmit();
             verifyBuiltInListenerWiring();
+            Bukkit.getPluginManager().registerEvents(this, this);
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> verifyAfterShutdown(result), "kansokusha-external-api-fixture")
             );
+            Bukkit.getScheduler().runTaskLater(this, this::startSessionSemanticsClient, 1L);
+            Bukkit.getScheduler().runTaskLater(
+                this,
+                () -> {
+                    if (!this.sessionSemanticsVerified && this.failure == null) {
+                        failAndShutdown(
+                            new AssertionError(
+                                "Paper 26.2 session semantics fixture timed out before observing join -> kick -> quit."
+                            )
+                        );
+                    }
+                },
+                600L
+            );
         } catch (Throwable failure) {
-            writeFailure(failure);
-        } finally {
+            failAndShutdown(failure);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void observeJoin(PlayerJoinEvent event) {
+        if (!isSessionFixture(event.getPlayer().getName())) {
+            return;
+        }
+
+        try {
+            assertEventOrder(List.of(), "join");
+            this.sessionEvents.add("join");
+            Bukkit.getScheduler().runTask(
+                this,
+                () -> event.getPlayer().kick(INITIAL_KICK_REASON, PlayerKickEvent.Cause.PLUGIN)
+            );
+        } catch (Throwable failure) {
+            failAndShutdown(failure);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void replaceKickReason(PlayerKickEvent event) {
+        if (isSessionFixture(event.getPlayer().getName())) {
+            event.reason(FINAL_KICK_REASON);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void observeKick(PlayerKickEvent event) {
+        if (!isSessionFixture(event.getPlayer().getName())) {
+            return;
+        }
+
+        try {
+            if (event.isCancelled()) {
+                throw new AssertionError("Paper session fixture kick was unexpectedly cancelled.");
+            }
+            if (event.getCause() != PlayerKickEvent.Cause.PLUGIN) {
+                throw new AssertionError("Unexpected kick cause: " + event.getCause());
+            }
+            if (!event.reason().equals(FINAL_KICK_REASON)) {
+                throw new AssertionError("MONITOR did not observe the final kick reason.");
+            }
+            assertEventOrder(List.of("join"), "kick");
+            this.sessionEvents.add("kick");
+        } catch (Throwable failure) {
+            failAndShutdown(failure);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void observeQuit(PlayerQuitEvent event) {
+        if (!isSessionFixture(event.getPlayer().getName())) {
+            return;
+        }
+
+        try {
+            if (event.getReason() != PlayerQuitEvent.QuitReason.KICKED) {
+                throw new AssertionError(
+                    "Accepted Paper 26.2 kick produced quit reason " + event.getReason()
+                        + " instead of KICKED."
+                );
+            }
+            assertEventOrder(List.of("join", "kick"), "quit");
+            this.sessionEvents.add("quit");
+            this.sessionSemanticsVerified = true;
             Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+        } catch (Throwable failure) {
+            failAndShutdown(failure);
         }
     }
 
@@ -107,6 +213,38 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         );
     }
 
+    private void startSessionSemanticsClient() {
+        var port = Bukkit.getPort();
+        Thread.ofPlatform()
+            .daemon()
+            .name("kansokusha-paper-26.2-session-client")
+            .start(() -> {
+                try {
+                    var protocol = new MinecraftProtocol(SESSION_PLAYER_NAME);
+                    var client = ClientNetworkSessionFactory.factory()
+                        .setRemoteSocketAddress(new InetSocketAddress("127.0.0.1", port))
+                        .setProtocol(protocol)
+                        .create();
+                    client.setFlag(MinecraftConstants.SESSION_SERVICE_KEY, new SessionService());
+                    client.connect();
+                } catch (Throwable failure) {
+                    failAndShutdown(failure);
+                }
+            });
+    }
+
+    private void assertEventOrder(List<String> expectedBefore, String next) {
+        if (!this.sessionEvents.equals(expectedBefore)) {
+            throw new AssertionError(
+                "Unexpected Paper 26.2 session event order before " + next + ": " + this.sessionEvents
+            );
+        }
+    }
+
+    private static boolean isSessionFixture(String playerName) {
+        return SESSION_PLAYER_NAME.equals(playerName);
+    }
+
     private static void assertRegisteredListener(String listenerClass, HandlerList handlers) {
         var registered = Arrays.stream(handlers.getRegisteredListeners())
             .anyMatch(listener ->
@@ -119,7 +257,22 @@ public final class ExternalPaperPlugin extends JavaPlugin {
     }
 
     private void verifyAfterShutdown(Result result) {
+        if (this.failure != null) {
+            return;
+        }
+
         try {
+            if (!this.sessionSemanticsVerified) {
+                throw new AssertionError(
+                    "Paper 26.2 session semantics were not verified before shutdown."
+                );
+            }
+            if (!this.sessionEvents.equals(List.of("join", "kick", "quit"))) {
+                throw new AssertionError(
+                    "Unexpected Paper 26.2 session event sequence: " + this.sessionEvents
+                );
+            }
+
             try {
                 Kansokusha.api();
                 throw new AssertionError("Kansokusha.api() remained available after shutdown.");
@@ -136,6 +289,21 @@ public final class ExternalPaperPlugin extends JavaPlugin {
             Files.writeString(this.resultFile, "success");
         } catch (Throwable failure) {
             writeFailure(failure);
+        }
+    }
+
+    private void failAndShutdown(Throwable failure) {
+        if (this.failure != null) {
+            return;
+        }
+
+        this.failure = failure;
+        writeFailure(failure);
+        try {
+            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+        } catch (RuntimeException schedulingFailure) {
+            failure.addSuppressed(schedulingFailure);
+            Bukkit.shutdown();
         }
     }
 

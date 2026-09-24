@@ -10,6 +10,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -28,6 +29,24 @@ class PaperPlayerSessionListenerTest {
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-25T00:00:00Z");
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174004");
+
+    @Test
+    void testSessionRecordersImplementBukkitListener() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+
+        Assertions.assertInstanceOf(
+            Listener.class,
+            PaperPlayerJoinListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
+        );
+        Assertions.assertInstanceOf(
+            Listener.class,
+            PaperPlayerQuitListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
+        );
+        Assertions.assertInstanceOf(
+            Listener.class,
+            PaperPlayerKickListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
+        );
+    }
 
     @Test
     void testJoinRecordsSuccessfulBackendSessionStart() throws Exception {
@@ -142,13 +161,12 @@ class PaperPlayerSessionListenerTest {
     }
 
     /**
-     * Paper 26.2's disconnect path first fires the cancellable PlayerKickEvent. If it remains
-     * accepted, Paper sets the player's quit reason to KICKED and PlayerList later fires
-     * PlayerQuitEvent. Kansokusha records both because kick describes the disconnect decision
-     * and quit describes the resulting backend session end.
+     * This test only fixes the Kansokusha meaning when both platform callbacks occur.
+     * The actual Paper 26.2 accepted-kick-to-quit sequence is verified by the real-server
+     * external API integration fixture.
      */
     @Test
-    void testAcceptedPaper26KickThenQuitAreDistinctEvents() throws Exception {
+    void testKickAndQuitCallbacksProduceDistinctSubmissions() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var kickListener = PaperPlayerKickListener.register(
             api,

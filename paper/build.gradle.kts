@@ -72,6 +72,14 @@ tasks {
             val runDirectory = externalApiTestDirectory.get().asFile
             project.delete(runDirectory)
 
+            Files.writeString(
+                runDirectory.toPath().resolve("server.properties"),
+                """
+                online-mode=false
+                enforce-secure-profile=false
+                """.trimIndent()
+            )
+
             val config = runDirectory.toPath()
                 .resolve("plugins")
                 .resolve("Kansokusha")
