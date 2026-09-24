@@ -3,10 +3,8 @@ package net.okocraft.kansokusha.paper.builtin;
 import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
@@ -18,8 +16,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -27,13 +23,11 @@ import java.util.Objects;
 public final class PaperFlowerPotChangeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "flower_pot_change");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final Map<PlayerFlowerPotManipulateEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    private final PaperInFlightMap<PlayerFlowerPotManipulateEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperFlowerPotChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -46,7 +40,7 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
     }
 
     static PaperFlowerPotChangeListener register(KansokushaApi api, Key serverKey, Clock clock) {
-        requireRegistration(api, DEFINITION);
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperFlowerPotChangeListener(api, serverKey, clock);
     }
 
@@ -65,19 +59,14 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
                 event.getItem()
             )
         );
-        synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshot);
-        }
+        this.inFlight.put(event, snapshot);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(PlayerFlowerPotManipulateEvent event) {
         Objects.requireNonNull(event, "event");
 
-        Snapshot snapshot;
-        synchronized (this.inFlight) {
-            snapshot = this.inFlight.remove(event);
-        }
+        var snapshot = this.inFlight.remove(event);
         if (snapshot == null || event.isCancelled()) {
             return;
         }
@@ -98,29 +87,13 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
 
     @Override
     public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
+        this.inFlight.clear();
     }
 
     int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size();
-        }
+        return this.inFlight.size();
     }
 
-    private static void requireRegistration(KansokushaApi api, EventTypeDefinition definition) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(definition);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + definition.key() + ": " + outcome
-            );
-        }
-    }
 
     private record Snapshot(
         Instant occurredAt,

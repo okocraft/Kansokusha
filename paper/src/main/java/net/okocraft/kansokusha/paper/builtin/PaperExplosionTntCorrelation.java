@@ -183,9 +183,6 @@ final class PaperExplosionTntCorrelation {
         LEGACY_DRAGON
     }
 
-    private record BlockKey(Key worldKey, BlockPosition position) {
-    }
-
     private static final class Item {
         private final BlockKey key;
         private final @Nullable EventSubmission submission;

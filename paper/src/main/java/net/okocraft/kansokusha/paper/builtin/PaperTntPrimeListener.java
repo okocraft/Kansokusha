@@ -2,10 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
@@ -26,13 +24,13 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
+
 @ApiStatus.Internal
 @NotNullByDefault
 public final class PaperTntPrimeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "tnt_prime");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -55,7 +53,7 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
     }
 
     static PaperTntPrimeListener register(KansokushaApi api, Key serverKey, Clock clock) {
-        registerEventType(api);
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperTntPrimeListener(api, serverKey, clock);
     }
 
@@ -241,22 +239,6 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
         );
     }
 
-    private static BlockPosition position(Block block) {
-        return new BlockPosition(block.getX(), block.getY(), block.getZ());
-    }
-
-    private static void registerEventType(KansokushaApi api) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(DEFINITION);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
-            );
-        }
-    }
 
     private record ImmutableBlock(Key worldKey, BlockPosition position, BlockData state) {
     }
