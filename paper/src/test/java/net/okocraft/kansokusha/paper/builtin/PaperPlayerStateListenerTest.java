@@ -43,7 +43,7 @@ class PaperPlayerStateListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174011");
 
     @Test
-    void testWorldChangeAndCrossWorldTeleportRemainDistinctRecords() {
+    void testWorldChangeAndCrossWorldTeleportRemainDistinctRecords() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var teleport = PaperPlayerTeleportListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -86,7 +86,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testTeleportSnapshotsSourceAndStoresFinalDestinationCauseAndRelativeFlags() {
+    void testTeleportSnapshotsSourceAndStoresFinalDestinationCauseAndRelativeFlags() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = teleportListener(api);
         var from = new Location(world("from"), 1.125, 64.5, 2.875, 10, 20);
@@ -127,7 +127,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledTeleportIsNotRecorded() {
+    void testCancelledTeleportIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = teleportListener(api);
         var currentWorld = world("world");
@@ -147,7 +147,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testGameModeRecordsEstablishedOldToFinalNewState() {
+    void testGameModeRecordsEstablishedOldToFinalNewState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerGameModeChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -181,7 +181,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledGameModeChangeIsNotRecorded() {
+    void testCancelledGameModeChangeIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerGameModeChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -202,7 +202,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testSpawnChangeRepresentsSetAndNullClearWithFinalTarget() {
+    void testSpawnChangeRepresentsSetAndNullClearWithFinalTarget() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -262,7 +262,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testLegacySpawnCompatibilityPathUsesSameEventTypeAndNullSchema() {
+    void testLegacySpawnCompatibilityPathUsesSameEventTypeAndNullSchema() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperLegacyPlayerSetSpawnListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -291,7 +291,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledSpawnChangeIsNotRecorded() {
+    void testCancelledSpawnChangeIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -313,7 +313,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testDeathRecordsFinalContextWithoutFullDrops() {
+    void testDeathRecordsFinalContextWithoutFullDrops() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerDeathListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -372,7 +372,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledDeathIsNotRecorded() {
+    void testCancelledDeathIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerDeathListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
