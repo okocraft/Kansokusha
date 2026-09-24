@@ -112,7 +112,32 @@ final class PaperExplosionTntCorrelation {
         @Nullable EventSubmission submission,
         boolean recordTntPrime
     ) {
-        return new Candidate(worldKey, position, occurrences, submission, recordTntPrime);
+        return candidate(
+            worldKey,
+            position,
+            occurrences,
+            submission,
+            recordTntPrime,
+            false
+        );
+    }
+
+    static Candidate candidate(
+        Key worldKey,
+        BlockPosition position,
+        int occurrences,
+        @Nullable EventSubmission submission,
+        boolean recordTntPrime,
+        boolean invalidateSameOperationOnAccept
+    ) {
+        return new Candidate(
+            worldKey,
+            position,
+            occurrences,
+            submission,
+            recordTntPrime,
+            invalidateSameOperationOnAccept
+        );
     }
 
     record Decision(boolean tracked, boolean recordTntPrime) {
@@ -126,7 +151,8 @@ final class PaperExplosionTntCorrelation {
         BlockPosition position,
         int occurrences,
         @Nullable EventSubmission submission,
-        boolean recordTntPrime
+        boolean recordTntPrime,
+        boolean invalidateSameOperationOnAccept
     ) {
         Candidate {
             Objects.requireNonNull(worldKey, "worldKey");
@@ -164,6 +190,7 @@ final class PaperExplosionTntCorrelation {
         private final BlockKey key;
         private final @Nullable EventSubmission submission;
         private final boolean recordTntPrime;
+        private final boolean invalidateSameOperationOnAccept;
         private int remaining;
         private boolean active = true;
 
@@ -171,6 +198,8 @@ final class PaperExplosionTntCorrelation {
             this.key = new BlockKey(candidate.worldKey(), candidate.position());
             this.submission = candidate.submission();
             this.recordTntPrime = candidate.recordTntPrime();
+            this.invalidateSameOperationOnAccept =
+                candidate.invalidateSameOperationOnAccept();
             this.remaining = candidate.occurrences();
         }
     }
@@ -379,6 +408,9 @@ final class PaperExplosionTntCorrelation {
             }
             deactivate(operation, item);
             if (binding.targetPresent()) {
+                if (item.invalidateSameOperationOnAccept) {
+                    invalidateSameOperation(operation, key);
+                }
                 invalidateOtherOperations(Thread.currentThread(), operation, key);
             }
             prune(Thread.currentThread());
@@ -391,6 +423,22 @@ final class PaperExplosionTntCorrelation {
         private static void deactivate(Operation operation, Item item) {
             item.active = false;
             operation.items.remove(item);
+        }
+
+        private static void invalidateSameOperation(
+            Operation operation,
+            BlockKey changedBlock
+        ) {
+            operation.items.removeIf(item -> {
+                if (
+                    item.invalidateSameOperationOnAccept
+                        && item.key.equals(changedBlock)
+                ) {
+                    item.active = false;
+                    return true;
+                }
+                return false;
+            });
         }
 
         private void invalidateOtherOperations(

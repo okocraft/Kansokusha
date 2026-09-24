@@ -270,12 +270,14 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
                 );
             }
 
+            var listedWorldKey = PaperKansokusha.key(listedBlock.getWorld().getKey());
             candidates.add(PaperExplosionTntCorrelation.candidate(
                 capture.worldKey(),
                 key.position(),
                 1,
                 submission,
-                listedType == Material.TNT && tntExplodes
+                listedType == Material.TNT && tntExplodes,
+                listedWorldKey.equals(capture.worldKey())
             ));
         }
         PaperExplosionTntCorrelation.beginLegacyDragon(this.api, candidates);
