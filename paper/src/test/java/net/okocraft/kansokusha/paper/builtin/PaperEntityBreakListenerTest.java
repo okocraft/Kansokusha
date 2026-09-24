@@ -74,13 +74,12 @@ class PaperEntityBreakListenerTest {
         var world = PaperBlockEventTestSupport.world();
         var target = hanging(world, ENTITY_ID, 15.5, 70, 9.5);
         var breaker = player(world);
+        var source = damageSource(DamageType.PLAYER_EXPLOSION, true);
         var event = Mockito.mock(HangingBreakByEntityEvent.class);
         Mockito.when(event.getEntity()).thenReturn(target);
         Mockito.when(event.getRemover()).thenReturn(breaker);
         Mockito.when(event.getCause()).thenReturn(HangingBreakEvent.RemoveCause.EXPLOSION);
-        Mockito.when(event.getDamageSource()).thenReturn(
-            damageSource(DamageType.PLAYER_EXPLOSION, true)
-        );
+        Mockito.when(event.getDamageSource()).thenReturn(source);
 
         listener.captureHanging(event);
         listener.finalizeHanging(event);
@@ -117,15 +116,14 @@ class PaperEntityBreakListenerTest {
         );
         generic.setCancelled(true);
 
+        var hangingEntity = hanging(world, ENTITY_ID, 3, 4, 5);
+        var hangingRemover = player(world);
+        var hangingSource = damageSource(DamageType.PLAYER_ATTACK, false);
         var hanging = Mockito.mock(HangingBreakByEntityEvent.class);
-        Mockito.when(hanging.getEntity()).thenReturn(
-            hanging(world, ENTITY_ID, 3, 4, 5)
-        );
-        Mockito.when(hanging.getRemover()).thenReturn(player(world));
+        Mockito.when(hanging.getEntity()).thenReturn(hangingEntity);
+        Mockito.when(hanging.getRemover()).thenReturn(hangingRemover);
         Mockito.when(hanging.getCause()).thenReturn(HangingBreakEvent.RemoveCause.ENTITY);
-        Mockito.when(hanging.getDamageSource()).thenReturn(
-            damageSource(DamageType.PLAYER_ATTACK, false)
-        );
+        Mockito.when(hanging.getDamageSource()).thenReturn(hangingSource);
         Mockito.when(hanging.isCancelled()).thenReturn(true);
 
         listener.captureGeneric(generic);
