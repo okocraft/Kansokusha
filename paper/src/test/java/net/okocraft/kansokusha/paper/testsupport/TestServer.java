@@ -4,6 +4,7 @@ import io.papermc.paper.command.brigadier.PaperCommands;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.LayeredRegistryAccess;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
@@ -23,6 +24,7 @@ import org.bukkit.craftbukkit.CraftRegistry;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Initializes the Paper/Minecraft registries required by real item stacks in tests.
