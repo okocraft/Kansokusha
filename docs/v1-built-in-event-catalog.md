@@ -1,7 +1,7 @@
 # Kansokusha v1 built-in event catalog
 
-- 日付: 2026-09-22
-- 関連 Issue: #10, #37
+- 日付: 2026-09-25
+- 関連 Issue: #10, #37, #129, #130, #131, #132, #133
 - 前提: ADR-0001, ADR-0003, ADR-0004
 
 ## 目的
@@ -21,9 +21,14 @@ Kansokusha v1 の記録基盤を実イベントで検証するため、組み込
 | Paper / Folia | `kansokusha:bucket_fill` | non-cancelled block-changing `PlayerBucketFillEvent`; non-block fills are excluded | `kansokusha:audit` | none |
 | Paper / Folia | `kansokusha:block_harvest` | non-cancelled harvest/shear source event normalized to one canonical event | `kansokusha:audit` | none |
 | Paper / Folia | `kansokusha:flower_pot_change` | non-cancelled flower-pot insert/remove with canonical before/after contents | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:item_drop` | non-cancelled player drop with item-entity UUID, detached stack, and drop position | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:item_pickup` | non-cancelled `EntityPickupItemEvent` when the actor is a Player, with item-entity UUID, detached stack, position, and remaining count | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:book_edit` | non-cancelled `PlayerEditBookEvent` with recoverable previous/final BookMeta and final signing flag | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:lectern_change` | non-cancelled lectern book insert/take only; page navigation is excluded | `kansokusha:audit` | none |
+| Paper / Folia | `kansokusha:player_trade` | successful merchant transaction confirmed after `PlayerPurchaseEvent` by Paper's successful-trade statistic event | `kansokusha:audit` | none |
 | Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` | none |
 
-chat、command、general inventory、login/logout、自然 block update、general entity/container 等、上表にない event は v1 minimum built-in catalog に含めない。
+chat、command、player inventory slot mutation、login/logout、上表にない general inventory / entity / container event 等は v1 minimum built-in catalog に含めない。item drop/pickup は inventory slot 差分ではなく、player と world item entity の ownership transfer を canonical operation として記録する。
 
 ## 共通 rules
 
@@ -57,7 +62,7 @@ Paper / Folia の block event は二段階で扱う。
 
 LOWEST snapshot は「Kansokusha が取得できた earliest-available state」であり、同じ `LOWEST` priority で Kansokusha より先に実行された listener より前の state は保証しない。
 
-また MONITOR 後の Paper / vanilla processing が実際に完了・成功したことまでは保証しない。
+また MONITOR 後の Paper / vanilla processing が実際に完了・成功したことまでは原則保証しない。例外として `kansokusha:player_trade` は、Paper 26.2 が `MerchantOffer#take` 成功後に発火する `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` と pending purchase を相関し、実取引成立後にのみ submission する。
 
 ## Retention mapping
 
@@ -78,6 +83,11 @@ catalog が提示する retention configuration example は次のとおり。
 | `kansokusha:bucket_fill` | `kansokusha:audit` |
 | `kansokusha:block_harvest` | `kansokusha:audit` |
 | `kansokusha:flower_pot_change` | `kansokusha:audit` |
+| `kansokusha:item_drop` | `kansokusha:audit` |
+| `kansokusha:item_pickup` | `kansokusha:audit` |
+| `kansokusha:book_edit` | `kansokusha:audit` |
+| `kansokusha:lectern_change` | `kansokusha:audit` |
+| `kansokusha:player_trade` | `kansokusha:audit` |
 | `kansokusha:server_connected` | `kansokusha:session` |
 
 fallback policy は `kansokusha:default` とする。
@@ -211,6 +221,45 @@ generation 1 payload は次を持つ。
 
 insert は `before = empty`、`after = placed item x1`、remove は `before = removed item x1`、`after = empty` とする。
 
+## `kansokusha:item_drop` / `kansokusha:item_pickup`
+
+player と world item entity の間の明示的な transfer を記録する。player inventory 内の generic slot mutation は source にしない。
+
+`item_drop` は non-cancelled `PlayerDropItemEvent` を対象とし、LOWEST で item entity UUID、ItemStack、entity の world position、player subject を detached snapshot にする。
+
+`item_pickup` は `EntityPickupItemEvent` の actor が Player の場合だけ対象とし、LOWEST で item entity UUID、ItemStack、pickup position、remaining count、player subject を detached snapshot にする。non-player pickup は保存しない。
+
+generation 1 payload は共通して `item_entity_uuid`、`stack`、exact entity `position` を持ち、pickup は追加で `remaining` を持つ。ItemStack は `PaperItemStackPayloadCodec` の byte serialization を再利用し、live reference を保持しない。
+
+## `kansokusha:book_edit`
+
+non-cancelled `PlayerEditBookEvent` を記録する。
+
+LOWEST で previous BookMeta と slot を snapshot し、MONITOR で final new BookMeta と signing flag を snapshot する。BookMeta は writable/written book ItemStack に適用して既存 `PaperItemStackPayloadCodec` で serialization するため、本文、title、author、generation、components 等を復元でき、live BookMeta reference を保持しない。本文への独自 redaction は行わない。
+
+generation 1 payload:
+
+- `slot`
+- `signing`
+- `previous_book_meta`
+- `new_book_meta`
+
+## `kansokusha:lectern_change`
+
+`PlayerInsertLecternBookEvent` と `PlayerTakeLecternBookEvent` を action `insert` / `take` に正規化する。`PlayerLecternPageChangeEvent` は閲覧状態であり persistent ownership change ではないため保存しない。
+
+common position は lectern block position とし、generation 1 payload は `action`、`before`、`after` の detached ItemStack snapshot を持つ。insert は empty → inserted book、take は taken book → empty とする。
+
+## `kansokusha:player_trade`
+
+`PlayerPurchaseEvent` を canonical handler とし、その subclass である `PlayerTradeEvent` 用の別 handler は登録しない。このため同一 transaction を二重保存しない。payload の `source_event` で villager/trader の `PlayerTradeEvent` と standalone merchant の `PlayerPurchaseEvent` を区別する。
+
+MONITOR で non-cancelled purchase の final merchant、recipe、reward/increase-use flags を detached payload にして pending に保持するが、この時点では submit しない。Paper 26.2 の `MerchantResultSlot#onTake` は event dispatch 後に final recipe で `MerchantOffer#take` を実行し、成功した branch だけで `Stats.TRADED_WITH_VILLAGER` を award する。この award に伴って同期発火する `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` を同一 player の pending purchase と相関できた場合だけ `kansokusha:player_trade` を submit する。
+
+これにより、plugin が `PlayerPurchaseEvent#setTrade(...)` で現在の input が満たせない recipe に変更した場合、event が non-cancelled でも `MerchantOffer#take` が失敗するため保存しない。statistic increment event 自体が cancel されても、event の発火位置は既に `MerchantOffer#take` 成功後なので transaction 成立確認として扱う。success signal が発生しない pending は次 tick に破棄する。
+
+merchant が Entity の場合は UUID/type を保存し、standalone merchant は `kind = standalone` とする。trade payload は result、ingredients、adjusted first ingredient、uses/max uses、experience、price/demand/special-price 等の event API が提供する確定値を detached ItemStack/value として保存する。
+
 ## `kansokusha:server_connected`
 
 ### Capture / fields
@@ -251,7 +300,7 @@ target backend name は common `server` field から復元可能なため payloa
 
 | 要件 | Catalog decision |
 | --- | --- |
-| §5 | v1 minimum built-in event を8 event type に固定 |
+| §5 | v1 minimum built-in event を13 event type に固定 |
 | §6 | 選定 built-in event では coalescing しない |
 | §8 | common fields と generation 1 payload fields を event ごとに固定 |
 | §9 | retention policy example、event mapping、fallback を固定 |
