@@ -93,6 +93,8 @@ public final class TestServer {
             Runnable::run
         ).join();
         layers = layers.replaceFrom(RegistryLayer.DIMENSIONS, dimensionRegistries);
+
+        tags.forEach(Registry.PendingTags::apply);
         return layers.compositeAccess().freeze();
     }
 
