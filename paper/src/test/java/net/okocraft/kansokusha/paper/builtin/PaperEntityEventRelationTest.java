@@ -79,6 +79,7 @@ class PaperEntityEventRelationTest {
             api,
             PaperBlockEventTestSupport.SERVER_KEY
         );
+        enableGenericCallbacks(listener);
         var world = PaperBlockEventTestSupport.world();
         var hanging = hanging(world);
         var remover = player(world);
@@ -110,7 +111,39 @@ class PaperEntityEventRelationTest {
             PaperEntityBreakListener.HANGING_SOURCE_EVENT,
             payload.getString("source_event").orElseThrow()
         );
-        Assertions.assertEquals(0, genericEvent.removerReads());
+        Assertions.assertEquals(1, genericEvent.removerReads());
+        Mockito.verify(hangingEvent, Mockito.never()).getRemover();
+    }
+
+    @Test
+    void testGenericCancellationControlsHangingBreakSubmission() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperEntityBreakListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        enableGenericCallbacks(listener);
+        var world = PaperBlockEventTestSupport.world();
+        var hanging = hanging(world);
+        var remover = player(world);
+        var damageSource = damageSource();
+
+        var hangingEvent = Mockito.mock(HangingBreakByEntityEvent.class);
+        var genericEvent = new PaperGenericEntityBreakEventFixture(
+            hanging,
+            remover,
+            damageSource,
+            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
+        );
+
+        listener.captureHanging(hangingEvent);
+        listener.finalizeHanging(hangingEvent);
+        listener.captureGeneric(genericEvent);
+        genericEvent.setCancelled(true);
+        listener.finalizeGeneric(genericEvent);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -128,6 +161,12 @@ class PaperEntityEventRelationTest {
                 HangingBreakEvent.class
             )
         );
+    }
+
+    private static void enableGenericCallbacks(PaperEntityBreakListener listener) throws Exception {
+        var field = PaperEntityBreakListener.class.getDeclaredField("genericCallbacksRegistered");
+        field.setAccessible(true);
+        field.setBoolean(listener, true);
     }
 
     private static Hanging hanging(World world) {

@@ -46,7 +46,7 @@ public final class PaperEntityBreakListener implements PaperInFlightListener {
         new PaperInFlightMap<>();
     private final PaperInFlightMap<HangingBreakByEntityEvent, Snapshot> hangingInFlight =
         new PaperInFlightMap<>();
-    private boolean genericCallbacksRegistered;
+    private volatile boolean genericCallbacksRegistered;
 
     private PaperEntityBreakListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -137,6 +137,9 @@ public final class PaperEntityBreakListener implements PaperInFlightListener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void captureHanging(HangingBreakByEntityEvent event) {
         Objects.requireNonNull(event, "event");
+        if (this.genericCallbacksRegistered) {
+            return;
+        }
 
         var damageSource = event.getDamageSource();
         var remover = event.getRemover();
@@ -158,6 +161,9 @@ public final class PaperEntityBreakListener implements PaperInFlightListener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeHanging(HangingBreakByEntityEvent event) {
         Objects.requireNonNull(event, "event");
+        if (this.genericCallbacksRegistered) {
+            return;
+        }
         this.finalizeEvent(event.isCancelled(), this.hangingInFlight.remove(event));
     }
 
@@ -173,10 +179,7 @@ public final class PaperEntityBreakListener implements PaperInFlightListener {
 
     private void captureGeneric(Event event, GenericEventAccess access) {
         var entity = access.entity(event);
-        if (entity instanceof Hanging) {
-            return;
-        }
-
+        var hanging = entity instanceof Hanging;
         var damageSource = access.damageSource(event);
         var remover = access.remover(event);
         this.genericInFlight.put(
@@ -188,8 +191,8 @@ public final class PaperEntityBreakListener implements PaperInFlightListener {
                 access.cause(event).name().toLowerCase(Locale.ROOT),
                 damageSource.getDamageType().getKey().toString(),
                 damageSource.isIndirect(),
-                GENERIC_SOURCE_EVENT,
-                false
+                hanging ? HANGING_SOURCE_EVENT : GENERIC_SOURCE_EVENT,
+                hanging
             )
         );
     }
