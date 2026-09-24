@@ -162,10 +162,11 @@ final class PaperContainerPayloadCodec {
         LocationSnapshot itemOrigin
     ) {
         var payload = new CompoundTag();
+        payload.putString("semantics", "non_cancelled_container_pickup_attempt");
         payload.putString("source_kind", "world_item");
         payload.put("inventory", inventory.payload());
         payload.putString("item_entity_uuid", itemEntityId);
-        payload.put("item", item);
+        payload.put("source_item", item);
         payload.put("item_origin", itemOrigin.payload());
         return PaperPayloadNbtCodec.encode(payload);
     }
@@ -181,14 +182,15 @@ final class PaperContainerPayloadCodec {
         ListTag finalResults
     ) {
         var payload = new CompoundTag();
+        payload.putString("semantics", "non_cancelled_container_process_event");
         payload.putString("process_kind", processKind);
         payload.putString("source_event", sourceEvent);
         payload.put("container", container.payload());
         payload.put("input_items", inputItems);
         payload.put("ingredient", ingredient);
         payload.put("fuel", fuel);
-        payload.put("initial_result_items", initialResults);
-        payload.put("final_result_items", finalResults);
+        payload.put("initial_event_result_items", initialResults);
+        payload.put("event_result_items", finalResults);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
