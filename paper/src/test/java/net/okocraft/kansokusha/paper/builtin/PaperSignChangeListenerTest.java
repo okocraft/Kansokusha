@@ -66,7 +66,7 @@ class PaperSignChangeListenerTest {
         Assertions.assertEquals(PaperSignChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(12, submission.position().x());
-        var payload = PaperAdditionalBuiltInPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("front", string(payload, "side"));
         Assertions.assertEquals(
             Component.text("before-0"),
@@ -150,7 +150,7 @@ class PaperSignChangeListenerTest {
         }
         Assertions.assertEquals(fixtures.size(), byX.size());
         for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperAdditionalBuiltInPayloadCodec.decode(
+            var payload = PaperPayloadNbtCodec.decode(
                 byX.get(1000 + i).payload()
             );
             Assertions.assertEquals(

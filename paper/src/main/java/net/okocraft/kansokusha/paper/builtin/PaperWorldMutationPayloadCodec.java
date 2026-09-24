@@ -8,7 +8,6 @@ import org.bukkit.block.data.BlockData;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
@@ -83,11 +82,11 @@ final class PaperWorldMutationPayloadCodec {
         String action
     ) {
         var payload = new CompoundTag();
-        payload.put("from", position(from));
-        payload.put("to", position(to));
+        payload.put("from", PaperPayloadNbtCodec.position(from));
+        payload.put("to", PaperPayloadNbtCodec.position(to));
         payload.put("state", PaperBlockStatePayloadCodec.blockState(state));
         payload.putString("piston_world", pistonWorldKey.asString());
-        payload.put("piston_origin", position(pistonOrigin));
+        payload.put("piston_origin", PaperPayloadNbtCodec.position(pistonOrigin));
         payload.putString("direction", normalized(direction));
         payload.putString("action", normalized(action));
         return PaperPayloadNbtCodec.encode(payload);
@@ -107,10 +106,6 @@ final class PaperWorldMutationPayloadCodec {
         return PaperPayloadNbtCodec.encode(payload);
     }
 
-    static CompoundTag decode(EventPayload payload) throws IOException {
-        return PaperPayloadNbtCodec.decode(payload);
-    }
-
     private static void putAttribution(
         CompoundTag payload,
         PaperEntityAttribution attribution
@@ -126,7 +121,7 @@ final class PaperWorldMutationPayloadCodec {
         var shooterBlock = attribution.shooterBlock();
         if (shooterBlock != null) {
             payload.putString("shooter_block_world", shooterBlock.worldKey().asString());
-            payload.put("shooter_block", position(shooterBlock.position()));
+            payload.put("shooter_block", PaperPayloadNbtCodec.position(shooterBlock.position()));
         }
     }
 
@@ -146,7 +141,7 @@ final class PaperWorldMutationPayloadCodec {
             throw new IllegalArgumentException("Block world, position, and state must all be present");
         }
         payload.putString(worldKey, world.asString());
-        payload.put(positionKey, position(blockPosition));
+        payload.put(positionKey, PaperPayloadNbtCodec.position(blockPosition));
         payload.put(stateKey, PaperBlockStatePayloadCodec.blockState(blockState));
     }
 
@@ -160,15 +155,6 @@ final class PaperWorldMutationPayloadCodec {
         if (value != null) {
             payload.putString(key, value);
         }
-    }
-
-    private static CompoundTag position(BlockPosition position) {
-        Objects.requireNonNull(position, "position");
-        var result = new CompoundTag();
-        result.putInt("x", position.x());
-        result.putInt("y", position.y());
-        result.putInt("z", position.z());
-        return result;
     }
 
     private static String normalized(String value) {

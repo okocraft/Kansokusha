@@ -94,7 +94,7 @@ class PaperBlockIgniteListenerTest {
         );
         expected.putString("actor_entity_uuid", PLAYER_ID.toString());
         expected.putString("actor_entity_type", "PLAYER");
-        Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
+        Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(target, Mockito.times(1)).getBlockData();
         Mockito.verify(source, Mockito.times(1)).getBlockData();

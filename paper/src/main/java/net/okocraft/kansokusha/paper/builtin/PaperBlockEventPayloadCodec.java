@@ -87,8 +87,8 @@ final class PaperBlockEventPayloadCodec {
             "fluid",
             Objects.requireNonNull(fluidKind, "fluidKind").toLowerCase(Locale.ROOT)
         );
-        payload.put("source", position(sourcePosition));
-        payload.put("destination", position(destinationPosition));
+        payload.put("source", PaperPayloadNbtCodec.position(sourcePosition));
+        payload.put("destination", PaperPayloadNbtCodec.position(destinationPosition));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -98,7 +98,7 @@ final class PaperBlockEventPayloadCodec {
     ) {
         var payload = new CompoundTag();
         payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
-        payload.put("sponge_origin", position(spongeOrigin));
+        payload.put("sponge_origin", PaperPayloadNbtCodec.position(spongeOrigin));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -112,7 +112,7 @@ final class PaperBlockEventPayloadCodec {
         payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
         payload.put("post_state", PaperBlockStatePayloadCodec.blockState(postState));
         payload.putString("source_event", Objects.requireNonNull(sourceEvent, "sourceEvent"));
-        payload.put("source", position(sourcePosition));
+        payload.put("source", PaperPayloadNbtCodec.position(sourcePosition));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -153,7 +153,7 @@ final class PaperBlockEventPayloadCodec {
             payload.putString("cause", cause);
         }
         if (sourcePosition != null) {
-            payload.put("source", position(sourcePosition));
+            payload.put("source", PaperPayloadNbtCodec.position(sourcePosition));
         }
         return PaperPayloadNbtCodec.encode(payload);
     }
@@ -169,16 +169,7 @@ final class PaperBlockEventPayloadCodec {
         if (sourcePosition == null || sourceState == null) {
             throw new IllegalArgumentException("sourcePosition and sourceState must both be present");
         }
-        payload.put("source", position(sourcePosition));
+        payload.put("source", PaperPayloadNbtCodec.position(sourcePosition));
         payload.put("source_state", PaperBlockStatePayloadCodec.blockState(sourceState));
-    }
-
-    private static CompoundTag position(BlockPosition position) {
-        Objects.requireNonNull(position, "position");
-        var result = new CompoundTag();
-        result.putInt("x", position.x());
-        result.putInt("y", position.y());
-        result.putInt("z", position.z());
-        return result;
     }
 }

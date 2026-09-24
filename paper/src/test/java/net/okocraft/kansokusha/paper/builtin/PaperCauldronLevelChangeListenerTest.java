@@ -91,7 +91,7 @@ class PaperCauldronLevelChangeListenerTest {
                 PLAYER_ID,
                 EntityType.PLAYER.name()
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(block, Mockito.times(1)).getBlockData();
@@ -140,7 +140,7 @@ class PaperCauldronLevelChangeListenerTest {
                 ENTITY_ID,
                 EntityType.ZOMBIE.name()
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
     }
 
@@ -182,7 +182,7 @@ class PaperCauldronLevelChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
     }
 

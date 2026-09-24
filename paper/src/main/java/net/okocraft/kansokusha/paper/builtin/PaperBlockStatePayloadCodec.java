@@ -10,7 +10,6 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
-import java.io.IOException;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -43,10 +42,6 @@ public final class PaperBlockStatePayloadCodec {
 
     static CompoundTag airBlockState() {
         return NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState());
-    }
-
-    static CompoundTag decode(EventPayload payload) throws IOException {
-        return PaperPayloadNbtCodec.decode(payload);
     }
 
     private static BlockState toMinecraftState(BlockData blockData) {

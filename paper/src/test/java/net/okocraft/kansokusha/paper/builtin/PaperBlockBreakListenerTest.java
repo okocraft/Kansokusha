@@ -77,7 +77,7 @@ class PaperBlockBreakListenerTest {
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
         Assertions.assertEquals(
             NbtUtils.writeBlockState(state),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, listener.inFlightCount());
 
@@ -198,7 +198,7 @@ class PaperBlockBreakListenerTest {
             Assertions.assertEquals(new BlockPosition(x, 64, -i), submission.position());
             Assertions.assertEquals(
                 NbtUtils.writeBlockState(expectedStates.get(x)),
-                PaperBlockStatePayloadCodec.decode(submission.payload())
+                PaperPayloadNbtCodec.decode(submission.payload())
             );
         }
     }

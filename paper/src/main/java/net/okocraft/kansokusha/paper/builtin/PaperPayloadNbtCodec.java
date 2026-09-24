@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.okocraft.kansokusha.api.event.EventPayload;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -30,6 +31,15 @@ public final class PaperPayloadNbtCodec {
             throw new AssertionError("Unexpected in-memory NBT encoding failure.", e);
         }
         return EventPayload.copyOf(bytes.toByteArray());
+    }
+
+    static CompoundTag position(BlockPosition position) {
+        Objects.requireNonNull(position, "position");
+        var result = new CompoundTag();
+        result.putInt("x", position.x());
+        result.putInt("y", position.y());
+        result.putInt("z", position.z());
+        return result;
     }
 
     public static CompoundTag decode(EventPayload payload) throws IOException {

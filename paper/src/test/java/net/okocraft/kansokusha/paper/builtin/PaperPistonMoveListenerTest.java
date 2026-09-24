@@ -115,7 +115,7 @@ class PaperPistonMoveListenerTest {
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
         Assertions.assertEquals(new BlockPosition(22, 64, 20), submission.position());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockEventTestSupport.position(new BlockPosition(21, 64, 20)),
             payload.get("from")
@@ -233,7 +233,7 @@ class PaperPistonMoveListenerTest {
 
         Assertions.assertEquals(events.size(), api.submissions.size());
         for (var submission : api.submissions) {
-            var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+            var payload = PaperPayloadNbtCodec.decode(submission.payload());
             var from = (net.minecraft.nbt.CompoundTag) payload.get("from");
             Assertions.assertNotNull(from);
             Assertions.assertEquals(
@@ -257,7 +257,7 @@ class PaperPistonMoveListenerTest {
         String action
     ) throws Exception {
         Assertions.assertEquals(to, submission.position());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(PaperBlockEventTestSupport.position(from), payload.get("from"));
         Assertions.assertEquals(PaperBlockEventTestSupport.position(to), payload.get("to"));
         Assertions.assertEquals(

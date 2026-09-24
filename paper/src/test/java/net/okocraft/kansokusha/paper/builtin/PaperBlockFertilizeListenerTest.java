@@ -83,7 +83,7 @@ class PaperBlockFertilizeListenerTest {
                 finalState,
                 new BlockPosition(10, 64, 10)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(cocoa, Mockito.times(1)).getBlockData();
@@ -132,7 +132,7 @@ class PaperBlockFertilizeListenerTest {
                 Blocks.OAK_LOG.defaultBlockState(),
                 new BlockPosition(30, 64, 30)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Mockito.verify(changedBlock, Mockito.times(1)).getBlockData();
         Mockito.verify(first, Mockito.times(1)).getBlockData();
@@ -207,7 +207,7 @@ class PaperBlockFertilizeListenerTest {
                 Blocks.OAK_LOG.defaultBlockState(),
                 new BlockPosition(50, 64, 50)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Mockito.verify(target, Mockito.times(1)).getBlockData();
         Mockito.verify(changed, Mockito.times(1)).getBlockData();
@@ -343,7 +343,7 @@ class PaperBlockFertilizeListenerTest {
                 Blocks.BIRCH_LOG.defaultBlockState(),
                 new BlockPosition(20, 64, 20)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, natural.inFlightCount());
         Assertions.assertEquals(0, fertilize.inFlightCount());

@@ -70,7 +70,7 @@ class PaperTntPrimeListenerTest {
         Assertions.assertEquals(new BlockPosition(10, 64, 20), submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
 
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("player", payload.getString("cause").orElseThrow());
         Assertions.assertEquals(
             PLAYER_ID.toString(),
@@ -245,7 +245,7 @@ class PaperTntPrimeListenerTest {
 
         Assertions.assertEquals(32, api.submissions.size());
         for (var submission : api.submissions) {
-            var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+            var payload = PaperPayloadNbtCodec.decode(submission.payload());
             Assertions.assertEquals(
                 expectedActors.get(submission.position().x()).toString(),
                 payload.getString("actor_entity_uuid").orElseThrow()

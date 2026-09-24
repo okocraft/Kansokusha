@@ -89,7 +89,7 @@ class PaperExplosionBlockChangeListenerTest {
         Assertions.assertEquals(OCCURRED_AT, byX.get(10).occurredAt());
         Assertions.assertEquals(OCCURRED_AT, byX.get(12).occurredAt());
 
-        var firstPayload = PaperWorldMutationPayloadCodec.decode(byX.get(10).payload());
+        var firstPayload = PaperPayloadNbtCodec.decode(byX.get(10).payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(Blocks.STONE.defaultBlockState().asBlockData()),
             firstPayload.get("pre_state")
@@ -102,7 +102,7 @@ class PaperExplosionBlockChangeListenerTest {
             firstPayload.get("source_block_state")
         );
 
-        var addedPayload = PaperWorldMutationPayloadCodec.decode(byX.get(12).payload());
+        var addedPayload = PaperPayloadNbtCodec.decode(byX.get(12).payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(
                 Blocks.DIAMOND_ORE.defaultBlockState().asBlockData()
@@ -431,7 +431,7 @@ class PaperExplosionBlockChangeListenerTest {
 
         Assertions.assertEquals(1, api.submissions.size());
         var innerSubmission = api.submissions.remove();
-        var innerPayload = PaperWorldMutationPayloadCodec.decode(innerSubmission.payload());
+        var innerPayload = PaperPayloadNbtCodec.decode(innerSubmission.payload());
         Assertions.assertEquals(
             PaperBlockEventTestSupport.position(new BlockPosition(2, 64, 2)),
             innerPayload.get("source_block")
@@ -694,7 +694,7 @@ class PaperExplosionBlockChangeListenerTest {
             ))
             .findFirst()
             .orElseThrow();
-        var payload = PaperWorldMutationPayloadCodec.decode(blockChange.payload());
+        var payload = PaperPayloadNbtCodec.decode(blockChange.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(
                 Blocks.STONE.defaultBlockState().asBlockData()
@@ -1151,7 +1151,7 @@ class PaperExplosionBlockChangeListenerTest {
             PaperKansokusha.key(world.getKey()),
             submission.worldKey()
         );
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(
                 Blocks.GOLD_BLOCK.defaultBlockState().asBlockData()
@@ -1194,7 +1194,7 @@ class PaperExplosionBlockChangeListenerTest {
 
         var submission = api.submissions.remove();
         Assertions.assertEquals(new PlayerSubject(shooterId), submission.subject());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             projectileId.toString(),
             payload.getString("actor_entity_uuid").orElseThrow()
@@ -1242,7 +1242,7 @@ class PaperExplosionBlockChangeListenerTest {
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             ghastId.toString(),
             payload.getString("shooter_entity_uuid").orElseThrow()
@@ -1343,7 +1343,7 @@ class PaperExplosionBlockChangeListenerTest {
             var expected = (i & 1) == 0
                 ? Blocks.STONE.defaultBlockState()
                 : Blocks.DEEPSLATE.defaultBlockState();
-            var payload = PaperWorldMutationPayloadCodec.decode(byX.get(1000 + i).payload());
+            var payload = PaperPayloadNbtCodec.decode(byX.get(1000 + i).payload());
             Assertions.assertEquals(
                 PaperBlockStatePayloadCodec.blockState(expected.asBlockData()),
                 payload.get("pre_state")

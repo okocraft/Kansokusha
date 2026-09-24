@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import io.papermc.paper.event.block.PlayerShearBlockEvent;
 import net.kyori.adventure.key.Key;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -69,7 +70,7 @@ class PaperBlockHarvestListenerTest {
 
         var harvestSubmission = byX.get(10);
         Assertions.assertEquals(PaperBlockHarvestListener.EVENT_TYPE, harvestSubmission.eventType());
-        var harvestPayload = PaperAdditionalBuiltInPayloadCodec.decode(harvestSubmission.payload());
+        var harvestPayload = PaperPayloadNbtCodec.decode(harvestSubmission.payload());
         Assertions.assertEquals("harvest", string(harvestPayload, "operation"));
         Assertions.assertEquals(
             "org.bukkit.event.player.PlayerHarvestBlockEvent",
@@ -78,37 +79,35 @@ class PaperBlockHarvestListenerTest {
         Assertions.assertEquals("hand", string(harvestPayload, "hand"));
         Assertions.assertEquals(
             NbtUtils.writeBlockState(Blocks.SWEET_BERRY_BUSH.defaultBlockState()),
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(harvestPayload, "pre_state")
+            harvestPayload.getCompoundOrEmpty("pre_state")
         );
-        var harvestItems = PaperAdditionalBuiltInPayloadCodec.decodeNestedItems(
-            harvestPayload,
-            "harvest_items"
-        );
+        var harvestItems = harvestPayload.getListOrEmpty("harvest_items").stream()
+            .map(CompoundTag.class::cast)
+            .toList();
         Assertions.assertEquals(1, harvestItems.size());
         Assertions.assertEquals(2, PaperItemStackPayloadCodec.decode(harvestItems.getFirst()).getAmount());
         Assertions.assertTrue(
             PaperItemStackPayloadCodec.decode(
-                PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(harvestPayload, "shear_tool")
+                harvestPayload.getCompoundOrEmpty("shear_tool")
             ).isEmpty()
         );
 
         var shearSubmission = byX.get(20);
         Assertions.assertEquals(PaperBlockHarvestListener.EVENT_TYPE, shearSubmission.eventType());
-        var shearPayload = PaperAdditionalBuiltInPayloadCodec.decode(shearSubmission.payload());
+        var shearPayload = PaperPayloadNbtCodec.decode(shearSubmission.payload());
         Assertions.assertEquals("shear", string(shearPayload, "operation"));
         Assertions.assertEquals(
             "io.papermc.paper.event.block.PlayerShearBlockEvent",
             string(shearPayload, "source_event")
         );
         var snapshottedTool = PaperItemStackPayloadCodec.decode(
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(shearPayload, "shear_tool")
+            shearPayload.getCompoundOrEmpty("shear_tool")
         );
         Assertions.assertEquals(Material.SHEARS, snapshottedTool.getType());
         Assertions.assertEquals(1, snapshottedTool.getAmount());
-        var snapshottedDrops = PaperAdditionalBuiltInPayloadCodec.decodeNestedItems(
-            shearPayload,
-            "shear_drops"
-        );
+        var snapshottedDrops = shearPayload.getListOrEmpty("shear_drops").stream()
+            .map(CompoundTag.class::cast)
+            .toList();
         Assertions.assertEquals(1, snapshottedDrops.size());
         Assertions.assertEquals(
             3,
@@ -227,7 +226,7 @@ class PaperBlockHarvestListenerTest {
         var byX = submissionsByX(api);
         Assertions.assertEquals(fixtures.size(), byX.size());
         for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperAdditionalBuiltInPayloadCodec.decode(byX.get(1000 + i).payload());
+            var payload = PaperPayloadNbtCodec.decode(byX.get(1000 + i).payload());
             Assertions.assertEquals((i & 1) == 0 ? "harvest" : "shear", string(payload, "operation"));
         }
         Assertions.assertEquals(0, listener.inFlightCount());

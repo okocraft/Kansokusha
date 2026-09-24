@@ -81,7 +81,7 @@ class PaperNaturalBlockChangeListenerTest {
             "fire",
             new BlockPosition(10, 64, 10)
         );
-        Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
+        Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
         Mockito.verify(changed, Mockito.times(1)).getBlockData();
     }
 
@@ -126,7 +126,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, listener.inFlightCount());
     }
@@ -172,7 +172,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertEquals(0, listener.inFlightCount());
     }
@@ -223,7 +223,7 @@ class PaperNaturalBlockChangeListenerTest {
                 "fire",
                 new BlockPosition(10, 64, 10)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
     }
 
@@ -407,7 +407,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(byX.get(1).payload())
+            PaperPayloadNbtCodec.decode(byX.get(1).payload())
         );
         Assertions.assertEquals(
             naturalPayload(
@@ -417,7 +417,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(byX.get(2).payload())
+            PaperPayloadNbtCodec.decode(byX.get(2).payload())
         );
         Assertions.assertEquals(
             naturalPayload(
@@ -427,7 +427,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(byX.get(3).payload())
+            PaperPayloadNbtCodec.decode(byX.get(3).payload())
         );
         Assertions.assertEquals(
             naturalPayload(
@@ -437,7 +437,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(byX.get(4).payload())
+            PaperPayloadNbtCodec.decode(byX.get(4).payload())
         );
         Assertions.assertEquals(
             naturalPayload(
@@ -447,7 +447,7 @@ class PaperNaturalBlockChangeListenerTest {
                 null,
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(byX.get(5).payload())
+            PaperPayloadNbtCodec.decode(byX.get(5).payload())
         );
     }
 
@@ -525,7 +525,7 @@ class PaperNaturalBlockChangeListenerTest {
                     "birch",
                     null
                 ),
-                PaperBlockStatePayloadCodec.decode(submission.payload())
+                PaperPayloadNbtCodec.decode(submission.payload())
             );
         }
         Assertions.assertNull(byX.get(102));
@@ -579,7 +579,7 @@ class PaperNaturalBlockChangeListenerTest {
                 "tree",
                 null
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
     }
 

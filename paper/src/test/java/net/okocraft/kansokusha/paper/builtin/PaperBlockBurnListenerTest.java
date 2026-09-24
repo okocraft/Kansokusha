@@ -67,7 +67,7 @@ class PaperBlockBurnListenerTest {
             "source_state",
             PaperBlockStatePayloadCodec.blockState(Blocks.FIRE.defaultBlockState().asBlockData())
         );
-        Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
+        Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
         Mockito.verify(burned, Mockito.times(1)).getBlockData();
         Mockito.verify(source, Mockito.times(1)).getBlockData();
     }
