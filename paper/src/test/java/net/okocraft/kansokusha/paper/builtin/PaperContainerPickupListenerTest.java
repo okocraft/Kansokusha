@@ -65,11 +65,17 @@ class PaperContainerPickupListenerTest {
         Assertions.assertNull(submission.subject());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            "non_cancelled_container_pickup_attempt",
+            string(payload, "semantics")
+        );
         Assertions.assertEquals("world_item", string(payload, "source_kind"));
         Assertions.assertEquals(ITEM_ID.toString(), string(payload, "item_entity_uuid"));
         Assertions.assertEquals(
             3,
-            PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("item")).getAmount()
+            PaperItemStackPayloadCodec.decode(
+                payload.getCompoundOrEmpty("source_item")
+            ).getAmount()
         );
         var origin = payload.getCompoundOrEmpty("item_origin");
         Assertions.assertEquals("example:world", string(origin, "world"));
