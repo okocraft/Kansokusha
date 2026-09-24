@@ -23,6 +23,16 @@ retention:
       policy: kansokusha:audit
     - event-type: kansokusha:flower_pot_change
       policy: kansokusha:audit
+    - event-type: kansokusha:item_drop
+      policy: kansokusha:audit
+    - event-type: kansokusha:item_pickup
+      policy: kansokusha:audit
+    - event-type: kansokusha:book_edit
+      policy: kansokusha:audit
+    - event-type: kansokusha:lectern_change
+      policy: kansokusha:audit
+    - event-type: kansokusha:player_trade
+      policy: kansokusha:audit
     - event-type: kansokusha:server_connected
       policy: kansokusha:session
   fallback-policy: kansokusha:default
