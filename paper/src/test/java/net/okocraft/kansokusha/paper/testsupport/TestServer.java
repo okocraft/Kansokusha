@@ -62,21 +62,35 @@ public final class TestServer {
             packs.openAllSelected()
         );
 
+        LayeredRegistryAccess<RegistryLayer> layers = RegistryLayer.createRegistryAccess();
         List<Registry.PendingTags<?>> tags = TagLoader.loadTagsForExistingRegistries(
             resources,
-            RegistryLayer.STATIC_ACCESS
+            layers.getLayer(RegistryLayer.STATIC)
         );
-        tags.forEach(Registry.PendingTags::apply);
 
-        RegistryAccess.Frozen loaded = RegistryDataLoader.load(
+        List<HolderLookup.RegistryLookup<?>> worldLookups = TagLoader.buildUpdatedLookups(
+            layers.getAccessForLoading(RegistryLayer.WORLD),
+            tags
+        );
+        RegistryAccess.Frozen worldRegistries = RegistryDataLoader.load(
             resources,
-            TagLoader.buildUpdatedLookups(RegistryLayer.STATIC_ACCESS, tags),
-            RegistryDataLoader.WORLDGEN_REGISTRIES,
+            worldLookups,
+            RegistryDataLoader.WORLD_REGISTRIES,
             Runnable::run
         ).join();
+        layers = layers.replaceFrom(RegistryLayer.WORLD, worldRegistries);
 
-        LayeredRegistryAccess<RegistryLayer> layers = RegistryLayer.createRegistryAccess()
-            .replaceFrom(RegistryLayer.WORLDGEN, loaded);
+        List<HolderLookup.RegistryLookup<?>> dimensionLookups = Stream.concat(
+            worldLookups.stream(),
+            worldRegistries.listRegistries()
+        ).toList();
+        RegistryAccess.Frozen dimensionRegistries = RegistryDataLoader.load(
+            resources,
+            dimensionLookups,
+            RegistryDataLoader.DIMENSION_REGISTRIES,
+            Runnable::run
+        ).join();
+        layers = layers.replaceFrom(RegistryLayer.DIMENSIONS, dimensionRegistries);
         return layers.compositeAccess().freeze();
     }
 
