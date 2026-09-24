@@ -57,7 +57,7 @@ class PaperAdministrativeWorldListenerTest {
 
         var event = Mockito.mock(WorldGameRuleChangeEvent.class);
         Mockito.when(event.getWorld()).thenReturn(world);
-        Mockito.when(event.getGameRule()).thenReturn(rule);
+        Mockito.doReturn(rule).when(event).getGameRule();
         Mockito.when(event.getCommandSender()).thenReturn(player);
         Mockito.when(event.getValue()).thenReturn("true");
         Mockito.when(event.isCancelled()).thenReturn(false);
@@ -101,7 +101,7 @@ class PaperAdministrativeWorldListenerTest {
 
         var cancelled = Mockito.mock(WorldGameRuleChangeEvent.class);
         Mockito.when(cancelled.getWorld()).thenReturn(world);
-        Mockito.when(cancelled.getGameRule()).thenReturn(rule);
+        Mockito.doReturn(rule).when(cancelled).getGameRule();
         Mockito.when(cancelled.getValue()).thenReturn("5");
         Mockito.when(cancelled.isCancelled()).thenReturn(true);
         listener.capture(cancelled);
@@ -110,7 +110,7 @@ class PaperAdministrativeWorldListenerTest {
 
         var accepted = Mockito.mock(WorldGameRuleChangeEvent.class);
         Mockito.when(accepted.getWorld()).thenReturn(world);
-        Mockito.when(accepted.getGameRule()).thenReturn(rule);
+        Mockito.doReturn(rule).when(accepted).getGameRule();
         Mockito.when(accepted.getValue()).thenReturn("7");
         Mockito.when(accepted.isCancelled()).thenReturn(false);
         Mockito.when(accepted.getCommandSender()).thenReturn(null);
