@@ -128,7 +128,7 @@ final class PaperExplosionTntCorrelation {
         int occurrences,
         @Nullable EventSubmission submission,
         boolean recordTntPrime,
-        boolean invalidateSameOperationOnAccept
+        boolean listedInExplosionWorld
     ) {
         return new Candidate(
             worldKey,
@@ -136,7 +136,7 @@ final class PaperExplosionTntCorrelation {
             occurrences,
             submission,
             recordTntPrime,
-            invalidateSameOperationOnAccept
+            listedInExplosionWorld
         );
     }
 
@@ -152,7 +152,7 @@ final class PaperExplosionTntCorrelation {
         int occurrences,
         @Nullable EventSubmission submission,
         boolean recordTntPrime,
-        boolean invalidateSameOperationOnAccept
+        boolean listedInExplosionWorld
     ) {
         Candidate {
             Objects.requireNonNull(worldKey, "worldKey");
@@ -190,7 +190,7 @@ final class PaperExplosionTntCorrelation {
         private final BlockKey key;
         private final @Nullable EventSubmission submission;
         private final boolean recordTntPrime;
-        private final boolean invalidateSameOperationOnAccept;
+        private final boolean listedInExplosionWorld;
         private int remaining;
         private boolean active = true;
 
@@ -198,8 +198,8 @@ final class PaperExplosionTntCorrelation {
             this.key = new BlockKey(candidate.worldKey(), candidate.position());
             this.submission = candidate.submission();
             this.recordTntPrime = candidate.recordTntPrime();
-            this.invalidateSameOperationOnAccept =
-                candidate.invalidateSameOperationOnAccept();
+            this.listedInExplosionWorld =
+                candidate.listedInExplosionWorld();
             this.remaining = candidate.occurrences();
         }
     }
@@ -408,7 +408,7 @@ final class PaperExplosionTntCorrelation {
             }
             deactivate(operation, item);
             if (binding.targetPresent()) {
-                if (item.invalidateSameOperationOnAccept) {
+                if (operation.kind == OperationKind.LEGACY_DRAGON) {
                     invalidateSameOperation(operation, key);
                 }
                 invalidateOtherOperations(Thread.currentThread(), operation, key);
@@ -431,7 +431,7 @@ final class PaperExplosionTntCorrelation {
         ) {
             operation.items.removeIf(item -> {
                 if (
-                    item.invalidateSameOperationOnAccept
+                    item.listedInExplosionWorld
                         && item.key.equals(changedBlock)
                 ) {
                     item.active = false;
