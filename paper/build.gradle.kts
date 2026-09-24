@@ -71,6 +71,7 @@ tasks {
         doFirst {
             val runDirectory = externalApiTestDirectory.get().asFile
             project.delete(runDirectory)
+            Files.createDirectories(runDirectory.toPath())
 
             Files.writeString(
                 runDirectory.toPath().resolve("server.properties"),
