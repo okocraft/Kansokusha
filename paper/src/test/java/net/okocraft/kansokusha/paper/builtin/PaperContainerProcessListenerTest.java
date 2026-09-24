@@ -255,14 +255,13 @@ class PaperContainerProcessListenerTest {
         Mockito.when(inventory.getType()).thenReturn(type);
         Mockito.when(inventory.getSize()).thenReturn(size);
         Mockito.when(inventory.getHolder()).thenReturn(null);
-        Mockito.when(inventory.getLocation()).thenReturn(
-            new Location(
-                block.getWorld(),
-                block.getX() + 0.5,
-                block.getY(),
-                block.getZ() + 0.5
-            )
+        var location = new Location(
+            block.getWorld(),
+            block.getX() + 0.5,
+            block.getY(),
+            block.getZ() + 0.5
         );
+        Mockito.when(inventory.getLocation()).thenReturn(location);
     }
 
     private static void attachInventory(Block block, Inventory inventory, Material type) {
