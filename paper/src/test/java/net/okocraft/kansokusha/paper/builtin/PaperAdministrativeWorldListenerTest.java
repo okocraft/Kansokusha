@@ -9,6 +9,8 @@ import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.api.subject.EventSubject;
+import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -61,12 +63,16 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(event.isCancelled()).thenReturn(false);
 
         listener.capture(event);
-        Mockito.when(event.getValue()).thenReturn("false");
         Mockito.when(event.getValue()).thenReturn("true");
         listener.finalizeEvent(event);
 
         var submission = onlySubmission(api);
-        assertWorldCommon(submission, PaperGameRuleChangeListener.EVENT_TYPE, "rules");
+        assertWorldCommon(
+            submission,
+            PaperGameRuleChangeListener.EVENT_TYPE,
+            "rules",
+            new PlayerSubject(PLAYER_ID)
+        );
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("minecraft:keep_inventory", string(payload, "game_rule"));
         Assertions.assertEquals("false", string(payload, "before"));
@@ -150,7 +156,8 @@ class PaperAdministrativeWorldListenerTest {
         assertWorldCommon(
             submission,
             PaperWorldDifficultyChangeListener.EVENT_TYPE,
-            "difficulty"
+            "difficulty",
+            null
         );
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("normal", string(payload, "before"));
@@ -204,7 +211,12 @@ class PaperAdministrativeWorldListenerTest {
         listener.finalizeCenter(centerEvent);
 
         var centerSubmission = onlySubmission(api);
-        assertWorldCommon(centerSubmission, PaperWorldBorderChangeListener.EVENT_TYPE, "border");
+        assertWorldCommon(
+            centerSubmission,
+            PaperWorldBorderChangeListener.EVENT_TYPE,
+            "border",
+            null
+        );
         var centerPayload = PaperPayloadNbtCodec.decode(centerSubmission.payload());
         Assertions.assertEquals("center", string(centerPayload, "action"));
         Assertions.assertEquals(centerTag(1.25, -2.5), centerPayload.getCompoundOrEmpty("before"));
@@ -324,14 +336,15 @@ class PaperAdministrativeWorldListenerTest {
     private static void assertWorldCommon(
         EventSubmission submission,
         Key eventType,
-        String world
+        String world,
+        EventSubject subject
     ) {
         Assertions.assertEquals(eventType, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(Key.key("example", world), submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(subject, submission.subject());
     }
 
     private static String string(CompoundTag payload, String key) {
