@@ -11,6 +11,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -84,7 +85,7 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
             this.serverKey,
             snapshot.worldKey(),
             null,
-            null,
+            PaperAdministrativeSource.subject(snapshot.source()),
             PaperAdministrativePayloadCodec.encodeGameRuleChange(
                 snapshot.gameRule(),
                 snapshot.before(),
@@ -112,7 +113,7 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
         Key worldKey,
         String gameRule,
         String before,
-        PaperAdministrativeSource.Snapshot source
+        @Nullable PaperAdministrativeSource.Snapshot source
     ) {
     }
 }
