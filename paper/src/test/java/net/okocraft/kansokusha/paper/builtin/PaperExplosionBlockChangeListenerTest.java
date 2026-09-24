@@ -809,6 +809,133 @@ class PaperExplosionBlockChangeListenerTest {
 
     @Test
     @SuppressWarnings({"deprecation", "removal"})
+    void testDragonWorldDuplicateTntAcceptedFirstPrimeExpiresDuplicate() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var explosionListener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var tntListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 65, 64, 65, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var dragon = Mockito.mock(EnderDragon.class);
+        Mockito.when(dragon.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(dragon.getType()).thenReturn(EntityType.ENDER_DRAGON);
+        var explosion = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(explosion.getEntity()).thenReturn(dragon);
+        Mockito.when(explosion.getLocation()).thenReturn(new Location(world, 65.5, 64.5, 65.5));
+        Mockito.when(explosion.getExplosionResult()).thenReturn(ExplosionResult.DESTROY);
+        Mockito.when(explosion.getYield()).thenReturn(1.0F);
+        Mockito.when(explosion.blockList()).thenReturn(
+            new ArrayList<>(List.of(tnt, tnt))
+        );
+
+        explosionListener.capture(explosion);
+        explosionListener.finalizeEvent(explosion);
+
+        Assertions.assertEquals(2, explosionListener.inFlightCount());
+
+        var legacy = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(legacy.getBlock()).thenReturn(tnt);
+        Mockito.when(legacy.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION);
+        Mockito.when(legacy.getPrimerEntity()).thenReturn(dragon);
+
+        explosionListener.captureTntPrime(legacy);
+        tntListener.captureTntPrime(legacy);
+        tntListener.finalizeTntPrime(legacy);
+        explosionListener.finalizeTntPrime(legacy);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(
+                    PaperExplosionBlockChangeListener.EVENT_TYPE
+                ))
+                .count()
+        );
+        Assertions.assertEquals(
+            1,
+            api.submissions.stream()
+                .filter(submission -> submission.eventType().equals(PaperTntPrimeListener.EVENT_TYPE))
+                .count()
+        );
+        Assertions.assertEquals(0, explosionListener.inFlightCount());
+        Assertions.assertEquals(0, tntListener.inFlightCount());
+    }
+
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testDragonWorldDuplicateTntCancelledThenAcceptedRemainsCorrelated() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var explosionListener = PaperExplosionBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var tntListener = PaperTntPrimeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var world = PaperBlockEventTestSupport.world();
+        Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(true);
+        var tnt = PaperBlockEventTestSupport.block(
+            world, 66, 64, 66, Blocks.TNT.defaultBlockState(), Material.TNT
+        );
+        var dragon = Mockito.mock(EnderDragon.class);
+        Mockito.when(dragon.getUniqueId()).thenReturn(UUID.randomUUID());
+        Mockito.when(dragon.getType()).thenReturn(EntityType.ENDER_DRAGON);
+        var explosion = Mockito.mock(EntityExplodeEvent.class);
+        Mockito.when(explosion.getEntity()).thenReturn(dragon);
+        Mockito.when(explosion.getLocation()).thenReturn(new Location(world, 66.5, 64.5, 66.5));
+        Mockito.when(explosion.getExplosionResult()).thenReturn(ExplosionResult.DESTROY);
+        Mockito.when(explosion.getYield()).thenReturn(1.0F);
+        Mockito.when(explosion.blockList()).thenReturn(
+            new ArrayList<>(List.of(tnt, tnt))
+        );
+
+        explosionListener.capture(explosion);
+        explosionListener.finalizeEvent(explosion);
+
+        var first = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(first.getBlock()).thenReturn(tnt);
+        Mockito.when(first.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION);
+        Mockito.when(first.getPrimerEntity()).thenReturn(dragon);
+        Mockito.when(first.isCancelled()).thenReturn(true);
+
+        explosionListener.captureTntPrime(first);
+        tntListener.captureTntPrime(first);
+        explosionListener.finalizeTntPrime(first);
+        tntListener.finalizeTntPrime(first);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Assertions.assertEquals(1, explosionListener.inFlightCount());
+
+        var second = Mockito.mock(com.destroystokyo.paper.event.block.TNTPrimeEvent.class);
+        Mockito.when(second.getBlock()).thenReturn(tnt);
+        Mockito.when(second.getReason())
+            .thenReturn(com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION);
+        Mockito.when(second.getPrimerEntity()).thenReturn(dragon);
+
+        explosionListener.captureTntPrime(second);
+        tntListener.captureTntPrime(second);
+        tntListener.finalizeTntPrime(second);
+        explosionListener.finalizeTntPrime(second);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        Assertions.assertEquals(0, explosionListener.inFlightCount());
+        Assertions.assertEquals(0, tntListener.inFlightCount());
+    }
+
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
     void testDragonLegacyRawEntriesPreserveSameCoordinateTypeOrder() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var explosionListener = PaperExplosionBlockChangeListener.register(
