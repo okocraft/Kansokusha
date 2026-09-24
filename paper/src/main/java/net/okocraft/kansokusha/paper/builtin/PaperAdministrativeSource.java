@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -32,6 +33,17 @@ final class PaperAdministrativeSource {
             snapshotSender(source.getSender()),
             executor == null ? null : snapshotExecutor(executor)
         );
+    }
+
+    static @Nullable PlayerSubject subject(@Nullable Snapshot source) {
+        if (
+            source == null
+                || !"player".equals(source.sender().kind())
+                || source.sender().uniqueId() == null
+        ) {
+            return null;
+        }
+        return new PlayerSubject(java.util.UUID.fromString(source.sender().uniqueId()));
     }
 
     private static SenderSnapshot snapshotSender(CommandSender sender) {
