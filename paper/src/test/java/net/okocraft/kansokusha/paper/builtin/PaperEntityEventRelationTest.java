@@ -1,7 +1,5 @@
 package net.okocraft.kansokusha.paper.builtin;
 
-import io.papermc.paper.event.entity.EntityBreakByEntityEvent;
-import io.papermc.paper.event.entity.EntityBreakEvent;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -92,14 +90,15 @@ class PaperEntityEventRelationTest {
         Mockito.when(hangingEvent.getDamageSource()).thenReturn(damageSource);
         Mockito.when(hangingEvent.getCause()).thenReturn(HangingBreakEvent.RemoveCause.ENTITY);
 
-        var genericEvent = Mockito.mock(EntityBreakByEntityEvent.class);
-        Mockito.when(genericEvent.getEntity()).thenReturn(hanging);
-        Mockito.when(genericEvent.getRemover()).thenReturn(remover);
-        Mockito.when(genericEvent.getDamageSource()).thenReturn(damageSource);
-        Mockito.when(genericEvent.getCause()).thenReturn(EntityBreakEvent.RemoveCause.ENTITY);
+        var genericEvent = new PaperGenericEntityBreakEventFixture(
+            hanging,
+            remover,
+            damageSource,
+            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
+        );
 
-        // Paper fires HangingBreakByEntityEvent first and then EntityBreakByEntityEvent
-        // for the same hanging damage path. Kansokusha canonically owns it on the hanging side.
+        // Paper 26.3 fires HangingBreakByEntityEvent first and then the generic
+        // EntityBreakByEntityEvent for the same hanging damage path.
         listener.captureHanging(hangingEvent);
         listener.finalizeHanging(hangingEvent);
         listener.captureGeneric(genericEvent);
@@ -111,7 +110,7 @@ class PaperEntityEventRelationTest {
             PaperEntityBreakListener.HANGING_SOURCE_EVENT,
             payload.getString("source_event").orElseThrow()
         );
-        Mockito.verify(genericEvent, Mockito.never()).getRemover();
+        Assertions.assertEquals(0, genericEvent.removerReads());
     }
 
     @Test
