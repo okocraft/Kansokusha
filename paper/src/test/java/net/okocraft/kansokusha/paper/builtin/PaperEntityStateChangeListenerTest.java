@@ -46,7 +46,7 @@ class PaperEntityStateChangeListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174122");
 
     @Test
-    void testArmorStandManipulateSnapshotsTargetSlotAndBeforeItems() {
+    void testArmorStandManipulateSnapshotsTargetSlotAndBeforeItems() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -121,7 +121,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testLeashAndUnleashSnapshotTargetHolderActionAndReason() {
+    void testLeashAndUnleashSnapshotTargetHolderActionAndReason() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -228,7 +228,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testItemFrameChangeSnapshotsExistingFrameStateAndDerivedResult() {
+    void testItemFrameChangeSnapshotsExistingFrameStateAndDerivedResult() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -301,7 +301,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testItemFramePlaceAndRemoveDescribeContentsNotFramePlacementOrBreak() {
+    void testItemFramePlaceAndRemoveDescribeContentsNotFramePlacementOrBreak() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -372,7 +372,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testTameSnapshotsTargetAndNewOwner() {
+    void testTameSnapshotsTargetAndNewOwner() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -412,7 +412,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testNameChangeSnapshotsPreviousAndNewComponentsAtLowest() {
+    void testNameChangeSnapshotsPreviousAndNewComponentsAtLowest() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -463,7 +463,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testNullEntityNamesAreRepresentedWithoutReadingComponentsLater() {
+    void testNullEntityNamesAreRepresentedWithoutReadingComponentsLater() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
