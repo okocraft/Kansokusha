@@ -49,6 +49,17 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertTrue(togglePayload.getBooleanOr("after_enabled", false));
         Assertions.assertEquals("whitelist_toggle", string(togglePayload, "source_event"));
 
+        var disable = Mockito.mock(WhitelistToggleEvent.class);
+        Mockito.when(disable.isEnabled()).thenReturn(false);
+        listener.captureToggle(disable);
+        enabled.set(false);
+        listener.finalizeToggle(disable);
+
+        var disablePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
+        Assertions.assertEquals("global_toggle", string(disablePayload, "action"));
+        Assertions.assertTrue(disablePayload.getBooleanOr("before_enabled", false));
+        Assertions.assertFalse(disablePayload.getBooleanOr("after_enabled", true));
+
         var profile = Mockito.mock(PlayerProfile.class);
         Mockito.when(profile.getId()).thenReturn(PROFILE_ID);
         Mockito.when(profile.getName()).thenReturn("Alice");
@@ -80,6 +91,17 @@ class PaperWhitelistChangeListenerTest {
             "whitelist_state_update",
             string(profilePayload, "source_event")
         );
+
+        var remove = profileEvent(
+            true,
+            WhitelistStateUpdateEvent.WhitelistStatus.REMOVED
+        );
+        listener.captureProfile(remove);
+        listener.finalizeProfile(remove);
+        var removePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
+        Assertions.assertEquals("profile_remove", string(removePayload, "action"));
+        Assertions.assertTrue(removePayload.getBooleanOr("before_whitelisted", false));
+        Assertions.assertFalse(removePayload.getBooleanOr("after_whitelisted", true));
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
