@@ -13,6 +13,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Location;
+import org.bukkit.Statistic;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -20,12 +21,18 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerTakeLecternBookEvent;
+import org.bukkit.event.player.PlayerStatisticIncrementEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.function.BiConsumer;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -45,6 +52,7 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
+    private final BiConsumer<Player, Runnable> nextTickExecutor;
     private final PaperInFlightMap<PlayerDropItemEvent, ItemEntitySnapshot> drops =
         new PaperInFlightMap<>();
     private final PaperInFlightMap<EntityPickupItemEvent, PickupSnapshot> pickups =
@@ -57,14 +65,39 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
         new PaperInFlightMap<>();
     private final PaperInFlightMap<PlayerPurchaseEvent, CommonSnapshot> purchases =
         new PaperInFlightMap<>();
+    private final Map<UUID, PendingPurchase> pendingPurchases = new HashMap<>();
 
-    private PaperPlayerItemAuditListener(KansokushaApi api, Key serverKey, Clock clock) {
+    private PaperPlayerItemAuditListener(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Player, Runnable> nextTickExecutor
+    ) {
         this.api = Objects.requireNonNull(api, "api");
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.nextTickExecutor = Objects.requireNonNull(nextTickExecutor, "nextTickExecutor");
+    }
+
+    static PaperPlayerItemAuditListener register(KansokushaApi api, Key serverKey) {
+        return register(
+            api,
+            serverKey,
+            Clock.systemUTC(),
+            PaperPlayerItemAuditListener::scheduleNextTick
+        );
     }
 
     static PaperPlayerItemAuditListener register(KansokushaApi api, Key serverKey, Clock clock) {
+        return register(api, serverKey, clock, (player, task) -> task.run());
+    }
+
+    static PaperPlayerItemAuditListener register(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock,
+        BiConsumer<Player, Runnable> nextTickExecutor
+    ) {
         PaperBuiltInSupport.register(
             api,
             ITEM_DROP_EVENT_TYPE,
@@ -73,7 +106,7 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
             LECTERN_CHANGE_EVENT_TYPE,
             PLAYER_TRADE_EVENT_TYPE
         );
-        return new PaperPlayerItemAuditListener(api, serverKey, clock);
+        return new PaperPlayerItemAuditListener(api, serverKey, clock, nextTickExecutor);
     }
 
     void captureDrop(PlayerDropItemEvent event) {
@@ -256,10 +289,13 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
 
     void capturePurchase(PlayerPurchaseEvent event) {
         Objects.requireNonNull(event, "event");
+        var player = event.getPlayer();
+        discardPendingPurchase(player.getUniqueId(), null);
+
         var merchant = event.getMerchant();
         var location =
-            merchant instanceof Entity entity ? entity.getLocation() : event.getPlayer().getLocation();
-        this.purchases.put(event, common(event.getPlayer(), location));
+            merchant instanceof Entity entity ? entity.getLocation() : player.getLocation();
+        this.purchases.put(event, common(player, location));
     }
 
     void finalizePurchase(PlayerPurchaseEvent event) {
@@ -269,8 +305,8 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
             return;
         }
 
-        submit(
-            PLAYER_TRADE_EVENT_TYPE,
+        var player = event.getPlayer();
+        var pending = new PendingPurchase(
             snapshot,
             PaperPlayerItemAuditPayloadCodec.encodePlayerTrade(
                 event instanceof PlayerTradeEvent ? PLAYER_TRADE_SOURCE : PLAYER_PURCHASE_SOURCE,
@@ -280,6 +316,25 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
                 event.willIncreaseTradeUses()
             )
         );
+        synchronized (this.pendingPurchases) {
+            this.pendingPurchases.put(player.getUniqueId(), pending);
+        }
+        this.nextTickExecutor.accept(
+            player,
+            () -> discardPendingPurchase(player.getUniqueId(), pending)
+        );
+    }
+
+    void confirmTrade(PlayerStatisticIncrementEvent event) {
+        Objects.requireNonNull(event, "event");
+        if (event.getStatistic() != Statistic.TRADED_WITH_VILLAGER) {
+            return;
+        }
+
+        var pending = removePendingPurchase(event.getPlayer().getUniqueId());
+        if (pending != null) {
+            submit(PLAYER_TRADE_EVENT_TYPE, pending.common(), pending.payload());
+        }
     }
 
     @Override
@@ -290,15 +345,21 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
         this.lecternInserts.clear();
         this.lecternTakes.clear();
         this.purchases.clear();
+        synchronized (this.pendingPurchases) {
+            this.pendingPurchases.clear();
+        }
     }
 
     int inFlightCount() {
-        return this.drops.size()
-            + this.pickups.size()
-            + this.bookEdits.size()
-            + this.lecternInserts.size()
-            + this.lecternTakes.size()
-            + this.purchases.size();
+        synchronized (this.pendingPurchases) {
+            return this.drops.size()
+                + this.pickups.size()
+                + this.bookEdits.size()
+                + this.lecternInserts.size()
+                + this.lecternTakes.size()
+                + this.purchases.size()
+                + this.pendingPurchases.size();
+        }
     }
 
     private CommonSnapshot common(Player player, Location location) {
@@ -321,6 +382,28 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
             PaperBuiltInSupport.position(block),
             new PlayerSubject(player.getUniqueId())
         );
+    }
+
+    private PendingPurchase removePendingPurchase(UUID playerId) {
+        synchronized (this.pendingPurchases) {
+            return this.pendingPurchases.remove(playerId);
+        }
+    }
+
+    private void discardPendingPurchase(UUID playerId, PendingPurchase expected) {
+        synchronized (this.pendingPurchases) {
+            var current = this.pendingPurchases.get(playerId);
+            if (expected == null || current == expected) {
+                this.pendingPurchases.remove(playerId);
+            }
+        }
+    }
+
+    private static void scheduleNextTick(Player player, Runnable task) {
+        var plugin = JavaPlugin.getProvidingPlugin(PaperPlayerItemAuditListener.class);
+        if (!player.getScheduler().execute(plugin, task, task, 1L)) {
+            task.run();
+        }
     }
 
     private void submit(Key eventType, CommonSnapshot snapshot, EventPayload payload) {
@@ -381,5 +464,8 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
     }
 
     private record LecternSnapshot(CommonSnapshot common, CompoundTag book) {
+    }
+
+    private record PendingPurchase(CommonSnapshot common, EventPayload payload) {
     }
 }
