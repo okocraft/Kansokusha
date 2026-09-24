@@ -254,14 +254,16 @@ class PaperPlayerStateListenerTest {
         Mockito.when(player.getRespawnLocation()).thenReturn(oldSpawn);
         var setEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(setEvent.getPlayer()).thenReturn(player);
-        Mockito.when(setEvent.getLocation()).thenReturn(initialSpawn, finalSpawn);
-        Mockito.when(setEvent.isForced()).thenReturn(false, true);
+        Mockito.when(setEvent.getLocation()).thenReturn(initialSpawn);
+        Mockito.when(setEvent.isForced()).thenReturn(false);
         Mockito.when(setEvent.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.BED);
         Mockito.when(setEvent.isCancelled()).thenReturn(false);
 
         listener.capture(setEvent);
         oldSpawn.setX(999);
         initialSpawn.setX(999);
+        Mockito.when(setEvent.getLocation()).thenReturn(finalSpawn);
+        Mockito.when(setEvent.isForced()).thenReturn(true);
         listener.finalizeEvent(setEvent);
 
         var setSubmission = onlySubmission(api);
@@ -315,7 +317,8 @@ class PaperPlayerStateListenerTest {
         Mockito.when(player.getRespawnLocation()).thenReturn(null);
         var event = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getLocation()).thenReturn(new Location(world("spawn"), 4, 5, 6));
+        var spawnWorld = world("spawn");
+        Mockito.when(event.getLocation()).thenReturn(new Location(spawnWorld, 4, 5, 6));
         Mockito.when(event.isForced()).thenReturn(false);
         Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
         Mockito.when(event.isCancelled()).thenReturn(true);
