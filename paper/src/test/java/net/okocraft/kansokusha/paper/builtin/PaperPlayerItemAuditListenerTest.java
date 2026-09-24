@@ -136,7 +136,7 @@ class PaperPlayerItemAuditListenerTest {
     }
 
     @Test
-    void testBookEditRoundTripsPreviousAndFinalBookMetaWithoutLiveReferences() {
+    void testBookEditRoundTripsPreviousAndFinalBookMetaWithoutLiveReferences() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -351,7 +351,7 @@ class PaperPlayerItemAuditListenerTest {
     }
 
     @Test
-    void testStandalonePurchaseRecordsMerchantKind() {
+    void testStandalonePurchaseRecordsMerchantKind() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
