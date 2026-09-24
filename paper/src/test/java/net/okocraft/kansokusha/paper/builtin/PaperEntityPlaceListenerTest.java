@@ -122,18 +122,17 @@ class PaperEntityPlaceListenerTest {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
+        var genericEntity = entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 1, 2, 3);
         var generic = Mockito.mock(EntityPlaceEvent.class);
-        Mockito.when(generic.getEntity()).thenReturn(
-            entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 1, 2, 3)
-        );
+        Mockito.when(generic.getEntity()).thenReturn(genericEntity);
         Mockito.when(generic.getHand()).thenReturn(EquipmentSlot.HAND);
         Mockito.when(generic.isCancelled()).thenReturn(true);
 
+        var hangingEntity = hanging(world, ENTITY_ID, 2, 3, 4);
+        var hangingBlock = Mockito.mock(Block.class);
         var hanging = Mockito.mock(HangingPlaceEvent.class);
-        Mockito.when(hanging.getEntity()).thenReturn(
-            hanging(world, ENTITY_ID, 2, 3, 4)
-        );
-        Mockito.when(hanging.getBlock()).thenReturn(Mockito.mock(Block.class));
+        Mockito.when(hanging.getEntity()).thenReturn(hangingEntity);
+        Mockito.when(hanging.getBlock()).thenReturn(hangingBlock);
         Mockito.when(hanging.getBlockFace()).thenReturn(BlockFace.NORTH);
         Mockito.when(hanging.isCancelled()).thenReturn(true);
 
