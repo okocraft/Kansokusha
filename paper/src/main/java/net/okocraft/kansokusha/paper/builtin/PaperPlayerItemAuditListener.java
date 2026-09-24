@@ -25,6 +25,7 @@ import org.bukkit.event.player.PlayerStatisticIncrementEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -390,7 +391,7 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
         }
     }
 
-    private void discardPendingPurchase(UUID playerId, PendingPurchase expected) {
+    private void discardPendingPurchase(UUID playerId, @Nullable PendingPurchase expected) {
         synchronized (this.pendingPurchases) {
             var current = this.pendingPurchases.get(playerId);
             if (expected == null || current == expected) {
