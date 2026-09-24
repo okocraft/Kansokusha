@@ -29,6 +29,9 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -41,6 +44,8 @@ class PaperPlayerStateListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174010");
     private static final UUID KILLER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174011");
+    private static final List<World> RETAINED_WORLDS =
+        Collections.synchronizedList(new ArrayList<>());
 
     @Test
     void testWorldChangeAndCrossWorldTeleportRemainDistinctRecords() throws Exception {
@@ -440,6 +445,7 @@ class PaperPlayerStateListenerTest {
     private static World world(String value) {
         var world = Mockito.mock(World.class);
         Mockito.when(world.getKey()).thenReturn(new NamespacedKey("example", value));
+        RETAINED_WORLDS.add(world);
         return world;
     }
 
