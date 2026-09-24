@@ -2,10 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
@@ -49,13 +47,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
+import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
+
 @ApiStatus.Internal
 @NotNullByDefault
 public final class PaperNaturalBlockChangeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "natural_block_change");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -102,13 +100,7 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         Clock clock,
         BiConsumer<Location, Runnable> nextTickExecutor
     ) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(DEFINITION);
-        if (outcome != RegistrationOutcome.REGISTERED && outcome != RegistrationOutcome.ALREADY_REGISTERED) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
-            );
-        }
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperNaturalBlockChangeListener(api, serverKey, clock, nextTickExecutor);
     }
 
@@ -690,10 +682,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         Bukkit.getRegionScheduler().run(plugin, location, ignored -> task.run());
     }
 
-    private static BlockPosition position(Block block) {
-        return new BlockPosition(block.getX(), block.getY(), block.getZ());
-    }
-
     private interface Capture {
     }
 
@@ -731,12 +719,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
         String cause,
         Map<BlockKey, BlockData> preStates
     ) implements Capture {
-    }
-
-    private record BlockKey(
-        Key worldKey,
-        BlockPosition position
-    ) {
     }
 
     private record ScaffoldingFadeKey(

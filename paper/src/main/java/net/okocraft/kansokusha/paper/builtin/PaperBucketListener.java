@@ -3,9 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
@@ -23,8 +21,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -33,15 +29,11 @@ public final class PaperBucketListener implements PaperInFlightListener {
 
     static final Key EMPTY_EVENT_TYPE = Key.key("kansokusha", "bucket_empty");
     static final Key FILL_EVENT_TYPE = Key.key("kansokusha", "bucket_fill");
-    private static final EventTypeDefinition EMPTY_DEFINITION =
-        new EventTypeDefinition(EMPTY_EVENT_TYPE, PayloadGeneration.FIRST);
-    private static final EventTypeDefinition FILL_DEFINITION =
-        new EventTypeDefinition(FILL_EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final Map<PlayerBucketEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    private final PaperInFlightMap<PlayerBucketEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperBucketListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -54,8 +46,7 @@ public final class PaperBucketListener implements PaperInFlightListener {
     }
 
     static PaperBucketListener register(KansokushaApi api, Key serverKey, Clock clock) {
-        requireRegistration(api, EMPTY_DEFINITION);
-        requireRegistration(api, FILL_DEFINITION);
+        PaperBuiltInSupport.register(api, EMPTY_EVENT_TYPE, FILL_EVENT_TYPE);
         return new PaperBucketListener(api, serverKey, clock);
     }
 
@@ -84,15 +75,11 @@ public final class PaperBucketListener implements PaperInFlightListener {
 
     @Override
     public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
+        this.inFlight.clear();
     }
 
     int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size();
-        }
+        return this.inFlight.size();
     }
 
     private void capture(PlayerBucketEvent event, Key eventType, String operation) {
@@ -117,18 +104,13 @@ public final class PaperBucketListener implements PaperInFlightListener {
             PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getItemStack())
         );
 
-        synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshot);
-        }
+        this.inFlight.put(event, snapshot);
     }
 
     private void finalizeEvent(PlayerBucketEvent event) {
         Objects.requireNonNull(event, "event");
 
-        Snapshot snapshot;
-        synchronized (this.inFlight) {
-            snapshot = this.inFlight.remove(event);
-        }
+        var snapshot = this.inFlight.remove(event);
         if (snapshot == null || event.isCancelled()) {
             return;
         }
@@ -159,18 +141,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
         );
     }
 
-    private static void requireRegistration(KansokushaApi api, EventTypeDefinition definition) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(definition);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + definition.key() + ": " + outcome
-            );
-        }
-    }
 
     private record Snapshot(
         Key eventType,

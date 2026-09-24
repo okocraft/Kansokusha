@@ -2,10 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
@@ -37,13 +35,13 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
+import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
+
 @ApiStatus.Internal
 @NotNullByDefault
 public final class PaperBlockIgniteListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_ignite");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -84,7 +82,7 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         Clock clock,
         BiConsumer<Location, Runnable> nextTickExecutor
     ) {
-        registerEventType(api, DEFINITION);
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperBlockIgniteListener(api, serverKey, clock, nextTickExecutor);
     }
 
@@ -293,19 +291,6 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         Bukkit.getRegionScheduler().run(plugin, location, ignored -> task.run());
     }
 
-    private static BlockPosition position(Block block) {
-        return new BlockPosition(block.getX(), block.getY(), block.getZ());
-    }
-
-    private static void registerEventType(KansokushaApi api, EventTypeDefinition definition) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(definition);
-        if (outcome != RegistrationOutcome.REGISTERED && outcome != RegistrationOutcome.ALREADY_REGISTERED) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + definition.key() + ": " + outcome
-            );
-        }
-    }
 
     private static void submit(KansokushaApi api, Key eventType, Snapshot snapshot) {
         api.submit(new EventSubmission(

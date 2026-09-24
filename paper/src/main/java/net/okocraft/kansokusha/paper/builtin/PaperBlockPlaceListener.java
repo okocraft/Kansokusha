@@ -2,10 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
@@ -21,9 +19,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -31,13 +27,11 @@ import java.util.Objects;
 public final class PaperBlockPlaceListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_place");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final Map<BlockPlaceEvent, List<Snapshot>> inFlight = new IdentityHashMap<>();
+    private final PaperInFlightMap<BlockPlaceEvent, List<Snapshot>> inFlight = new PaperInFlightMap<>();
 
     private PaperBlockPlaceListener(
         KansokushaApi api,
@@ -61,16 +55,7 @@ public final class PaperBlockPlaceListener implements PaperInFlightListener {
         Key serverKey,
         Clock clock
     ) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(DEFINITION);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
-            );
-        }
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperBlockPlaceListener(api, serverKey, clock);
     }
 
@@ -94,19 +79,14 @@ public final class PaperBlockPlaceListener implements PaperInFlightListener {
             );
         }
 
-        synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshots);
-        }
+        this.inFlight.put(event, snapshots);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(BlockPlaceEvent event) {
         Objects.requireNonNull(event, "event");
 
-        List<Snapshot> snapshots;
-        synchronized (this.inFlight) {
-            snapshots = this.inFlight.remove(event);
-        }
+        var snapshots = this.inFlight.remove(event);
 
         if (snapshots == null || event.isCancelled() || !event.canBuild()) {
             return;
@@ -130,15 +110,11 @@ public final class PaperBlockPlaceListener implements PaperInFlightListener {
 
     @Override
     public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
+        this.inFlight.clear();
     }
 
     int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size();
-        }
+        return this.inFlight.size();
     }
 
     private Snapshot snapshot(

@@ -2,14 +2,11 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
-import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -21,23 +18,21 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+
+import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
 
 @ApiStatus.Internal
 @NotNullByDefault
 public final class PaperCauldronLevelChangeListener implements PaperInFlightListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "cauldron_level_change");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final Map<CauldronLevelChangeEvent, Snapshot> inFlight = new IdentityHashMap<>();
+    private final PaperInFlightMap<CauldronLevelChangeEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperCauldronLevelChangeListener(
         KansokushaApi api,
@@ -61,7 +56,7 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
         Key serverKey,
         Clock clock
     ) {
-        registerEventType(api);
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperCauldronLevelChangeListener(api, serverKey, clock);
     }
 
@@ -91,19 +86,14 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
             entity == null ? null : entity.getType().name()
         );
 
-        synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshot);
-        }
+        this.inFlight.put(event, snapshot);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeEvent(CauldronLevelChangeEvent event) {
         Objects.requireNonNull(event, "event");
 
-        Snapshot snapshot;
-        synchronized (this.inFlight) {
-            snapshot = this.inFlight.remove(event);
-        }
+        var snapshot = this.inFlight.remove(event);
 
         if (snapshot == null || event.isCancelled()) {
             return;
@@ -131,33 +121,13 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
 
     @Override
     public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
+        this.inFlight.clear();
     }
 
     int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size();
-        }
+        return this.inFlight.size();
     }
 
-    private static void registerEventType(KansokushaApi api) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(DEFINITION);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
-            );
-        }
-    }
-
-    private static BlockPosition position(Block block) {
-        return new BlockPosition(block.getX(), block.getY(), block.getZ());
-    }
 
     private record Snapshot(
         Instant occurredAt,
