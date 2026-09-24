@@ -57,6 +57,7 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
             this.clock.instant(),
             PaperKansokusha.key(world.getKey()),
             world.getDifficulty(),
+            world.isHardcore(),
             PaperAdministrativeSource.snapshot(event.getCommandSource())
         ));
     }
@@ -70,7 +71,7 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
             return;
         }
 
-        var after = event.getDifficulty();
+        var after = snapshot.hardcore() ? Difficulty.HARD : event.getDifficulty();
         if (snapshot.before() == after) {
             return;
         }
@@ -104,6 +105,7 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
         Instant occurredAt,
         Key worldKey,
         Difficulty before,
+        boolean hardcore,
         PaperAdministrativeSource.Snapshot source
     ) {
     }
