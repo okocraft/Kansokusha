@@ -72,7 +72,7 @@ class PaperBlockPlaceListenerTest {
         Assertions.assertEquals(new BlockPosition(12, 64, -7), submission.position());
         Assertions.assertEquals(
             placePayload(fixture.replaced(), fixture.placed()),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
@@ -168,7 +168,7 @@ class PaperBlockPlaceListenerTest {
             Assertions.assertEquals(new BlockPosition(100 + i, 70, -i), submission.position());
             Assertions.assertEquals(
                 placePayload(replaced.get(i), placed.get(i)),
-                PaperBlockStatePayloadCodec.decode(submission.payload())
+                PaperPayloadNbtCodec.decode(submission.payload())
             );
         }
         Assertions.assertEquals(0, listener.inFlightCount());
@@ -218,7 +218,7 @@ class PaperBlockPlaceListenerTest {
             Assertions.assertNotNull(submission);
             Assertions.assertEquals(
                 placePayload(fixture.replaced(), fixture.placed()),
-                PaperBlockStatePayloadCodec.decode(submission.payload())
+                PaperPayloadNbtCodec.decode(submission.payload())
             );
         }
     }

@@ -98,11 +98,11 @@ class PaperSpongeAbsorbListenerTest {
                 Blocks.WATER.defaultBlockState(),
                 new BlockPosition(10, 64, 10)
             ),
-            PaperBlockStatePayloadCodec.decode(first.payload())
+            PaperPayloadNbtCodec.decode(first.payload())
         );
         Assertions.assertEquals(
             spongePayload(wetSlabState, new BlockPosition(10, 64, 10)),
-            PaperBlockStatePayloadCodec.decode(second.payload())
+            PaperPayloadNbtCodec.decode(second.payload())
         );
 
         Mockito.verify(water, Mockito.times(1)).getBlockData();
@@ -177,7 +177,7 @@ class PaperSpongeAbsorbListenerTest {
                 Blocks.WATER.defaultBlockState(),
                 new BlockPosition(30, 64, 30)
             ),
-            PaperBlockStatePayloadCodec.decode(submission.payload())
+            PaperPayloadNbtCodec.decode(submission.payload())
         );
         Mockito.verify(water, Mockito.times(1)).getBlockData();
     }

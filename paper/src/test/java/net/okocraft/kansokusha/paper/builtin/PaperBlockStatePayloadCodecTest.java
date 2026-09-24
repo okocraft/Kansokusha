@@ -30,7 +30,7 @@ class PaperBlockStatePayloadCodecTest {
 
         Assertions.assertEquals(
             NbtUtils.writeBlockState(state),
-            PaperBlockStatePayloadCodec.decode(payload)
+            PaperPayloadNbtCodec.decode(payload)
         );
     }
 
@@ -51,7 +51,7 @@ class PaperBlockStatePayloadCodecTest {
 
         Assertions.assertEquals(
             expected,
-            PaperBlockStatePayloadCodec.decode(payload)
+            PaperPayloadNbtCodec.decode(payload)
         );
     }
 }

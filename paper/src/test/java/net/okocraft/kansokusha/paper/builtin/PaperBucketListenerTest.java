@@ -77,7 +77,7 @@ class PaperBucketListenerTest {
 
         var emptySubmission = byType.get(PaperBucketListener.EMPTY_EVENT_TYPE);
         Assertions.assertNotNull(emptySubmission);
-        var emptyPayload = PaperAdditionalBuiltInPayloadCodec.decode(emptySubmission.payload());
+        var emptyPayload = PaperPayloadNbtCodec.decode(emptySubmission.payload());
         Assertions.assertEquals("empty", string(emptyPayload, "operation"));
         Assertions.assertEquals("minecraft:water_bucket", string(emptyPayload, "bucket"));
         Assertions.assertEquals("hand", string(emptyPayload, "hand"));
@@ -85,31 +85,25 @@ class PaperBucketListenerTest {
         Assertions.assertEquals(9, emptyPayload.getIntOr("clicked_x", Integer.MIN_VALUE));
         Assertions.assertEquals(
             NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState()),
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(emptyPayload, "pre_state")
+            emptyPayload.getCompoundOrEmpty("pre_state")
         );
         var initialItem = PaperItemStackPayloadCodec.decode(
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(
-                emptyPayload,
-                "initial_result_item"
-            )
+            emptyPayload.getCompoundOrEmpty("initial_result_item")
         );
         var finalItem = PaperItemStackPayloadCodec.decode(
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(
-                emptyPayload,
-                "final_result_item"
-            )
+            emptyPayload.getCompoundOrEmpty("final_result_item")
         );
         Assertions.assertEquals(1, initialItem.getAmount());
         Assertions.assertEquals(2, finalItem.getAmount());
 
         var fillSubmission = byType.get(PaperBucketListener.FILL_EVENT_TYPE);
         Assertions.assertNotNull(fillSubmission);
-        var fillPayload = PaperAdditionalBuiltInPayloadCodec.decode(fillSubmission.payload());
+        var fillPayload = PaperPayloadNbtCodec.decode(fillSubmission.payload());
         Assertions.assertEquals("fill", string(fillPayload, "operation"));
         Assertions.assertEquals("minecraft:bucket", string(fillPayload, "bucket"));
         Assertions.assertEquals(
             NbtUtils.writeBlockState(Blocks.WATER.defaultBlockState()),
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(fillPayload, "pre_state")
+            fillPayload.getCompoundOrEmpty("pre_state")
         );
         Assertions.assertFalse(fillPayload.contains("expected_post_state"));
         Assertions.assertEquals(0, listener.inFlightCount());
@@ -188,10 +182,10 @@ class PaperBucketListenerTest {
         listener.captureEmpty((PlayerBucketEmptyEvent) fixture.event());
         listener.finalizeEmpty((PlayerBucketEmptyEvent) fixture.event());
 
-        var payload = PaperAdditionalBuiltInPayloadCodec.decode(onlySubmission(api).payload());
+        var payload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals(
             NbtUtils.writeBlockState(Blocks.AIR.defaultBlockState()),
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedBlockState(payload, "pre_state")
+            payload.getCompoundOrEmpty("pre_state")
         );
         Mockito.verify(fixture.changedBlock(), Mockito.times(1)).getBlockData();
     }

@@ -1,9 +1,9 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
+import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
@@ -186,8 +186,8 @@ public final class PaperBucketListener implements PaperInFlightListener {
         int clickedX,
         int clickedY,
         int clickedZ,
-        EventPayload preState,
-        EventPayload initialResultItem
+        CompoundTag preState,
+        CompoundTag initialResultItem
     ) {
     }
 }

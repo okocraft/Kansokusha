@@ -66,7 +66,7 @@ class PaperEntityBlockChangeListenerTest {
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(10, 64, 10), submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(Blocks.SAND.defaultBlockState().asBlockData()),
             payload.get("before")
@@ -110,7 +110,7 @@ class PaperEntityBlockChangeListenerTest {
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("ENDERMAN", payload.getString("actor_entity_type").orElseThrow());
     }
 
@@ -169,7 +169,7 @@ class PaperEntityBlockChangeListenerTest {
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(21, 64, 20), submission.position());
         Assertions.assertNull(submission.subject());
-        var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(Blocks.OAK_DOOR.defaultBlockState().asBlockData()),
             payload.get("before")
@@ -264,7 +264,7 @@ class PaperEntityBlockChangeListenerTest {
 
         Assertions.assertEquals(events.size(), api.submissions.size());
         for (var submission : api.submissions) {
-            var payload = PaperWorldMutationPayloadCodec.decode(submission.payload());
+            var payload = PaperPayloadNbtCodec.decode(submission.payload());
             Assertions.assertEquals(
                 expectedActors.get(submission.position().x()).toString(),
                 payload.getString("actor_entity_uuid").orElseThrow()

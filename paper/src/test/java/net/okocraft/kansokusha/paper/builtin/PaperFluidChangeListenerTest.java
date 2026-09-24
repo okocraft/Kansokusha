@@ -67,7 +67,7 @@ class PaperFluidChangeListenerTest {
             "destination",
             PaperBlockEventTestSupport.position(new BlockPosition(11, 62, 10))
         );
-        Assertions.assertEquals(expected, PaperBlockStatePayloadCodec.decode(submission.payload()));
+        Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
         Mockito.verify(source, Mockito.never()).getBlockData();
         Mockito.verify(destination, Mockito.never()).getBlockData();
     }
@@ -99,7 +99,7 @@ class PaperFluidChangeListenerTest {
         listener.finalizeEvent(event);
 
         var submission = api.submissions.remove();
-        var payload = PaperBlockStatePayloadCodec.decode(submission.payload());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("water", payload.getString("fluid").orElseThrow());
         Assertions.assertEquals(new BlockPosition(21, 63, 20), submission.position());
         Mockito.verify(source, Mockito.never()).getBlockData();

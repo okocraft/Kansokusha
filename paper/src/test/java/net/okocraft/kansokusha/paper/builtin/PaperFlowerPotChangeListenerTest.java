@@ -60,15 +60,15 @@ class PaperFlowerPotChangeListenerTest {
         listener.finalizeEvent(remove.event());
 
         var byX = submissionsByX(api);
-        var insertPayload = PaperAdditionalBuiltInPayloadCodec.decode(byX.get(10).payload());
+        var insertPayload = PaperPayloadNbtCodec.decode(byX.get(10).payload());
         Assertions.assertEquals("insert", string(insertPayload, "action"));
         Assertions.assertTrue(
             PaperItemStackPayloadCodec.decode(
-                PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(insertPayload, "before")
+                insertPayload.getCompoundOrEmpty("before")
             ).isEmpty()
         );
         var inserted = PaperItemStackPayloadCodec.decode(
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(insertPayload, "after")
+            insertPayload.getCompoundOrEmpty("after")
         );
         Assertions.assertEquals(Material.POPPY, inserted.getType());
         Assertions.assertEquals(1, inserted.getAmount());
@@ -76,16 +76,16 @@ class PaperFlowerPotChangeListenerTest {
             CraftItemStack.asNMSCopy(inserted).get(DataComponents.CUSTOM_NAME)
         );
 
-        var removePayload = PaperAdditionalBuiltInPayloadCodec.decode(byX.get(20).payload());
+        var removePayload = PaperPayloadNbtCodec.decode(byX.get(20).payload());
         Assertions.assertEquals("remove", string(removePayload, "action"));
         var removed = PaperItemStackPayloadCodec.decode(
-            PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(removePayload, "before")
+            removePayload.getCompoundOrEmpty("before")
         );
         Assertions.assertEquals(Material.DANDELION, removed.getType());
         Assertions.assertEquals(1, removed.getAmount());
         Assertions.assertTrue(
             PaperItemStackPayloadCodec.decode(
-                PaperAdditionalBuiltInPayloadCodec.decodeNestedItem(removePayload, "after")
+                removePayload.getCompoundOrEmpty("after")
             ).isEmpty()
         );
         Assertions.assertEquals(0, listener.inFlightCount());
@@ -153,7 +153,7 @@ class PaperFlowerPotChangeListenerTest {
         var byX = submissionsByX(api);
         Assertions.assertEquals(fixtures.size(), byX.size());
         for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperAdditionalBuiltInPayloadCodec.decode(byX.get(1000 + i).payload());
+            var payload = PaperPayloadNbtCodec.decode(byX.get(1000 + i).payload());
             Assertions.assertEquals((i & 1) == 0 ? "insert" : "remove", string(payload, "action"));
         }
         Assertions.assertEquals(0, listener.inFlightCount());

@@ -1,7 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.text.Component;
-import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.okocraft.kansokusha.api.event.EventPayload;
@@ -15,7 +14,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -44,27 +42,24 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         return List.copyOf(snapshot);
     }
 
-    static EventPayload snapshotBlockState(BlockData blockData) {
-        return PaperBlockStatePayloadCodec.encodeBlockBreak(
-            Objects.requireNonNull(blockData, "blockData")
-        );
+    static CompoundTag snapshotBlockState(BlockData blockData) {
+        return PaperBlockStatePayloadCodec.blockState(Objects.requireNonNull(blockData, "blockData"));
     }
 
-    static EventPayload snapshotItem(@Nullable ItemStack itemStack) {
-        var value = itemStack == null ? ItemStack.empty() : itemStack;
-        return PaperPayloadNbtCodec.encode(PaperItemStackPayloadCodec.encode(value));
+    static CompoundTag snapshotItem(@Nullable ItemStack itemStack) {
+        return PaperItemStackPayloadCodec.encode(itemStack == null ? ItemStack.empty() : itemStack);
     }
 
-    static List<EventPayload> snapshotItems(List<ItemStack> itemStacks) {
+    static ListTag snapshotItems(List<ItemStack> itemStacks) {
         Objects.requireNonNull(itemStacks, "itemStacks");
-        var snapshot = new ArrayList<EventPayload>(itemStacks.size());
+        var snapshot = new ListTag();
         for (var itemStack : itemStacks) {
             snapshot.add(snapshotItem(itemStack));
         }
-        return List.copyOf(snapshot);
+        return snapshot;
     }
 
-    static EventPayload snapshotFlowerPotContent(@Nullable ItemStack itemStack) {
+    static CompoundTag snapshotFlowerPotContent(@Nullable ItemStack itemStack) {
         if (itemStack == null || itemStack.isEmpty()) {
             return snapshotItem(null);
         }
@@ -91,9 +86,9 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         int clickedX,
         int clickedY,
         int clickedZ,
-        EventPayload preState,
-        EventPayload initialResultItem,
-        EventPayload finalResultItem
+        CompoundTag preState,
+        CompoundTag initialResultItem,
+        CompoundTag finalResultItem
     ) {
         var payload = new CompoundTag();
         payload.putString("operation", Objects.requireNonNull(operation, "operation"));
@@ -103,9 +98,9 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         payload.putInt("clicked_x", clickedX);
         payload.putInt("clicked_y", clickedY);
         payload.putInt("clicked_z", clickedZ);
-        putPayload(payload, "pre_state", preState);
-        putPayload(payload, "initial_result_item", initialResultItem);
-        putPayload(payload, "final_result_item", finalResultItem);
+        payload.put("pre_state", preState);
+        payload.put("initial_result_item", initialResultItem);
+        payload.put("final_result_item", finalResultItem);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -121,7 +116,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
             snapshotBlockState(preState),
             snapshotItems(harvestedItems),
             snapshotItem(null),
-            List.of()
+            new ListTag()
         );
     }
 
@@ -136,7 +131,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
             "io.papermc.paper.event.block.PlayerShearBlockEvent",
             hand,
             snapshotBlockState(preState),
-            List.of(),
+            new ListTag(),
             snapshotItem(tool),
             snapshotItems(drops)
         );
@@ -147,56 +142,28 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         var empty = snapshotItem(null);
         var payload = new CompoundTag();
         payload.putString("action", placing ? "insert" : "remove");
-        putPayload(payload, "before", placing ? empty : itemSnapshot);
-        putPayload(payload, "after", placing ? itemSnapshot : empty);
+        payload.put("before", placing ? empty : itemSnapshot);
+        payload.put("after", placing ? itemSnapshot : empty);
         return PaperPayloadNbtCodec.encode(payload);
-    }
-
-    static CompoundTag decode(EventPayload payload) throws IOException {
-        return PaperPayloadNbtCodec.decode(payload);
-    }
-
-    static CompoundTag decodeNestedItem(CompoundTag payload, String key) throws IOException {
-        return PaperPayloadNbtCodec.decode(nestedPayload(payload, key));
-    }
-
-    static CompoundTag decodeNestedBlockState(CompoundTag payload, String key) throws IOException {
-        return PaperBlockStatePayloadCodec.decode(nestedPayload(payload, key));
-    }
-
-    static List<CompoundTag> decodeNestedItems(CompoundTag payload, String key) throws IOException {
-        var list = payload.getListOrEmpty(key);
-        var decoded = new ArrayList<CompoundTag>(list.size());
-        for (var tag : list) {
-            if (!(tag instanceof ByteArrayTag bytes)) {
-                throw new IllegalArgumentException("Expected byte-array payload in '" + key + "'.");
-            }
-            decoded.add(
-                PaperPayloadNbtCodec.decode(
-                    EventPayload.copyOf(bytes.getAsByteArray().clone())
-                )
-            );
-        }
-        return List.copyOf(decoded);
     }
 
     private static EventPayload encodeBlockHarvest(
         String operation,
         String sourceEvent,
         EquipmentSlot hand,
-        EventPayload preState,
-        List<EventPayload> harvestedItems,
-        EventPayload shearTool,
-        List<EventPayload> shearDrops
+        CompoundTag preState,
+        ListTag harvestedItems,
+        CompoundTag shearTool,
+        ListTag shearDrops
     ) {
         var payload = new CompoundTag();
         payload.putString("operation", operation);
         payload.putString("source_event", sourceEvent);
         payload.putString("hand", enumName(hand));
-        putPayload(payload, "pre_state", preState);
-        payload.put("harvest_items", encodePayloadList(harvestedItems));
-        putPayload(payload, "shear_tool", shearTool);
-        payload.put("shear_drops", encodePayloadList(shearDrops));
+        payload.put("pre_state", preState);
+        payload.put("harvest_items", harvestedItems);
+        payload.put("shear_tool", shearTool);
+        payload.put("shear_drops", shearDrops);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -209,29 +176,6 @@ public final class PaperAdditionalBuiltInPayloadCodec {
             encoded.add(entry);
         }
         return encoded;
-    }
-
-    private static ListTag encodePayloadList(List<EventPayload> payloads) {
-        var encoded = new ListTag();
-        for (var payload : payloads) {
-            encoded.add(new ByteArrayTag(payload.copyBytes()));
-        }
-        return encoded;
-    }
-
-    private static void putPayload(CompoundTag target, String key, EventPayload payload) {
-        target.put(
-            key,
-            new ByteArrayTag(Objects.requireNonNull(payload, "payload").copyBytes())
-        );
-    }
-
-    private static EventPayload nestedPayload(CompoundTag payload, String key) {
-        var value = Objects.requireNonNull(payload, "payload").get(key);
-        if (!(value instanceof ByteArrayTag bytes)) {
-            throw new IllegalArgumentException("Expected byte-array payload in '" + key + "'.");
-        }
-        return EventPayload.copyOf(bytes.getAsByteArray().clone());
     }
 
     private static String enumName(Enum<?> value) {
