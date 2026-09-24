@@ -4,7 +4,6 @@ import io.papermc.paper.command.brigadier.PaperCommands;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.Commands;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.LayeredRegistryAccess;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
@@ -24,7 +23,6 @@ import org.bukkit.craftbukkit.CraftRegistry;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * Initializes the Paper/Minecraft registries required by real item stacks in tests.
@@ -64,37 +62,21 @@ public final class TestServer {
             packs.openAllSelected()
         );
 
-        LayeredRegistryAccess<RegistryLayer> layers = RegistryLayer.createRegistryAccess();
         List<Registry.PendingTags<?>> tags = TagLoader.loadTagsForExistingRegistries(
             resources,
-            layers.getLayer(RegistryLayer.STATIC)
+            RegistryLayer.STATIC_ACCESS
         );
-
-        List<HolderLookup.RegistryLookup<?>> worldLookups = TagLoader.buildUpdatedLookups(
-            layers.getAccessForLoading(RegistryLayer.WORLD),
-            tags
-        );
-        RegistryAccess.Frozen worldRegistries = RegistryDataLoader.load(
-            resources,
-            worldLookups,
-            RegistryDataLoader.WORLD_REGISTRIES,
-            Runnable::run
-        ).join();
-        layers = layers.replaceFrom(RegistryLayer.WORLD, worldRegistries);
-
-        List<HolderLookup.RegistryLookup<?>> dimensionLookups = Stream.concat(
-            worldLookups.stream(),
-            worldRegistries.listRegistries()
-        ).toList();
-        RegistryAccess.Frozen dimensionRegistries = RegistryDataLoader.load(
-            resources,
-            dimensionLookups,
-            RegistryDataLoader.DIMENSION_REGISTRIES,
-            Runnable::run
-        ).join();
-        layers = layers.replaceFrom(RegistryLayer.DIMENSIONS, dimensionRegistries);
-
         tags.forEach(Registry.PendingTags::apply);
+
+        RegistryAccess.Frozen loaded = RegistryDataLoader.load(
+            resources,
+            TagLoader.buildUpdatedLookups(RegistryLayer.STATIC_ACCESS, tags),
+            RegistryDataLoader.WORLDGEN_REGISTRIES,
+            Runnable::run
+        ).join();
+
+        LayeredRegistryAccess<RegistryLayer> layers = RegistryLayer.createRegistryAccess()
+            .replaceFrom(RegistryLayer.WORLDGEN, loaded);
         return layers.compositeAccess().freeze();
     }
 

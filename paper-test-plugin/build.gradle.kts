@@ -17,7 +17,7 @@ dependencies {
     compileOnly(projects.kansokushaPaper)
     compileOnly(libs.paper)
 
-    implementation("org.geysermc.mcprotocollib:protocol:26.3-SNAPSHOT")
+    implementation("org.geysermc.mcprotocollib:protocol:26.2-SNAPSHOT")
 }
 
 tasks.jar {
