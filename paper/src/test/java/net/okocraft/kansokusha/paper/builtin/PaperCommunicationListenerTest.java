@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 class PaperCommunicationListenerTest {
 
@@ -149,11 +150,15 @@ class PaperCommunicationListenerTest {
         var listener = serverListener(consoleApi);
         var console = Mockito.mock(ConsoleCommandSender.class);
         Mockito.when(console.getName()).thenReturn("CONSOLE");
-        var consoleEvent = new ServerCommandEvent(console, "say original");
-        consoleEvent.setCancelled(true);
+        var consoleCommand = new AtomicReference<>("say original");
+        var consoleEvent = Mockito.mock(ServerCommandEvent.class);
+        Mockito.when(consoleEvent.getSender()).thenReturn(console);
+        Mockito.when(consoleEvent.getCommand()).thenAnswer(ignored -> consoleCommand.get());
+        Mockito.when(consoleEvent.isCancelled()).thenReturn(true);
 
         listener.record(consoleEvent);
-        consoleEvent.setCommand("say rewritten");
+        consoleCommand.set("say rewritten");
+        Mockito.verify(consoleEvent, Mockito.never()).isCancelled();
 
         assertServerSubmission(
             onlySubmission(consoleApi),
@@ -168,7 +173,10 @@ class PaperCommunicationListenerTest {
         listener = serverListener(otherApi);
         var other = Mockito.mock(CommandSender.class);
         Mockito.when(other.getName()).thenReturn("custom-source");
-        listener.record(new ServerCommandEvent(other, "custom command"));
+        var otherEvent = Mockito.mock(ServerCommandEvent.class);
+        Mockito.when(otherEvent.getSender()).thenReturn(other);
+        Mockito.when(otherEvent.getCommand()).thenReturn("custom command");
+        listener.record(otherEvent);
 
         assertServerSubmission(
             onlySubmission(otherApi),
@@ -190,7 +198,10 @@ class PaperCommunicationListenerTest {
         Mockito.when(sender.getName()).thenReturn("command-block");
         Mockito.when(sender.getBlock()).thenReturn(block);
 
-        listener.record(new ServerCommandEvent(sender, "setblock ~ ~ ~ stone"));
+        var event = Mockito.mock(ServerCommandEvent.class);
+        Mockito.when(event.getSender()).thenReturn(sender);
+        Mockito.when(event.getCommand()).thenReturn("setblock ~ ~ ~ stone");
+        listener.record(event);
 
         assertServerSubmission(
             onlySubmission(api),
@@ -208,11 +219,14 @@ class PaperCommunicationListenerTest {
         var listener = serverListener(api);
         var sender = Mockito.mock(RemoteConsoleCommandSender.class);
         Mockito.when(sender.getName()).thenReturn("Rcon");
-        var event = new RemoteServerCommandEvent(sender, "list");
-        event.setCancelled(true);
+        var event = Mockito.mock(RemoteServerCommandEvent.class);
+        Mockito.when(event.getSender()).thenReturn(sender);
+        Mockito.when(event.getCommand()).thenReturn("list");
+        Mockito.when(event.isCancelled()).thenReturn(true);
 
         listener.record(event);
         listener.recordRemote(event);
+        Mockito.verify(event, Mockito.never()).isCancelled();
 
         Assertions.assertEquals(1, api.submissions.size());
         assertServerSubmission(
