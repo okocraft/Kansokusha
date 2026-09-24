@@ -254,8 +254,9 @@ class PaperEntityLifecycleEventRelationTest {
         var event = Mockito.mock(EntityBreakByEntityEvent.class);
         Mockito.when(event.getEntity()).thenReturn(broken);
         Mockito.when(event.getRemover()).thenReturn(breaker);
+        var damageSource = damageSource("mob_attack", breaker);
         Mockito.when(event.getCause()).thenReturn(EntityBreakEvent.RemoveCause.ENTITY);
-        Mockito.when(event.getDamageSource()).thenReturn(damageSource("mob_attack", breaker));
+        Mockito.when(event.getDamageSource()).thenReturn(damageSource);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
         listener.captureEntityBreak(event);
