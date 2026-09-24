@@ -60,6 +60,7 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         this.resultFile = Path.of(System.getProperty("kansokusha.external-api-fixture.result"));
+        Bukkit.getOfflinePlayer(SESSION_PLAYER_NAME).setWhitelisted(true);
 
         final Result result;
         try {
