@@ -13,6 +13,8 @@ jcommon {
         compileOnlyApi(libs.annotations)
         compileOnlyApi(libs.configurate.yaml)
 
+        implementation(libs.mcmsgdef)
+
         testImplementation(libs.junit.jupiter)
         testImplementation(libs.configurate.yaml)
     }

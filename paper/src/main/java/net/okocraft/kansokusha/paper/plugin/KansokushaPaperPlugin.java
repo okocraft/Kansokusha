@@ -4,6 +4,7 @@ import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
@@ -22,6 +23,8 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         try {
+            LanguageProvider.load(this.getDataPath().resolve("languages"), KansokushaCommands.getDefiners());
+
             var config = KansokushaConfig.load(this.getDataPath());
             var serverKey = PaperServerIdentity.resolve(config.serverKey(), Path.of("."));
             var runtime = KansokushaRuntime.start(
@@ -39,6 +42,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
+            LanguageProvider.unload();
             // onDisable closes the runtime if it has already started.
             this.getLogger().log(Level.SEVERE, "Failed to start Kansokusha.", e);
             this.getServer().getPluginManager().disablePlugin(this);
@@ -47,6 +51,8 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        LanguageProvider.unload();
+
         var runtime = this.runtime;
         if (runtime != null) {
             Kansokusha.setApi(null);

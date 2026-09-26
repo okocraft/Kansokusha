@@ -8,6 +8,7 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.velocity.builtin.VelocityBackendRegistryChangeListener;
 import net.okocraft.kansokusha.velocity.builtin.VelocityChatSubscriber;
@@ -42,6 +43,7 @@ public final class KansokushaVelocityPlugin {
     public void onProxyInitialize(ProxyInitializeEvent event) {
         final KansokushaRuntime runtime;
         try {
+            LanguageProvider.load(this.dataDirectory.resolve("languages"), KansokushaCommands.getDefiners());
             runtime = KansokushaRuntime.start(
                 this.dataDirectory,
                 KansokushaConfig.load(this.dataDirectory),
@@ -50,6 +52,7 @@ public final class KansokushaVelocityPlugin {
                 (message, failure) -> this.logger.error(message, failure)
             );
         } catch (IOException | SQLException e) {
+            LanguageProvider.unload();
             this.logger.error("Failed to start Kansokusha.", e);
             return;
         }
@@ -72,6 +75,8 @@ public final class KansokushaVelocityPlugin {
 
     @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        LanguageProvider.unload();
+
         var runtime = this.runtime;
         if (runtime != null) {
             Kansokusha.setApi(null);
