@@ -35,7 +35,7 @@ class PaperCauldronLevelChangeListenerTest {
     }
 
     @Test
-    void testPlayerChangeKeepsLowestMetadataAndUsesFinalNewState() throws Exception {
+    void testPlayerChangeRecordsOldAndNewStateWithActor() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperCauldronLevelChangeListener.register(
             api,
@@ -63,19 +63,7 @@ class PaperCauldronLevelChangeListenerTest {
         );
         Mockito.when(event.getNewState()).thenReturn(changed);
 
-        listener.capture(event);
-
-        Mockito.verify(changed, Mockito.never()).getBlockData();
-        Mockito.when(block.getBlockData()).thenReturn(
-            Blocks.LAVA_CAULDRON.defaultBlockState().asBlockData()
-        );
-        Mockito.when(changed.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-        Mockito.when(event.getEntity()).thenReturn(null);
-        Mockito.when(event.getReason()).thenReturn(
-            CauldronLevelChangeEvent.ChangeReason.NATURAL_FILL
-        );
-
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperCauldronLevelChangeListener.EVENT_TYPE, submission.eventType());
@@ -85,7 +73,7 @@ class PaperCauldronLevelChangeListenerTest {
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,
-                Blocks.AIR.defaultBlockState(),
+                newState,
                 CauldronLevelChangeEvent.ChangeReason.BOTTLE_FILL,
                 "player",
                 PLAYER_ID,
@@ -93,9 +81,6 @@ class PaperCauldronLevelChangeListenerTest {
             ),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
-        Mockito.verify(block, Mockito.times(1)).getBlockData();
-        Mockito.verify(changed, Mockito.times(1)).getBlockData();
     }
 
     @Test
@@ -126,8 +111,7 @@ class PaperCauldronLevelChangeListenerTest {
         );
         Mockito.when(event.getNewState()).thenReturn(changed);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
@@ -168,8 +152,7 @@ class PaperCauldronLevelChangeListenerTest {
         );
         Mockito.when(event.getNewState()).thenReturn(changed);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
@@ -208,12 +191,10 @@ class PaperCauldronLevelChangeListenerTest {
         Mockito.when(event.getNewState()).thenReturn(changed);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Mockito.verify(changed, Mockito.never()).getBlockData();
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static net.minecraft.world.level.block.state.BlockState waterCauldron(int level) {

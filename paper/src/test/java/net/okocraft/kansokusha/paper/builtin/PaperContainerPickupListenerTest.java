@@ -52,9 +52,7 @@ class PaperContainerPickupListenerTest {
         Mockito.when(event.getItem()).thenReturn(item);
         Mockito.when(event.isCancelled()).thenReturn(false);
 
-        listener.capture(event);
-        stack.setAmount(1);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -85,7 +83,6 @@ class PaperContainerPickupListenerTest {
 
         Mockito.verify(item, Mockito.times(1)).getItemStack();
         Mockito.verify(item, Mockito.times(1)).getLocation();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -109,11 +106,9 @@ class PaperContainerPickupListenerTest {
         Mockito.when(event.getItem()).thenReturn(item);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperContainerPickupListener listener(

@@ -16,15 +16,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperEntityBlockChangeListenerTest {
 
@@ -57,10 +52,7 @@ class PaperEntityBlockChangeListenerTest {
         Mockito.when(event.getEntity()).thenReturn(player);
         Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
-        listener.capture(event);
-        Mockito.when(block.getBlockData()).thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
-        Mockito.when(event.getBlockData()).thenReturn(Blocks.DIRT.defaultBlockState().asBlockData());
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
@@ -80,9 +72,6 @@ class PaperEntityBlockChangeListenerTest {
             payload.getString("actor_entity_uuid").orElseThrow()
         );
         Assertions.assertEquals("PLAYER", payload.getString("actor_entity_type").orElseThrow());
-        Mockito.verify(block, Mockito.times(1)).getBlockData();
-        Mockito.verify(event, Mockito.times(1)).getBlockData();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -105,8 +94,7 @@ class PaperEntityBlockChangeListenerTest {
         Mockito.when(event.getEntity()).thenReturn(enderman);
         Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
@@ -133,11 +121,9 @@ class PaperEntityBlockChangeListenerTest {
         Mockito.when(event.getEntity()).thenReturn(projectile);
         Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -161,8 +147,7 @@ class PaperEntityBlockChangeListenerTest {
         Mockito.when(event.getEntity()).thenReturn(zombie);
         Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -180,7 +165,6 @@ class PaperEntityBlockChangeListenerTest {
         );
         Assertions.assertEquals(actorId.toString(), payload.getString("actor_entity_uuid").orElseThrow());
         Assertions.assertEquals("ZOMBIE", payload.getString("actor_entity_type").orElseThrow());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -203,73 +187,8 @@ class PaperEntityBlockChangeListenerTest {
         Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testConcurrentFoliaStyleEntityChangesDoNotCrossSnapshots() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperEntityBlockChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var events = new ArrayList<EntityChangeBlockEvent>();
-        var expectedActors = new HashMap<Integer, UUID>();
-
-        for (int i = 0; i < 32; i++) {
-            var x = 1000 + i;
-            var actorId = UUID.nameUUIDFromBytes(("entity-" + i).getBytes(StandardCharsets.UTF_8));
-            expectedActors.put(x, actorId);
-            var block = PaperBlockEventTestSupport.block(
-                world,
-                x,
-                64,
-                -i,
-                (i & 1) == 0 ? Blocks.SAND.defaultBlockState() : Blocks.GRAVEL.defaultBlockState(),
-                (i & 1) == 0 ? Material.SAND : Material.GRAVEL
-            );
-            var actor = Mockito.mock(Enderman.class);
-            Mockito.when(actor.getUniqueId()).thenReturn(actorId);
-            Mockito.when(actor.getType()).thenReturn(EntityType.ENDERMAN);
-            var event = Mockito.mock(EntityChangeBlockEvent.class);
-            Mockito.when(event.getBlock()).thenReturn(block);
-            Mockito.when(event.getEntity()).thenReturn(actor);
-            Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-            events.add(event);
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = events.stream()
-                .map(event -> executor.submit(() -> listener.capture(event)))
-                .toList();
-            for (var task : captures) {
-                task.get();
-            }
-            var finalizers = events.stream()
-                .map(event -> executor.submit(() -> listener.finalizeEvent(event)))
-                .toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        Assertions.assertEquals(events.size(), api.submissions.size());
-        for (var submission : api.submissions) {
-            var payload = PaperPayloadNbtCodec.decode(submission.payload());
-            Assertions.assertEquals(
-                expectedActors.get(submission.position().x()).toString(),
-                payload.getString("actor_entity_uuid").orElseThrow()
-            );
-        }
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 }

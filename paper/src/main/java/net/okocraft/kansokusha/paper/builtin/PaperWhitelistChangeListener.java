@@ -4,6 +4,7 @@ import com.destroystokyo.paper.event.server.WhitelistToggleEvent;
 import io.papermc.paper.event.server.WhitelistStateUpdateEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import org.bukkit.Bukkit;
@@ -12,12 +13,9 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -37,10 +35,6 @@ public final class PaperWhitelistChangeListener implements Listener {
     private final Key serverKey;
     private final Clock clock;
     private final BooleanSupplier whitelistEnabled;
-    private final PaperInFlightMap<WhitelistToggleEvent, ToggleSnapshot> toggleInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<WhitelistStateUpdateEvent, ProfileSnapshot> profileInFlight =
-        new PaperInFlightMap<>();
 
     private PaperWhitelistChangeListener(
         KansokushaApi api,
@@ -68,98 +62,48 @@ public final class PaperWhitelistChangeListener implements Listener {
         return new PaperWhitelistChangeListener(api, serverKey, clock, whitelistEnabled);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureToggle(WhitelistToggleEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordToggle(WhitelistToggleEvent event) {
         Objects.requireNonNull(event, "event");
 
-        this.toggleInFlight.put(event, new ToggleSnapshot(
-            this.clock.instant(),
-            this.whitelistEnabled.getAsBoolean(),
-            event.isEnabled()
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeToggle(WhitelistToggleEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.toggleInFlight.remove(event);
-        if (snapshot == null || snapshot.before() == snapshot.after()) {
+        var before = this.whitelistEnabled.getAsBoolean();
+        var after = event.isEnabled();
+        if (before == after) {
             return;
         }
 
-        this.api.submit(new EventSubmission(
-            EVENT_TYPE,
-            PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
-            this.serverKey,
-            null,
-            null,
-            null,
-            PaperAdministrativePayloadCodec.encodeWhitelistToggle(
-                snapshot.before(),
-                snapshot.after()
-            )
-        ));
+        this.submit(PaperAdministrativePayloadCodec.encodeWhitelistToggle(before, after));
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureProfile(WhitelistStateUpdateEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordProfile(WhitelistStateUpdateEvent event) {
         Objects.requireNonNull(event, "event");
 
+        var before = event.getPlayer().isWhitelisted();
+        var added = event.getStatus() == WhitelistStateUpdateEvent.WhitelistStatus.ADDED;
+        if (before == added) {
+            return;
+        }
+
         var profile = event.getPlayerProfile();
-        this.profileInFlight.put(event, new ProfileSnapshot(
-            this.clock.instant(),
-            event.getPlayer().isWhitelisted(),
-            event.getStatus() == WhitelistStateUpdateEvent.WhitelistStatus.ADDED,
+        this.submit(PaperAdministrativePayloadCodec.encodeWhitelistProfileChange(
+            added,
+            before,
             profile.getId(),
             profile.getName()
         ));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeProfile(WhitelistStateUpdateEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.profileInFlight.remove(event);
-        if (
-            snapshot == null
-                || event.isCancelled()
-                || snapshot.before() == snapshot.added()
-        ) {
-            return;
-        }
-
+    private void submit(EventPayload payload) {
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
             null,
             null,
             null,
-            PaperAdministrativePayloadCodec.encodeWhitelistProfileChange(
-                snapshot.added(),
-                snapshot.before(),
-                snapshot.profileId(),
-                snapshot.profileName()
-            )
+            payload
         ));
-    }
-
-    int inFlightCount() {
-        return this.toggleInFlight.size() + this.profileInFlight.size();
-    }
-
-    private record ToggleSnapshot(Instant occurredAt, boolean before, boolean after) {
-    }
-
-    private record ProfileSnapshot(
-        Instant occurredAt,
-        boolean before,
-        boolean added,
-        @Nullable UUID profileId,
-        @Nullable String profileName
-    ) {
     }
 }

@@ -46,7 +46,7 @@ class PaperEntityStateChangeListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174122");
 
     @Test
-    void testArmorStandManipulateSnapshotsTargetSlotAndBeforeItems() throws Exception {
+    void testArmorStandManipulateRecordsTargetSlotAndBeforeItems() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -70,11 +70,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(event.getSlot()).thenReturn(EquipmentSlot.HEAD);
         Mockito.when(event.getHand()).thenReturn(EquipmentSlot.HAND);
 
-        listener.captureArmorStandManipulate(event);
-        playerItem.setAmount(3);
-        armorStandItem.setAmount(4);
-        Mockito.when(armorStand.getLocation()).thenReturn(new Location(world, 99, 99, 99));
-        listener.finalizeArmorStandManipulate(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -113,15 +109,13 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(event.getPlayerItem()).thenReturn(ItemStack.empty());
         Mockito.when(event.getArmorStandItem()).thenReturn(ItemStack.empty());
 
-        listener.captureArmorStandManipulate(event);
-        listener.finalizeArmorStandManipulate(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
-    void testLeashAndUnleashSnapshotTargetHolderActionAndReason() throws Exception {
+    void testLeashAndUnleashRecordTargetHolderActionAndReason() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -150,9 +144,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(leash.getPlayer()).thenReturn(player);
         Mockito.when(leash.getHand()).thenReturn(EquipmentSlot.OFF_HAND);
 
-        listener.captureLeash(leash);
-        Mockito.when(holder.getType()).thenReturn(EntityType.ZOMBIE);
-        listener.finalizeLeash(leash);
+        PaperListenerTestSupport.fire(listener, leash);
 
         var leashSubmission = onlySubmission(api);
         assertCommon(
@@ -198,12 +190,8 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(unleash.getHand()).thenReturn(EquipmentSlot.HAND);
         Mockito.when(unleash.getReason())
             .thenReturn(EntityUnleashEvent.UnleashReason.PLAYER_UNLEASH);
-        listener.captureUnleash(unleash);
-        Mockito.verify(unleash, Mockito.never()).isDropLeash();
         Mockito.when(unleash.isDropLeash()).thenReturn(true);
-        Mockito.when(unleashTarget.getLeashHolder())
-            .thenThrow(new IllegalStateException("late read"));
-        listener.finalizeUnleash(unleash);
+        PaperListenerTestSupport.fire(listener, unleash);
 
         var unleashSubmission = onlySubmission(api);
         assertCommon(
@@ -229,7 +217,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testItemFrameChangeSnapshotsBeforeStateAndUsesFinalNormalizedItem() throws Exception {
+    void testItemFrameChangeRecordsBeforeStateAndNormalizedItem() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -252,18 +240,9 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getAction())
             .thenReturn(PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE);
+        Mockito.when(event.getItemStack()).thenReturn(ItemStack.of(Material.DIAMOND, 64));
 
-        listener.captureItemFrameChange(event);
-        Mockito.verify(event, Mockito.never()).getItemStack();
-
-        var finalEventItem = ItemStack.of(Material.DIAMOND, 64);
-        Mockito.when(event.getItemStack()).thenReturn(finalEventItem);
-        framedItem.setAmount(4);
-        Mockito.when(frame.getRotation()).thenReturn(Rotation.FLIPPED);
-        Mockito.when(frame.isFixed()).thenReturn(false);
-        Mockito.when(frame.getLocation()).thenReturn(new Location(world, 99, 99, 99));
-        listener.finalizeItemFrameChange(event);
-        finalEventItem.setAmount(32);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -293,8 +272,7 @@ class PaperEntityStateChangeListenerTest {
             "clockwise",
             payload.getString("rotation_after").orElseThrow()
         );
-        Assertions.assertTrue(payload.getBoolean("fixed_before").orElseThrow());
-        Assertions.assertTrue(payload.getBoolean("fixed_after").orElseThrow());
+        Assertions.assertTrue(payload.getBoolean("fixed").orElseThrow());
         assertEntity(
             payload.getCompoundOrEmpty("target"),
             TARGET_ID,
@@ -328,8 +306,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(place.getAction())
             .thenReturn(PlayerItemFrameChangeEvent.ItemFrameChangeAction.PLACE);
         Mockito.when(place.getItemStack()).thenReturn(placed);
-        listener.captureItemFrameChange(place);
-        listener.finalizeItemFrameChange(place);
+        PaperListenerTestSupport.fire(listener, place);
 
         var placePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals("place", placePayload.getString("action").orElseThrow());
@@ -352,8 +329,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(remove.getAction())
             .thenReturn(PlayerItemFrameChangeEvent.ItemFrameChangeAction.REMOVE);
         Mockito.when(remove.getItemStack()).thenReturn(placed);
-        listener.captureItemFrameChange(remove);
-        listener.finalizeItemFrameChange(remove);
+        PaperListenerTestSupport.fire(listener, remove);
 
         var removePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals(
@@ -374,7 +350,7 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testTameSnapshotsTargetAndNewOwner() throws Exception {
+    void testTameRecordsTargetAndNewOwner() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -392,10 +368,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(event.getEntity()).thenReturn(target);
         Mockito.when(event.getOwner()).thenReturn(owner);
 
-        listener.captureTame(event);
-        Mockito.when(target.getType()).thenReturn(EntityType.CAT);
-        Mockito.when(owner.getLocation()).thenReturn(new Location(world, 100, 100, 100));
-        listener.finalizeTame(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -414,20 +387,12 @@ class PaperEntityStateChangeListenerTest {
     }
 
     @Test
-    void testNameChangeUsesFinalEntityNameAndPersistentState() throws Exception {
+    void testNameChangeRecordsPreviousAndNewNameAndPersistentState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
         var player = player(world);
-        var event = Mockito.mock(PlayerNameEntityEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-
-        listener.captureNameChange(event);
-        Mockito.verify(event, Mockito.never()).getEntity();
-        Mockito.verify(event, Mockito.never()).getName();
-        Mockito.verify(event, Mockito.never()).isPersistent();
-
-        var finalTarget = stubEntity(
+        var target = stubEntity(
             Mockito.mock(LivingEntity.class),
             world,
             EntityType.VILLAGER,
@@ -436,12 +401,14 @@ class PaperEntityStateChangeListenerTest {
             81,
             -2.5
         );
-        Mockito.when(finalTarget.customName()).thenReturn(Component.text("before final"));
-        Mockito.when(event.getEntity()).thenReturn(finalTarget);
-        Mockito.when(event.getName()).thenReturn(Component.text("after final"));
+        Mockito.when(target.customName()).thenReturn(Component.text("before"));
+        var event = Mockito.mock(PlayerNameEntityEvent.class);
+        Mockito.when(event.getPlayer()).thenReturn(player);
+        Mockito.when(event.getEntity()).thenReturn(target);
+        Mockito.when(event.getName()).thenReturn(Component.text("after"));
         Mockito.when(event.isPersistent()).thenReturn(true);
 
-        listener.finalizeNameChange(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -457,11 +424,11 @@ class PaperEntityStateChangeListenerTest {
             "minecraft:villager"
         );
         Assertions.assertEquals(
-            Component.text("before final"),
+            Component.text("before"),
             decodeComponent(payload.getCompoundOrEmpty("previous_custom_name"))
         );
         Assertions.assertEquals(
-            Component.text("after final"),
+            Component.text("after"),
             decodeComponent(payload.getCompoundOrEmpty("new_custom_name"))
         );
         Assertions.assertTrue(payload.getBoolean("persistent").orElseThrow());
@@ -487,8 +454,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(event.getPlayer()).thenReturn(namingPlayer);
         Mockito.when(event.getName()).thenReturn(null);
 
-        listener.captureNameChange(event);
-        listener.finalizeNameChange(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var payload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertTrue(payload.getCompoundOrEmpty("previous_custom_name").isEmpty());
@@ -528,8 +494,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(armor.getSlot()).thenReturn(EquipmentSlot.HAND);
         Mockito.when(armor.getHand()).thenReturn(EquipmentSlot.HAND);
         Mockito.when(armor.isCancelled()).thenReturn(true);
-        listener.captureArmorStandManipulate(armor);
-        listener.finalizeArmorStandManipulate(armor);
+        PaperListenerTestSupport.fire(listener, armor);
 
         var leashTarget = stubEntity(
             Mockito.mock(Entity.class),
@@ -546,8 +511,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(leash.getPlayer()).thenReturn(player);
         Mockito.when(leash.getHand()).thenReturn(EquipmentSlot.HAND);
         Mockito.when(leash.isCancelled()).thenReturn(true);
-        listener.captureLeash(leash);
-        listener.finalizeLeash(leash);
+        PaperListenerTestSupport.fire(listener, leash);
 
         var unleashTarget = stubEntity(
             Mockito.mock(Leashable.class),
@@ -567,8 +531,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(unleash.getReason())
             .thenReturn(EntityUnleashEvent.UnleashReason.PLAYER_UNLEASH);
         Mockito.when(unleash.isCancelled()).thenReturn(true);
-        listener.captureUnleash(unleash);
-        listener.finalizeUnleash(unleash);
+        PaperListenerTestSupport.fire(listener, unleash);
         Mockito.verify(unleash, Mockito.never()).isDropLeash();
 
         var frame = stubEntity(
@@ -588,8 +551,7 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(frameEvent.getAction())
             .thenReturn(PlayerItemFrameChangeEvent.ItemFrameChangeAction.PLACE);
         Mockito.when(frameEvent.isCancelled()).thenReturn(true);
-        listener.captureItemFrameChange(frameEvent);
-        listener.finalizeItemFrameChange(frameEvent);
+        PaperListenerTestSupport.fire(listener, frameEvent);
         Mockito.verify(frameEvent, Mockito.never()).getItemStack();
 
         var tameTarget = stubEntity(
@@ -605,20 +567,17 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(tame.getEntity()).thenReturn(tameTarget);
         Mockito.when(tame.getOwner()).thenReturn(player);
         Mockito.when(tame.isCancelled()).thenReturn(true);
-        listener.captureTame(tame);
-        listener.finalizeTame(tame);
+        PaperListenerTestSupport.fire(listener, tame);
 
         var name = Mockito.mock(PlayerNameEntityEvent.class);
         Mockito.when(name.getPlayer()).thenReturn(player);
         Mockito.when(name.isCancelled()).thenReturn(true);
-        listener.captureNameChange(name);
-        listener.finalizeNameChange(name);
+        PaperListenerTestSupport.fire(listener, name);
         Mockito.verify(name, Mockito.never()).getEntity();
         Mockito.verify(name, Mockito.never()).getName();
         Mockito.verify(name, Mockito.never()).isPersistent();
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperEntityStateChangeListener listener(

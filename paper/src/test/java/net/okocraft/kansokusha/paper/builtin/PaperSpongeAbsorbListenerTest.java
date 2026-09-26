@@ -28,7 +28,7 @@ class PaperSpongeAbsorbListenerTest {
     }
 
     @Test
-    void testFinalAffectedBlocksShareOccurredAtAndKeepLowestPreState() throws Exception {
+    void testAffectedBlocksShareOccurredAtAndRecordPreState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperSpongeAbsorbListener.register(
             api,
@@ -69,15 +69,9 @@ class PaperSpongeAbsorbListenerTest {
         Mockito.when(event.getBlock()).thenReturn(sponge);
         Mockito.when(event.getBlocks()).thenReturn(changedStates);
 
-        listener.capture(event);
-
-        Mockito.when(water.getBlockData()).thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
-        Mockito.when(slab.getBlockData()).thenReturn(Blocks.STONE.defaultBlockState().asBlockData());
-
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(2, api.submissions.size());
-        Assertions.assertEquals(0, listener.inFlightCount());
 
         var first = api.submissions.stream()
             .filter(submission -> new BlockPosition(11, 64, 10).equals(submission.position()))
@@ -104,86 +98,10 @@ class PaperSpongeAbsorbListenerTest {
             spongePayload(wetSlabState, new BlockPosition(10, 64, 10)),
             PaperPayloadNbtCodec.decode(second.payload())
         );
-
-        Mockito.verify(water, Mockito.times(1)).getBlockData();
-        Mockito.verify(slab, Mockito.times(1)).getBlockData();
     }
 
     @Test
-    void testRemovedAffectedBlockIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperSpongeAbsorbListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var sponge = PaperBlockEventTestSupport.block(
-            world, 20, 64, 20, Blocks.SPONGE.defaultBlockState(), Material.SPONGE
-        );
-        var water = PaperBlockEventTestSupport.block(
-            world, 21, 64, 20, Blocks.WATER.defaultBlockState(), Material.WATER
-        );
-        var cleared = PaperBlockEventTestSupport.state(
-            world, water, 21, 64, 20, Blocks.AIR.defaultBlockState()
-        );
-        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
-        changedStates.add(cleared);
-        var event = Mockito.mock(SpongeAbsorbEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(sponge);
-        Mockito.when(event.getBlocks()).thenReturn(changedStates);
-
-        listener.capture(event);
-        changedStates.clear();
-        listener.finalizeEvent(event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-        Mockito.verify(water, Mockito.times(1)).getBlockData();
-    }
-
-    @Test
-    void testAddedAffectedBlockUsesMonitorLivePreState() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperSpongeAbsorbListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var sponge = PaperBlockEventTestSupport.block(
-            world, 30, 64, 30, Blocks.SPONGE.defaultBlockState(), Material.SPONGE
-        );
-        var water = PaperBlockEventTestSupport.block(
-            world, 31, 64, 30, Blocks.WATER.defaultBlockState(), Material.WATER
-        );
-        var cleared = PaperBlockEventTestSupport.state(
-            world, water, 31, 64, 30, Blocks.AIR.defaultBlockState()
-        );
-        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
-        var event = Mockito.mock(SpongeAbsorbEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(sponge);
-        Mockito.when(event.getBlocks()).thenReturn(changedStates);
-
-        listener.capture(event);
-        changedStates.add(cleared);
-        listener.finalizeEvent(event);
-
-        Assertions.assertEquals(1, api.submissions.size());
-        var submission = api.submissions.remove();
-        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(new BlockPosition(31, 64, 30), submission.position());
-        Assertions.assertEquals(
-            spongePayload(
-                Blocks.WATER.defaultBlockState(),
-                new BlockPosition(30, 64, 30)
-            ),
-            PaperPayloadNbtCodec.decode(submission.payload())
-        );
-        Mockito.verify(water, Mockito.times(1)).getBlockData();
-    }
-
-    @Test
-    void testCancelledAbsorbDropsAllCapturedBlocks() {
+    void testCancelledAbsorbIsNotSubmitted() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperSpongeAbsorbListener.register(
             api,
@@ -204,11 +122,9 @@ class PaperSpongeAbsorbListenerTest {
         Mockito.when(event.getBlocks()).thenReturn(List.of(cleared));
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static CompoundTag spongePayload(

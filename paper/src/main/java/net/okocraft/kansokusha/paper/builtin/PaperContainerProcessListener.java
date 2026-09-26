@@ -6,10 +6,8 @@ import net.minecraft.nbt.ListTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -25,7 +23,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,7 +35,6 @@ public final class PaperContainerProcessListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<Event, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperContainerProcessListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -59,8 +55,8 @@ public final class PaperContainerProcessListener implements Listener {
         return new PaperContainerProcessListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureFurnace(FurnaceSmeltEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordFurnace(FurnaceSmeltEvent event) {
         Objects.requireNonNull(event, "event");
 
         var block = event.getBlock();
@@ -70,8 +66,7 @@ public final class PaperContainerProcessListener implements Listener {
             fuel = furnaceInventory.getFuel();
         }
 
-        this.capture(
-            event,
+        this.submit(
             block,
             "furnace_smelt",
             "org.bukkit.event.inventory.FurnaceSmeltEvent",
@@ -83,13 +78,12 @@ public final class PaperContainerProcessListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureBrew(BrewEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordBrew(BrewEvent event) {
         Objects.requireNonNull(event, "event");
 
         var contents = event.getContents();
-        this.capture(
-            event,
+        this.submit(
             event.getBlock(),
             "brew",
             "org.bukkit.event.inventory.BrewEvent",
@@ -103,15 +97,14 @@ public final class PaperContainerProcessListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureCook(BlockCookEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordCook(BlockCookEvent event) {
         Objects.requireNonNull(event, "event");
         if (event instanceof FurnaceSmeltEvent) {
             return;
         }
 
-        this.capture(
-            event,
+        this.submit(
             event.getBlock(),
             "campfire_cook",
             "org.bukkit.event.block.BlockCookEvent",
@@ -123,16 +116,15 @@ public final class PaperContainerProcessListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureCrafter(CrafterCraftEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordCrafter(CrafterCraftEvent event) {
         Objects.requireNonNull(event, "event");
 
         var inventory = blockInventory(event.getBlock());
         var inputs = inventory == null
             ? new ItemStack[0]
             : inventory.getContents();
-        this.capture(
-            event,
+        this.submit(
             event.getBlock(),
             "crafter_craft",
             "org.bukkit.event.block.CrafterCraftEvent",
@@ -144,104 +136,33 @@ public final class PaperContainerProcessListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeFurnace(FurnaceSmeltEvent event) {
-        this.finalizeEvent(
-            event,
-            event.isCancelled(),
-            PaperContainerPayloadCodec.snapshotItems(List.of(event.getResult()))
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeBrew(BrewEvent event) {
-        this.finalizeEvent(
-            event,
-            event.isCancelled(),
-            PaperContainerPayloadCodec.snapshotItems(event.getResults())
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeCook(BlockCookEvent event) {
-        if (event instanceof FurnaceSmeltEvent) {
-            return;
-        }
-        this.finalizeEvent(
-            event,
-            event.isCancelled(),
-            PaperContainerPayloadCodec.snapshotItems(List.of(event.getResult()))
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeCrafter(CrafterCraftEvent event) {
-        this.finalizeEvent(
-            event,
-            event.isCancelled(),
-            PaperContainerPayloadCodec.snapshotItems(List.of(event.getResult()))
-        );
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private void capture(
-        Event event,
+    private void submit(
         Block block,
         String processKind,
         String sourceEvent,
         ListTag inputItems,
         CompoundTag ingredient,
         CompoundTag fuel,
-        ListTag initialResults,
+        ListTag results,
         @Nullable Inventory inventory
     ) {
-        this.inFlight.put(
-            event,
-            new Snapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                PaperKansokusha.key(block.getWorld().getKey()),
-                PaperBuiltInSupport.position(block),
-                processKind,
-                sourceEvent,
-                PaperContainerPayloadCodec.snapshotBlockContainer(block, inventory),
-                inputItems,
-                ingredient,
-                fuel,
-                initialResults
-            )
-        );
-    }
-
-    private void finalizeEvent(Event event, boolean cancelled, ListTag finalResults) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || cancelled) {
-            return;
-        }
-
         this.api.submit(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
+                this.clock.instant(),
+                this.serverKey,
+                PaperKansokusha.key(block.getWorld().getKey()),
+                PaperBuiltInSupport.position(block),
                 null,
                 PaperContainerPayloadCodec.encodeProcess(
-                    snapshot.processKind(),
-                    snapshot.sourceEvent(),
-                    snapshot.container(),
-                    snapshot.inputItems(),
-                    snapshot.ingredient(),
-                    snapshot.fuel(),
-                    snapshot.initialResults(),
-                    finalResults
+                    processKind,
+                    sourceEvent,
+                    PaperContainerPayloadCodec.snapshotBlockContainer(block, inventory),
+                    inputItems,
+                    ingredient,
+                    fuel,
+                    results
                 )
             )
         );
@@ -253,20 +174,5 @@ public final class PaperContainerProcessListener implements Listener {
             return holder.getInventory();
         }
         return null;
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        String processKind,
-        String sourceEvent,
-        PaperContainerPayloadCodec.InventorySnapshot container,
-        ListTag inputItems,
-        CompoundTag ingredient,
-        CompoundTag fuel,
-        ListTag initialResults
-    ) {
     }
 }

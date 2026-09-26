@@ -60,7 +60,7 @@ class PaperPlayerSessionListenerTest {
         var event = Mockito.mock(PlayerJoinEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
 
-        listener.record(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -84,7 +84,7 @@ class PaperPlayerSessionListenerTest {
         Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getReason()).thenReturn(PlayerQuitEvent.QuitReason.TIMED_OUT);
 
-        listener.record(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -115,7 +115,7 @@ class PaperPlayerSessionListenerTest {
         );
         event.setCancelled(true);
 
-        listener.record(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Mockito.verify(player, Mockito.never()).getLocation();
@@ -139,7 +139,7 @@ class PaperPlayerSessionListenerTest {
         var finalReason = Component.text("final reason");
         event.reason(finalReason);
 
-        listener.record(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -190,8 +190,8 @@ class PaperPlayerSessionListenerTest {
         Mockito.when(quit.getPlayer()).thenReturn(player);
         Mockito.when(quit.getReason()).thenReturn(PlayerQuitEvent.QuitReason.KICKED);
 
-        kickListener.record(kick);
-        quitListener.record(quit);
+        PaperListenerTestSupport.fire(kickListener, kick);
+        PaperListenerTestSupport.fire(quitListener, quit);
 
         Assertions.assertEquals(2, api.submissions.size());
         var kickSubmission = api.submissions.remove();

@@ -1,11 +1,9 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
-import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -16,7 +14,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -28,8 +25,6 @@ public final class PaperContainerTransferListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<InventoryMoveItemEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperContainerTransferListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -50,8 +45,8 @@ public final class PaperContainerTransferListener implements Listener {
         return new PaperContainerTransferListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(InventoryMoveItemEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(InventoryMoveItemEvent event) {
         Objects.requireNonNull(event, "event");
 
         var sourceInventory = event.getSource();
@@ -61,60 +56,25 @@ public final class PaperContainerTransferListener implements Listener {
         var destination = PaperContainerPayloadCodec.snapshotInventory(destinationInventory);
         var initiator = PaperContainerPayloadCodec.snapshotInventory(initiatorInventory);
         var common = firstLocated(initiator, source, destination);
-        var initiatorRole = initiatorRole(
-            initiatorInventory,
-            sourceInventory,
-            destinationInventory
-        );
-
-        this.inFlight.put(
-            event,
-            new Snapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                common == null ? null : common.worldKey(),
-                common == null ? null : common.position(),
-                source,
-                destination,
-                initiator,
-                initiatorRole,
-                PaperContainerPayloadCodec.snapshotItem(event.getItem())
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(InventoryMoveItemEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
 
         this.api.submit(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
+                this.clock.instant(),
+                this.serverKey,
+                common == null ? null : common.worldKey(),
+                common == null ? null : common.position(),
                 null,
                 PaperContainerPayloadCodec.encodeTransfer(
-                    snapshot.source(),
-                    snapshot.destination(),
-                    snapshot.initiator(),
-                    snapshot.initiatorRole(),
-                    snapshot.initialItem(),
+                    source,
+                    destination,
+                    initiator,
+                    initiatorRole(initiatorInventory, sourceInventory, destinationInventory),
                     PaperContainerPayloadCodec.snapshotItem(event.getItem())
                 )
             )
         );
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
     }
 
     private static String initiatorRole(
@@ -140,18 +100,5 @@ public final class PaperContainerTransferListener implements Listener {
             }
         }
         return null;
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        @Nullable Key worldKey,
-        @Nullable BlockPosition position,
-        PaperContainerPayloadCodec.InventorySnapshot source,
-        PaperContainerPayloadCodec.InventorySnapshot destination,
-        PaperContainerPayloadCodec.InventorySnapshot initiator,
-        String initiatorRole,
-        CompoundTag initialItem
-    ) {
     }
 }

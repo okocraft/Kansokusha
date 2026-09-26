@@ -7,6 +7,8 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,12 @@ import java.util.Set;
 class PaperBuiltInListenersTest {
 
     private static final Key SERVER_KEY = Key.key("example", "paper");
+    // Chat and commands record the original input even if it is later cancelled or rewritten.
+    private static final Set<Class<?>> RAW_ACTIVITY_LISTENERS = Set.of(
+        PaperChatListener.class,
+        PaperPlayerCommandListener.class,
+        PaperServerCommandListener.class
+    );
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -41,6 +49,28 @@ class PaperBuiltInListenersTest {
             definition -> definition.key().namespace().equals("kansokusha")
                 && definition.payloadGeneration().equals(PayloadGeneration.FIRST)
         ));
+    }
+
+    @Test
+    void testHandlersRecordNonCancelledEventsAtMonitor() {
+        var api = new RegistrationRecordingApi();
+        for (var factory : PaperBuiltInListeners.FACTORIES) {
+            var listenerClass = factory.apply(api, SERVER_KEY).getClass();
+            for (var method : listenerClass.getDeclaredMethods()) {
+                var handler = method.getAnnotation(EventHandler.class);
+                if (handler == null) {
+                    continue;
+                }
+                var name = listenerClass.getSimpleName() + "#" + method.getName();
+                if (RAW_ACTIVITY_LISTENERS.contains(listenerClass)) {
+                    Assertions.assertEquals(EventPriority.LOWEST, handler.priority(), name);
+                    Assertions.assertFalse(handler.ignoreCancelled(), name);
+                } else {
+                    Assertions.assertEquals(EventPriority.MONITOR, handler.priority(), name);
+                    Assertions.assertTrue(handler.ignoreCancelled(), name);
+                }
+            }
+        }
     }
 
     private static final class RegistrationRecordingApi implements KansokushaApi {

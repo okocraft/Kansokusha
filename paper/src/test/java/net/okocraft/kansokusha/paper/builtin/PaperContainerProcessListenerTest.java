@@ -42,7 +42,7 @@ class PaperContainerProcessListenerTest {
     }
 
     @Test
-    void testFourContainerProcessesNormalizeAndSnapshotBoundaries() throws Exception {
+    void testFourContainerProcessesNormalizeToOneEventType() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -61,13 +61,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(furnace.getResult()).thenAnswer(ignored -> furnaceResult[0]);
         Mockito.when(furnace.isCancelled()).thenReturn(false);
 
-        listener.captureFurnace(furnace);
-        listener.captureCook(furnace);
-        furnaceSource.setAmount(7);
-        furnaceFuel.setAmount(4);
-        furnaceResult[0] = ItemStack.of(Material.GOLD_INGOT, 1);
-        listener.finalizeFurnace(furnace);
-        listener.finalizeCook(furnace);
+        PaperListenerTestSupport.fire(listener, furnace);
 
         var brewBlock = block(world, 20, Material.BREWING_STAND);
         var brewer = Mockito.mock(BrewerInventory.class);
@@ -93,11 +87,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(brew.getResults()).thenReturn(brewResults);
         Mockito.when(brew.isCancelled()).thenReturn(false);
 
-        listener.captureBrew(brew);
-        potion.setAmount(2);
-        ingredient.setAmount(2);
-        brewResults.set(0, ItemStack.of(Material.SPLASH_POTION, 1));
-        listener.finalizeBrew(brew);
+        PaperListenerTestSupport.fire(listener, brew);
 
         var campfireBlock = block(world, 30, Material.CAMPFIRE);
         Mockito.when(campfireBlock.getState()).thenReturn(Mockito.mock(BlockState.class));
@@ -109,10 +99,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(cook.getResult()).thenAnswer(ignored -> campfireResult[0]);
         Mockito.when(cook.isCancelled()).thenReturn(false);
 
-        listener.captureCook(cook);
-        campfireSource.setAmount(2);
-        campfireResult[0] = ItemStack.of(Material.COOKED_SALMON, 1);
-        listener.finalizeCook(cook);
+        PaperListenerTestSupport.fire(listener, cook);
 
         var crafterBlock = block(world, 40, Material.CRAFTER);
         var crafterInventory = Mockito.mock(Inventory.class);
@@ -130,14 +117,11 @@ class PaperContainerProcessListenerTest {
         Mockito.when(crafter.getResult()).thenAnswer(ignored -> crafterResult[0]);
         Mockito.when(crafter.isCancelled()).thenReturn(false);
 
-        listener.captureCrafter(crafter);
-        crafterInput.setAmount(1);
-        crafterResult[0] = ItemStack.of(Material.ANVIL, 1);
-        listener.finalizeCrafter(crafter);
+        PaperListenerTestSupport.fire(listener, crafter);
 
         Assertions.assertEquals(4, api.submissions.size());
         var byX = submissionsByX(api);
-        assertProcess(byX.get(10), "furnace_smelt", Material.RAW_IRON, 2, Material.GOLD_INGOT);
+        assertProcess(byX.get(10), "furnace_smelt", Material.RAW_IRON, 2, Material.IRON_INGOT);
         var furnacePayload = PaperPayloadNbtCodec.decode(byX.get(10).payload());
         Assertions.assertEquals(
             1,
@@ -146,7 +130,7 @@ class PaperContainerProcessListenerTest {
             ).getAmount()
         );
 
-        assertProcess(byX.get(20), "brew", Material.POTION, 1, Material.SPLASH_POTION);
+        assertProcess(byX.get(20), "brew", Material.POTION, 1, Material.POTION);
         var brewPayload = PaperPayloadNbtCodec.decode(byX.get(20).payload());
         Assertions.assertEquals(
             1,
@@ -155,9 +139,8 @@ class PaperContainerProcessListenerTest {
             ).getAmount()
         );
 
-        assertProcess(byX.get(30), "campfire_cook", Material.COD, 1, Material.COOKED_SALMON);
-        assertProcess(byX.get(40), "crafter_craft", Material.IRON_INGOT, 3, Material.ANVIL);
-        Assertions.assertEquals(0, listener.inFlightCount());
+        assertProcess(byX.get(30), "campfire_cook", Material.COD, 1, Material.COOKED_COD);
+        assertProcess(byX.get(40), "crafter_craft", Material.IRON_INGOT, 3, Material.IRON_BLOCK);
     }
 
     @Test
@@ -180,9 +163,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(furnace.getResult()).thenAnswer(ignored -> eventResult[0]);
         Mockito.when(furnace.isCancelled()).thenReturn(false);
 
-        listener.captureFurnace(furnace);
-        eventResult[0] = ItemStack.of(Material.GOLD_INGOT, 1);
-        listener.finalizeFurnace(furnace);
+        PaperListenerTestSupport.fire(listener, furnace);
 
         Assertions.assertEquals(1, api.submissions.size());
         var payload = PaperPayloadNbtCodec.decode(api.submissions.remove().payload());
@@ -193,8 +174,7 @@ class PaperContainerProcessListenerTest {
         Assertions.assertEquals("furnace_smelt", string(payload, "process_kind"));
         var results = payload.getListOrEmpty("event_result_items");
         var result = PaperItemStackPayloadCodec.decode((CompoundTag) results.get(0));
-        Assertions.assertEquals(Material.GOLD_INGOT, result.getType());
-        Assertions.assertEquals(0, listener.inFlightCount());
+        Assertions.assertEquals(Material.IRON_INGOT, result.getType());
     }
 
     @Test
@@ -210,8 +190,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(furnace.getSource()).thenReturn(ItemStack.of(Material.RAW_IRON, 1));
         Mockito.when(furnace.getResult()).thenReturn(ItemStack.of(Material.IRON_INGOT, 1));
         Mockito.when(furnace.isCancelled()).thenReturn(true);
-        listener.captureFurnace(furnace);
-        listener.finalizeFurnace(furnace);
+        PaperListenerTestSupport.fire(listener, furnace);
 
         var brewBlock = block(world, 2, Material.BREWING_STAND);
         var brewer = Mockito.mock(BrewerInventory.class);
@@ -224,8 +203,7 @@ class PaperContainerProcessListenerTest {
             new ArrayList<>(List.of(ItemStack.of(Material.POTION, 1)))
         );
         Mockito.when(brew.isCancelled()).thenReturn(true);
-        listener.captureBrew(brew);
-        listener.finalizeBrew(brew);
+        PaperListenerTestSupport.fire(listener, brew);
 
         var campfireBlock = block(world, 3, Material.CAMPFIRE);
         Mockito.when(campfireBlock.getState()).thenReturn(Mockito.mock(BlockState.class));
@@ -234,8 +212,7 @@ class PaperContainerProcessListenerTest {
         Mockito.when(cook.getSource()).thenReturn(ItemStack.of(Material.COD, 1));
         Mockito.when(cook.getResult()).thenReturn(ItemStack.of(Material.COOKED_COD, 1));
         Mockito.when(cook.isCancelled()).thenReturn(true);
-        listener.captureCook(cook);
-        listener.finalizeCook(cook);
+        PaperListenerTestSupport.fire(listener, cook);
 
         var crafterBlock = block(world, 4, Material.CRAFTER);
         var crafterInventory = Mockito.mock(Inventory.class);
@@ -246,11 +223,9 @@ class PaperContainerProcessListenerTest {
         Mockito.when(crafter.getBlock()).thenReturn(crafterBlock);
         Mockito.when(crafter.getResult()).thenReturn(ItemStack.of(Material.IRON_BLOCK, 1));
         Mockito.when(crafter.isCancelled()).thenReturn(true);
-        listener.captureCrafter(crafter);
-        listener.finalizeCrafter(crafter);
+        PaperListenerTestSupport.fire(listener, crafter);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
 
         var handledTypes = Arrays.stream(PaperContainerProcessListener.class.getDeclaredMethods())
             .filter(method -> method.getAnnotation(EventHandler.class) != null)

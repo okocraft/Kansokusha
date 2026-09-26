@@ -7,7 +7,6 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.NamespacedKey;
@@ -24,13 +23,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperBlockBreakListenerTest {
 
@@ -47,7 +40,7 @@ class PaperBlockBreakListenerTest {
     }
 
     @Test
-    void testNonCancelledBreakSubmitsLowestSnapshot() throws Exception {
+    void testNonCancelledBreakSubmitsBlockState() throws Exception {
         var api = Mockito.mock(KansokushaApi.class);
         Mockito.when(api.submit(Mockito.any())).thenReturn(true);
 
@@ -59,8 +52,7 @@ class PaperBlockBreakListenerTest {
         var state = Blocks.DIAMOND_ORE.defaultBlockState();
         var event = event(state.asBlockData(), false);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var captor = ArgumentCaptor.forClass(EventSubmission.class);
         Mockito.verify(api).submit(captor.capture());
@@ -76,13 +68,10 @@ class PaperBlockBreakListenerTest {
             NbtUtils.writeBlockState(state),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
-
-        Mockito.verify(event.getBlock(), Mockito.times(1)).getBlockData();
     }
 
     @Test
-    void testCancelledBreakDropsAndRemovesSnapshot() {
+    void testCancelledBreakIsNotSubmitted() {
         var api = Mockito.mock(KansokushaApi.class);
 
         var listener = PaperBlockBreakListener.register(
@@ -92,76 +81,9 @@ class PaperBlockBreakListenerTest {
         );
         var event = event(Blocks.STONE.defaultBlockState().asBlockData(), true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Mockito.verify(api, Mockito.never()).submit(Mockito.any());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testConcurrentFoliaStyleEventsDoNotCrossSnapshots() throws Exception {
-        var api = new RecordingApi();
-        var listener = PaperBlockBreakListener.register(api, SERVER_KEY);
-        var executor = Executors.newFixedThreadPool(8);
-        var events = new ArrayList<BlockBreakEvent>();
-        var expectedStates = new HashMap<Integer, net.minecraft.world.level.block.state.BlockState>();
-
-        for (int i = 0; i < 64; i++) {
-            var x = 1000 + i;
-            var state = (i & 1) == 0
-                ? Blocks.DEEPSLATE.defaultBlockState()
-                : Blocks.DIAMOND_ORE.defaultBlockState();
-            events.add(event(state.asBlockData(), false, x, 64, -i));
-            expectedStates.put(x, state);
-        }
-
-        try {
-            var captureTasks = new ArrayList<java.util.concurrent.Future<?>>();
-            for (var event : events) {
-                captureTasks.add(executor.submit(() -> listener.capture(event)));
-            }
-            for (var task : captureTasks) {
-                task.get();
-            }
-
-            Assertions.assertEquals(64, listener.inFlightCount());
-
-            var finalizeTasks = new ArrayList<java.util.concurrent.Future<?>>();
-            for (var event : events) {
-                finalizeTasks.add(executor.submit(() -> listener.finalizeEvent(event)));
-            }
-            for (var task : finalizeTasks) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        Assertions.assertEquals(64, api.submissions.size());
-        Assertions.assertEquals(0, listener.inFlightCount());
-
-        var submissionsByX = new HashMap<Integer, EventSubmission>();
-        for (var submission : api.submissions) {
-            var position = submission.position();
-            Assertions.assertNotNull(position);
-            Assertions.assertNull(
-                submissionsByX.put(position.x(), submission),
-                "Duplicate submission for x=" + position.x()
-            );
-        }
-
-        for (int i = 0; i < 64; i++) {
-            var x = 1000 + i;
-            var submission = submissionsByX.get(x);
-            Assertions.assertNotNull(submission, "Missing submission for x=" + x);
-            Assertions.assertEquals(new BlockPosition(x, 64, -i), submission.position());
-            Assertions.assertEquals(
-                NbtUtils.writeBlockState(expectedStates.get(x)),
-                PaperPayloadNbtCodec.decode(submission.payload())
-            );
-        }
     }
 
     private static BlockBreakEvent event(
@@ -196,26 +118,5 @@ class PaperBlockBreakListenerTest {
         Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.isCancelled()).thenReturn(cancelled);
         return event;
-    }
-
-    private static final class RecordingApi implements KansokushaApi {
-
-        private final ConcurrentLinkedQueue<EventSubmission> submissions =
-            new ConcurrentLinkedQueue<>();
-
-        @Override
-        public Optional<Key> localServerKey() {
-            return Optional.of(SERVER_KEY);
-        }
-
-        @Override
-        public void registerEventType(EventTypeDefinition definition) {
-        }
-
-        @Override
-        public boolean submit(EventSubmission submission) {
-            this.submissions.add(submission);
-            return true;
-        }
     }
 }

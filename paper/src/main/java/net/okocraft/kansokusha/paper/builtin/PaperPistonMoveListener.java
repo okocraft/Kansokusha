@@ -2,7 +2,6 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -10,7 +9,6 @@ import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.PistonMoveReaction;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -20,8 +18,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -36,7 +32,6 @@ public final class PaperPistonMoveListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<Event, List<Snapshot>> inFlight = new PaperInFlightMap<>();
 
     private PaperPistonMoveListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -53,36 +48,19 @@ public final class PaperPistonMoveListener implements Listener {
         return new PaperPistonMoveListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(BlockPistonExtendEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordExtend(BlockPistonExtendEvent event) {
         Objects.requireNonNull(event, "event");
-        capture(event, event.getBlock(), event.getBlocks(), event.getDirection(), "extend");
+        this.record(event.getBlock(), event.getBlocks(), event.getDirection(), "extend");
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(BlockPistonExtendEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordRetract(BlockPistonRetractEvent event) {
         Objects.requireNonNull(event, "event");
-        finalizeMovement(event, event.isCancelled());
+        this.record(event.getBlock(), event.getBlocks(), event.getDirection(), "retract");
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(BlockPistonRetractEvent event) {
-        Objects.requireNonNull(event, "event");
-        capture(event, event.getBlock(), event.getBlocks(), event.getDirection(), "retract");
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(BlockPistonRetractEvent event) {
-        Objects.requireNonNull(event, "event");
-        finalizeMovement(event, event.isCancelled());
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private void capture(
-        Event event,
+    private void record(
         Block piston,
         List<Block> movedBlocks,
         BlockFace direction,
@@ -91,7 +69,6 @@ public final class PaperPistonMoveListener implements Listener {
         var occurredAt = this.clock.instant();
         var pistonWorldKey = PaperKansokusha.key(piston.getWorld().getKey());
         var pistonOrigin = position(piston);
-        var snapshots = new ArrayList<Snapshot>(movedBlocks.size());
 
         for (var block : movedBlocks) {
             if (block.getPistonMoveReaction() == PistonMoveReaction.BREAK) {
@@ -104,15 +81,18 @@ public final class PaperPistonMoveListener implements Listener {
                 from.y() + direction.getModY(),
                 from.z() + direction.getModZ()
             );
-            snapshots.add(new Snapshot(
+            this.api.submit(new EventSubmission(
+                EVENT_TYPE,
+                PayloadGeneration.FIRST,
                 occurredAt,
                 this.serverKey,
                 PaperKansokusha.key(block.getWorld().getKey()),
                 to,
+                null,
                 PaperWorldMutationPayloadCodec.encodePistonMove(
                     from,
                     to,
-                    block.getBlockData().clone(),
+                    block.getBlockData(),
                     pistonWorldKey,
                     pistonOrigin,
                     direction.name(),
@@ -120,37 +100,5 @@ public final class PaperPistonMoveListener implements Listener {
                 )
             ));
         }
-
-        this.inFlight.put(event, List.copyOf(snapshots));
-    }
-
-    private void finalizeMovement(Event event, boolean cancelled) {
-        var snapshots = this.inFlight.remove(event);
-        if (snapshots == null || cancelled) {
-            return;
-        }
-
-        for (var snapshot : snapshots) {
-            this.api.submit(new EventSubmission(
-                EVENT_TYPE,
-                PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
-                null,
-                snapshot.payload()
-            ));
-        }
-    }
-
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        EventPayload payload
-    ) {
     }
 }

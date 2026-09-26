@@ -63,8 +63,7 @@ final class PaperEntityEventPayloadCodec {
         String cause,
         String damageType,
         boolean indirectDamage,
-        String sourceEvent,
-        boolean hanging
+        String sourceEvent
     ) {
         Objects.requireNonNull(brokenEntity, "brokenEntity");
         Objects.requireNonNull(breaker, "breaker");
@@ -79,13 +78,6 @@ final class PaperEntityEventPayloadCodec {
         payload.putString("damage_type", damageType);
         payload.putBoolean("indirect_damage", indirectDamage);
         payload.putString("source_event", sourceEvent);
-
-        if (hanging) {
-            var context = new CompoundTag();
-            context.putString("remove_cause", cause);
-            payload.put("hanging", context);
-        }
-
         return PaperPayloadNbtCodec.encode(payload);
     }
 

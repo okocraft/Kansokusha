@@ -4,17 +4,14 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -26,8 +23,6 @@ public final class PaperContainerPickupListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<InventoryPickupItemEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperContainerPickupListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -48,8 +43,8 @@ public final class PaperContainerPickupListener implements Listener {
         return new PaperContainerPickupListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(InventoryPickupItemEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(InventoryPickupItemEvent event) {
         Objects.requireNonNull(event, "event");
 
         var inventory = PaperContainerPayloadCodec.snapshotInventory(event.getInventory());
@@ -59,65 +54,22 @@ public final class PaperContainerPickupListener implements Listener {
             "item origin"
         );
 
-        var worldKey = inventory.worldKey() != null ? inventory.worldKey() : origin.worldKey();
-        var position = inventory.position() != null ? inventory.position() : origin.position();
-
-        this.inFlight.put(
-            event,
-            new Snapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                worldKey,
-                position,
-                inventory,
-                itemEntity.getUniqueId().toString(),
-                PaperContainerPayloadCodec.snapshotItem(itemEntity.getItemStack()),
-                origin
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(InventoryPickupItemEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
         this.api.submit(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
+                this.clock.instant(),
+                this.serverKey,
+                inventory.worldKey() != null ? inventory.worldKey() : origin.worldKey(),
+                inventory.position() != null ? inventory.position() : origin.position(),
                 null,
                 PaperContainerPayloadCodec.encodePickup(
-                    snapshot.inventory(),
-                    snapshot.itemEntityId(),
-                    snapshot.item(),
-                    snapshot.itemOrigin()
+                    inventory,
+                    itemEntity.getUniqueId().toString(),
+                    PaperContainerPayloadCodec.snapshotItem(itemEntity.getItemStack()),
+                    origin
                 )
             )
         );
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        @Nullable Key worldKey,
-        @Nullable BlockPosition position,
-        PaperContainerPayloadCodec.InventorySnapshot inventory,
-        String itemEntityId,
-        net.minecraft.nbt.CompoundTag item,
-        PaperContainerPayloadCodec.LocationSnapshot itemOrigin
-    ) {
     }
 }

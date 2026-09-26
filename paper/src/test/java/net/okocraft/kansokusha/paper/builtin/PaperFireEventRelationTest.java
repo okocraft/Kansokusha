@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.time.Clock;
 import java.util.HashMap;
 
 class PaperFireEventRelationTest {
@@ -26,9 +25,7 @@ class PaperFireEventRelationTest {
         var igniteListener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var naturalListener = PaperNaturalBlockChangeListener.register(
             api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            Clock.systemUTC(),
-            (location, task) -> task.run()
+            PaperBlockEventTestSupport.SERVER_KEY
         );
         var burnListener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
         var world = PaperBlockEventTestSupport.world();
@@ -42,14 +39,12 @@ class PaperFireEventRelationTest {
         var originIgnite = Mockito.mock(BlockIgniteEvent.class);
         Mockito.when(originIgnite.getBlock()).thenReturn(target);
         Mockito.when(originIgnite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.LAVA);
-        igniteListener.capture(originIgnite);
-        igniteListener.finalizeEvent(originIgnite);
+        PaperListenerTestSupport.fire(igniteListener, originIgnite);
 
         var spreadIgnite = Mockito.mock(BlockIgniteEvent.class);
         Mockito.when(spreadIgnite.getCause()).thenReturn(BlockIgniteEvent.IgniteCause.SPREAD);
         Mockito.when(spreadIgnite.getBlock()).thenReturn(target);
-        igniteListener.capture(spreadIgnite);
-        igniteListener.finalizeEvent(spreadIgnite);
+        PaperListenerTestSupport.fire(igniteListener, spreadIgnite);
 
         var postFire = PaperBlockEventTestSupport.state(
             world, target, 1, 64, 0, Blocks.FIRE.defaultBlockState()
@@ -58,8 +53,7 @@ class PaperFireEventRelationTest {
         Mockito.when(spread.getBlock()).thenReturn(target);
         Mockito.when(spread.getSource()).thenReturn(sourceFire);
         Mockito.when(spread.getNewState()).thenReturn(postFire);
-        naturalListener.capture(spread);
-        naturalListener.finalizeEvent(spread);
+        PaperListenerTestSupport.fire(naturalListener, spread);
 
         var burned = PaperBlockEventTestSupport.block(
             world, 2, 64, 0, Blocks.OAK_PLANKS.defaultBlockState(), Material.OAK_PLANKS
@@ -67,8 +61,7 @@ class PaperFireEventRelationTest {
         var burn = Mockito.mock(BlockBurnEvent.class);
         Mockito.when(burn.getBlock()).thenReturn(burned);
         Mockito.when(burn.getIgnitingBlock()).thenReturn(sourceFire);
-        burnListener.capture(burn);
-        burnListener.finalizeEvent(burn);
+        PaperListenerTestSupport.fire(burnListener, burn);
 
         Assertions.assertEquals(3, api.submissions.size());
         var counts = new HashMap<net.kyori.adventure.key.Key, Integer>();
@@ -78,6 +71,5 @@ class PaperFireEventRelationTest {
         Assertions.assertEquals(1, counts.get(PaperBlockIgniteListener.EVENT_TYPE));
         Assertions.assertEquals(1, counts.get(PaperNaturalBlockChangeListener.EVENT_TYPE));
         Assertions.assertEquals(1, counts.get(PaperBlockBurnListener.EVENT_TYPE));
-        Mockito.verify(spreadIgnite, Mockito.never()).getBlock();
     }
 }

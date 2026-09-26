@@ -31,4 +31,4 @@ The listener concurrency semantics are covered by unit tests, but the repository
 4. Join with two players in different active regions when available, perform block break/place operations concurrently, and then stop the server normally.
 5. Restart the same instance and confirm Kansokusha opens the existing database without locking errors.
 
-The Folia check is a compatibility smoke test, not a performance benchmark. The event-specific LOWEST/MONITOR correlation and concurrent in-flight isolation remain regression-tested in the Paper module tests.
+The Folia check is a compatibility smoke test, not a performance benchmark. Built-in listeners keep no state shared between events, so there is no cross-thread correlation to regression-test beyond the per-listener tests in the Paper module.

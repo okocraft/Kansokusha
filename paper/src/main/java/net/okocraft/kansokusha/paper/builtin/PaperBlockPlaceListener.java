@@ -2,13 +2,10 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
-import org.bukkit.block.BlockState;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -18,8 +15,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -32,7 +27,6 @@ public final class PaperBlockPlaceListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<BlockPlaceEvent, List<Snapshot>> inFlight = new PaperInFlightMap<>();
 
     private PaperBlockPlaceListener(
         KansokushaApi api,
@@ -60,89 +54,36 @@ public final class PaperBlockPlaceListener implements Listener {
         return new PaperBlockPlaceListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(BlockPlaceEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(BlockPlaceEvent event) {
         Objects.requireNonNull(event, "event");
 
-        var occurredAt = Instant.now(this.clock);
-        var subject = new PlayerSubject(event.getPlayer().getUniqueId());
-        List<Snapshot> snapshots;
-
-        if (event instanceof BlockMultiPlaceEvent multiPlaceEvent) {
-            var captured = new ArrayList<Snapshot>(multiPlaceEvent.getReplacedBlockStates().size());
-            for (var replacedState : multiPlaceEvent.getReplacedBlockStates()) {
-                captured.add(this.snapshot(replacedState, subject, occurredAt));
-            }
-            snapshots = List.copyOf(captured);
-        } else {
-            snapshots = List.of(
-                this.snapshot(event.getBlockReplacedState(), subject, occurredAt)
-            );
-        }
-
-        this.inFlight.put(event, snapshots);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(BlockPlaceEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshots = this.inFlight.remove(event);
-
-        if (snapshots == null || event.isCancelled() || !event.canBuild()) {
+        if (!event.canBuild()) {
             return;
         }
 
-        for (var snapshot : snapshots) {
+        var occurredAt = this.clock.instant();
+        var subject = new PlayerSubject(event.getPlayer().getUniqueId());
+        var replacedStates = event instanceof BlockMultiPlaceEvent multiPlaceEvent
+            ? multiPlaceEvent.getReplacedBlockStates()
+            : List.of(event.getBlockReplacedState());
+
+        for (var replacedState : replacedStates) {
             this.api.submit(
                 new EventSubmission(
                     EVENT_TYPE,
                     PayloadGeneration.FIRST,
-                    snapshot.occurredAt(),
-                    snapshot.serverKey(),
-                    snapshot.worldKey(),
-                    snapshot.position(),
-                    snapshot.subject(),
-                    snapshot.payload()
+                    occurredAt,
+                    this.serverKey,
+                    PaperKansokusha.key(replacedState.getWorld().getKey()),
+                    PaperBuiltInSupport.position(replacedState),
+                    subject,
+                    PaperBlockStatePayloadCodec.encodeBlockPlace(
+                        replacedState.getBlockData(),
+                        replacedState.getBlock().getBlockData()
+                    )
                 )
             );
         }
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private Snapshot snapshot(
-        BlockState replacedState,
-        PlayerSubject subject,
-        Instant occurredAt
-    ) {
-        var placedBlock = replacedState.getBlock();
-        return new Snapshot(
-            occurredAt,
-            this.serverKey,
-            PaperKansokusha.key(replacedState.getWorld().getKey()),
-            new BlockPosition(
-                replacedState.getX(),
-                replacedState.getY(),
-                replacedState.getZ()
-            ),
-            subject,
-            PaperBlockStatePayloadCodec.encodeBlockPlace(
-                replacedState.getBlockData(),
-                placedBlock.getBlockData()
-            )
-        );
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        PlayerSubject subject,
-        EventPayload payload
-    ) {
     }
 }

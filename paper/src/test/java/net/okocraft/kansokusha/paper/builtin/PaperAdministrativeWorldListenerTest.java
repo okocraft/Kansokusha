@@ -40,7 +40,7 @@ class PaperAdministrativeWorldListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174021");
 
     @Test
-    void testGameRuleChangeUsesEarliestOldAndFinalValueWithExactSource() throws Exception {
+    void testGameRuleChangeRecordsOldAndNewValueWithSource() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperGameRuleChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -60,12 +60,10 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(event.getWorld()).thenReturn(world);
         Mockito.doReturn(rule).when(event).getGameRule();
         Mockito.when(event.getCommandSender()).thenReturn(player);
-        Mockito.when(event.getValue()).thenReturn("false");
+        Mockito.when(event.getValue()).thenReturn("true");
         Mockito.when(event.isCancelled()).thenReturn(false);
 
-        listener.capture(event);
-        Mockito.when(event.getValue()).thenReturn("true");
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertWorldCommon(
@@ -86,7 +84,6 @@ class PaperAdministrativeWorldListenerTest {
         Assertions.assertEquals("Alice", string(source, "sender_name"));
         Assertions.assertEquals(PLAYER_ID.toString(), string(source, "sender_uuid"));
         Assertions.assertEquals("minecraft:player", string(source, "sender_entity_type"));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -106,8 +103,7 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.doReturn(rule).when(cancelled).getGameRule();
         Mockito.when(cancelled.getValue()).thenReturn("5");
         Mockito.when(cancelled.isCancelled()).thenReturn(true);
-        listener.capture(cancelled);
-        listener.finalizeEvent(cancelled);
+        PaperListenerTestSupport.fire(listener, cancelled);
         Assertions.assertTrue(api.submissions.isEmpty());
 
         var accepted = Mockito.mock(WorldGameRuleChangeEvent.class);
@@ -116,17 +112,14 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(accepted.getValue()).thenReturn("7");
         Mockito.when(accepted.isCancelled()).thenReturn(false);
         Mockito.when(accepted.getCommandSender()).thenReturn(null);
-        listener.capture(accepted);
-        listener.finalizeEvent(accepted);
+        PaperListenerTestSupport.fire(listener, accepted);
 
         var submission = onlySubmission(api);
         Assertions.assertNull(submission.subject());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertFalse(payload.getBooleanOr("source_present", true));
         Assertions.assertFalse(payload.contains("source"));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
-
 
     @Test
     void testGameRuleCanonicalizesSemanticValuesBeforeComparingAndSaving() throws Exception {
@@ -146,8 +139,7 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(noOp.getValue()).thenReturn("03");
         Mockito.when(noOp.isCancelled()).thenReturn(false);
 
-        listener.capture(noOp);
-        listener.finalizeEvent(noOp);
+        PaperListenerTestSupport.fire(listener, noOp);
         Assertions.assertTrue(api.submissions.isEmpty());
 
         var changed = Mockito.mock(WorldGameRuleChangeEvent.class);
@@ -156,14 +148,12 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(changed.getValue()).thenReturn("04");
         Mockito.when(changed.isCancelled()).thenReturn(false);
 
-        listener.capture(changed);
-        listener.finalizeEvent(changed);
+        PaperListenerTestSupport.fire(listener, changed);
 
         var submission = onlySubmission(api);
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("3", string(payload, "before"));
         Assertions.assertEquals("4", string(payload, "after"));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -190,8 +180,7 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(event.getCommandSource()).thenReturn(source);
         Mockito.when(event.getDifficulty()).thenReturn(Difficulty.HARD);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertWorldCommon(
@@ -210,7 +199,6 @@ class PaperAdministrativeWorldListenerTest {
         Assertions.assertEquals("entity", string(sourceTag, "executor_kind"));
         Assertions.assertEquals(EXECUTOR_ID.toString(), string(sourceTag, "executor_uuid"));
         Assertions.assertEquals("minecraft:zombie", string(sourceTag, "executor_entity_type"));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -227,15 +215,13 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(event.getWorld()).thenReturn(world);
         Mockito.when(event.getDifficulty()).thenReturn(Difficulty.EASY);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
-    void testWorldBorderCenterAndBoundsUseFinalRequestedValues() throws Exception {
+    void testWorldBorderCenterAndBoundsRecordRequestedValues() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperWorldBorderChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -245,11 +231,9 @@ class PaperAdministrativeWorldListenerTest {
         var centerEvent = Mockito.mock(WorldBorderCenterChangeEvent.class);
         Mockito.when(centerEvent.getWorld()).thenReturn(world);
         Mockito.when(centerEvent.getOldCenter()).thenReturn(new Location(world, 1.25, 0, -2.5));
-        Mockito.when(centerEvent.getNewCenter()).thenReturn(new Location(world, 10, 0, 20));
-        Mockito.when(centerEvent.isCancelled()).thenReturn(false);
-        listener.captureCenter(centerEvent);
         Mockito.when(centerEvent.getNewCenter()).thenReturn(new Location(world, 30.5, 0, 40.75));
-        listener.finalizeCenter(centerEvent);
+        Mockito.when(centerEvent.isCancelled()).thenReturn(false);
+        PaperListenerTestSupport.fire(listener, centerEvent);
 
         var centerSubmission = onlySubmission(api);
         assertWorldCommon(
@@ -270,18 +254,12 @@ class PaperAdministrativeWorldListenerTest {
         var boundsEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
         Mockito.when(boundsEvent.getWorld()).thenReturn(world);
         Mockito.when(boundsEvent.getOldSize()).thenReturn(1000.0);
-        Mockito.when(boundsEvent.getNewSize()).thenReturn(500.0);
-        Mockito.when(boundsEvent.getType())
-            .thenReturn(WorldBorderBoundsChangeEvent.Type.INSTANT_MOVE);
-        Mockito.when(boundsEvent.getDurationTicks()).thenReturn(0L);
-        Mockito.when(boundsEvent.isCancelled()).thenReturn(false);
-        listener.captureBounds(boundsEvent);
-
         Mockito.when(boundsEvent.getNewSize()).thenReturn(250.0);
         Mockito.when(boundsEvent.getType())
             .thenReturn(WorldBorderBoundsChangeEvent.Type.STARTED_MOVE);
         Mockito.when(boundsEvent.getDurationTicks()).thenReturn(120L);
-        listener.finalizeBounds(boundsEvent);
+        Mockito.when(boundsEvent.isCancelled()).thenReturn(false);
+        PaperListenerTestSupport.fire(listener, boundsEvent);
 
         var boundsSubmission = onlySubmission(api);
         var boundsPayload = PaperPayloadNbtCodec.decode(boundsSubmission.payload());
@@ -302,8 +280,7 @@ class PaperAdministrativeWorldListenerTest {
             .thenReturn(WorldBorderBoundsChangeEvent.Type.STARTED_MOVE);
         Mockito.when(zeroDurationEvent.getDurationTicks()).thenReturn(0L);
         Mockito.when(zeroDurationEvent.isCancelled()).thenReturn(false);
-        listener.captureBounds(zeroDurationEvent);
-        listener.finalizeBounds(zeroDurationEvent);
+        PaperListenerTestSupport.fire(listener, zeroDurationEvent);
 
         var zeroDurationPayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals("bounds", string(zeroDurationPayload, "action"));
@@ -312,7 +289,6 @@ class PaperAdministrativeWorldListenerTest {
             0L,
             zeroDurationPayload.getLongOr("transition_duration_ticks", Long.MIN_VALUE)
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -327,18 +303,15 @@ class PaperAdministrativeWorldListenerTest {
         Mockito.when(centerEvent.getWorld()).thenReturn(world);
         Mockito.when(centerEvent.getOldCenter()).thenReturn(new Location(world, 0, 0, 0));
         Mockito.when(centerEvent.isCancelled()).thenReturn(true);
-        listener.captureCenter(centerEvent);
-        listener.finalizeCenter(centerEvent);
+        PaperListenerTestSupport.fire(listener, centerEvent);
 
         var boundsEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
         Mockito.when(boundsEvent.getWorld()).thenReturn(world);
         Mockito.when(boundsEvent.getOldSize()).thenReturn(100.0);
         Mockito.when(boundsEvent.isCancelled()).thenReturn(true);
-        listener.captureBounds(boundsEvent);
-        listener.finalizeBounds(boundsEvent);
+        PaperListenerTestSupport.fire(listener, boundsEvent);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test

@@ -16,11 +16,8 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperPistonMoveListenerTest {
 
@@ -54,10 +51,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getBlocks()).thenReturn(List.of(first, second));
         Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
 
-        listener.capture(event);
-        Mockito.when(first.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-        Mockito.when(second.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(2, api.submissions.size());
         var byX = submissionsByX(api);
@@ -79,9 +73,6 @@ class PaperPistonMoveListenerTest {
             "east",
             "extend"
         );
-        Mockito.verify(first, Mockito.times(1)).getBlockData();
-        Mockito.verify(second, Mockito.times(1)).getBlockData();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -109,8 +100,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getBlocks()).thenReturn(List.of(moved, broken));
         Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -125,7 +115,6 @@ class PaperPistonMoveListenerTest {
             payload.get("to")
         );
         Mockito.verify(broken, Mockito.never()).getBlockData();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -148,8 +137,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getBlocks()).thenReturn(List.of(moved));
         Mockito.when(event.getDirection()).thenReturn(BlockFace.WEST);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         assertMove(
@@ -179,73 +167,9 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testConcurrentFoliaStylePistonEventsDoNotCrossSnapshots() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPistonMoveListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var world = PaperBlockEventTestSupport.world();
-        var events = new ArrayList<BlockPistonExtendEvent>();
-
-        for (int i = 0; i < 24; i++) {
-            var piston = PaperBlockEventTestSupport.block(
-                world, 100 + i, 64, 0, Blocks.PISTON.defaultBlockState(), Material.PISTON
-            );
-            var moved = PaperBlockEventTestSupport.block(
-                world,
-                1000 + i,
-                64,
-                -i,
-                (i & 1) == 0 ? Blocks.STONE.defaultBlockState() : Blocks.GOLD_BLOCK.defaultBlockState(),
-                (i & 1) == 0 ? Material.STONE : Material.GOLD_BLOCK
-            );
-            var event = Mockito.mock(BlockPistonExtendEvent.class);
-            Mockito.when(event.getBlock()).thenReturn(piston);
-            Mockito.when(event.getBlocks()).thenReturn(List.of(moved));
-            Mockito.when(event.getDirection()).thenReturn(BlockFace.UP);
-            events.add(event);
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = events.stream()
-                .map(event -> executor.submit(() -> listener.capture(event)))
-                .toList();
-            for (var task : captures) {
-                task.get();
-            }
-            var finalizers = events.stream()
-                .map(event -> executor.submit(() -> listener.finalizeEvent(event)))
-                .toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        Assertions.assertEquals(events.size(), api.submissions.size());
-        for (var submission : api.submissions) {
-            var payload = PaperPayloadNbtCodec.decode(submission.payload());
-            var from = (net.minecraft.nbt.CompoundTag) payload.get("from");
-            Assertions.assertNotNull(from);
-            Assertions.assertEquals(
-                submission.position().x(),
-                from.getInt("x").orElseThrow()
-            );
-            Assertions.assertEquals(
-                submission.position().y() - 1,
-                from.getInt("y").orElseThrow()
-            );
-        }
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static void assertMove(

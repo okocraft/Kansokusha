@@ -32,8 +32,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperBlockHarvestListenerTest {
 
@@ -52,16 +50,8 @@ class PaperBlockHarvestListenerTest {
         var drops = new ArrayList<>(List.of(ItemStack.of(Material.HONEYCOMB, 3)));
         var shear = shearEvent(20, tool, drops, false);
 
-        listener.captureHarvest(harvest.event());
-        harvested.getFirst().setAmount(7);
-        harvested.add(ItemStack.of(Material.DIAMOND, 1));
-        listener.finalizeHarvest(harvest.event());
-
-        listener.captureShear(shear.event());
-        tool.setAmount(2);
-        drops.getFirst().setAmount(8);
-        drops.add(ItemStack.of(Material.EMERALD, 1));
-        listener.finalizeShear(shear.event());
+        PaperListenerTestSupport.fire(listener, harvest.event());
+        PaperListenerTestSupport.fire(listener, shear.event());
 
         var byX = submissionsByX(api);
         Assertions.assertEquals(2, byX.size());
@@ -111,7 +101,6 @@ class PaperBlockHarvestListenerTest {
             3,
             PaperItemStackPayloadCodec.decode(snapshottedDrops.getFirst()).getAmount()
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -130,17 +119,14 @@ class PaperBlockHarvestListenerTest {
             true
         );
 
-        listener.captureHarvest(harvest.event());
-        listener.finalizeHarvest(harvest.event());
-        listener.captureShear(shear.event());
-        listener.finalizeShear(shear.event());
+        PaperListenerTestSupport.fire(listener, harvest.event());
+        PaperListenerTestSupport.fire(listener, shear.event());
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
-    void testDuplicatePreventionAndSourceWiringExcludeBlockBreak() {
+    void testSourceWiringExcludesBlockBreak() {
         var api = new RecordingApi();
         var listener = listener(api);
         var harvest = harvestEvent(
@@ -149,9 +135,7 @@ class PaperBlockHarvestListenerTest {
             false
         );
 
-        listener.captureHarvest(harvest.event());
-        listener.finalizeHarvest(harvest.event());
-        listener.finalizeHarvest(harvest.event());
+        PaperListenerTestSupport.fire(listener, harvest.event());
 
         Assertions.assertEquals(1, api.submissions.size());
         var handledEventTypes = Arrays.stream(PaperBlockHarvestListener.class.getDeclaredMethods())
@@ -163,58 +147,6 @@ class PaperBlockHarvestListenerTest {
         Assertions.assertTrue(handledEventTypes.contains(PlayerShearBlockEvent.class));
         Assertions.assertFalse(PlayerHarvestBlockEvent.class.isAssignableFrom(PlayerShearBlockEvent.class));
         Assertions.assertFalse(PlayerShearBlockEvent.class.isAssignableFrom(PlayerHarvestBlockEvent.class));
-    }
-
-    @Test
-    void testConcurrentFoliaStyleHarvestEventsDoNotCrossSnapshots() throws Exception {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixtures = new ArrayList<Fixture>();
-        for (int i = 0; i < 32; i++) {
-            if ((i & 1) == 0) {
-                fixtures.add(new Fixture(
-                    harvestEvent(
-                        1000 + i,
-                        new ArrayList<>(List.of(ItemStack.of(Material.SWEET_BERRIES, i + 1))),
-                        false
-                    ),
-                    null
-                ));
-            } else {
-                fixtures.add(new Fixture(
-                    null,
-                    shearEvent(
-                        1000 + i,
-                        ItemStack.of(Material.SHEARS, 1),
-                        new ArrayList<>(List.of(ItemStack.of(Material.HONEYCOMB, i + 1))),
-                        false
-                    )
-                ));
-            }
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = fixtures.stream().map(f -> executor.submit(() -> capture(listener, f))).toList();
-            for (var task : captures) {
-                task.get();
-            }
-            var finalizers = fixtures.stream().map(f -> executor.submit(() -> finish(listener, f))).toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        var byX = submissionsByX(api);
-        Assertions.assertEquals(fixtures.size(), byX.size());
-        for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperPayloadNbtCodec.decode(byX.get(1000 + i).payload());
-            Assertions.assertEquals((i & 1) == 0 ? "harvest" : "shear", string(payload, "operation"));
-        }
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperBlockHarvestListener listener(RecordingApi api) {
@@ -277,22 +209,6 @@ class PaperBlockHarvestListenerTest {
         return player;
     }
 
-    private static void capture(PaperBlockHarvestListener listener, Fixture fixture) {
-        if (fixture.harvest() != null) {
-            listener.captureHarvest(fixture.harvest().event());
-        } else {
-            listener.captureShear(fixture.shear().event());
-        }
-    }
-
-    private static void finish(PaperBlockHarvestListener listener, Fixture fixture) {
-        if (fixture.harvest() != null) {
-            listener.finalizeHarvest(fixture.harvest().event());
-        } else {
-            listener.finalizeShear(fixture.shear().event());
-        }
-    }
-
     private static HashMap<Integer, EventSubmission> submissionsByX(RecordingApi api) {
         var byX = new HashMap<Integer, EventSubmission>();
         for (var submission : api.submissions) {
@@ -309,9 +225,6 @@ class PaperBlockHarvestListenerTest {
     }
 
     private record ShearFixture(PlayerShearBlockEvent event) {
-    }
-
-    private record Fixture(HarvestFixture harvest, ShearFixture shear) {
     }
 
     private static final class RecordingApi implements KansokushaApi {

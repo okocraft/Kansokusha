@@ -49,7 +49,7 @@ public final class PaperPlayerWorldChangeListener implements Listener {
         return new PaperPlayerWorldChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void record(PlayerChangedWorldEvent event) {
         Objects.requireNonNull(event, "event");
 

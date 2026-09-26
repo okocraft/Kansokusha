@@ -37,7 +37,7 @@ class PaperEntityPlaceListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174101");
 
     @Test
-    void testGenericPlacementSnapshotsEntityActorAndItemAtLowest() throws Exception {
+    void testGenericPlacementRecordsEntityActorAndItem() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
@@ -49,10 +49,7 @@ class PaperEntityPlaceListenerTest {
         Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getHand()).thenReturn(EquipmentSlot.HAND);
 
-        listener.captureGeneric(event);
-        item.setAmount(4);
-        Mockito.when(entity.getLocation()).thenReturn(new Location(world, 99, 99, 99));
-        listener.finalizeGeneric(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(submission, PaperEntityPlaceListener.EVENT_TYPE, new BlockPosition(12, 64, -7));
@@ -71,7 +68,6 @@ class PaperEntityPlaceListenerTest {
             payload.getString("source_event").orElseThrow()
         );
         Assertions.assertFalse(payload.contains("hanging"));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -94,9 +90,7 @@ class PaperEntityPlaceListenerTest {
         Mockito.when(event.getBlock()).thenReturn(attached);
         Mockito.when(event.getBlockFace()).thenReturn(BlockFace.SOUTH);
 
-        listener.captureHanging(event);
-        item.setAmount(3);
-        listener.finalizeHanging(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
@@ -136,13 +130,10 @@ class PaperEntityPlaceListenerTest {
         Mockito.when(hanging.getBlockFace()).thenReturn(BlockFace.NORTH);
         Mockito.when(hanging.isCancelled()).thenReturn(true);
 
-        listener.captureGeneric(generic);
-        listener.finalizeGeneric(generic);
-        listener.captureHanging(hanging);
-        listener.finalizeHanging(hanging);
+        PaperListenerTestSupport.fire(listener, generic);
+        PaperListenerTestSupport.fire(listener, hanging);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperEntityPlaceListener listener(PaperBlockEventTestSupport.RecordingApi api) {

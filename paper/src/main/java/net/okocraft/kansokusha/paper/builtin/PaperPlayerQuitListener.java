@@ -50,7 +50,7 @@ public final class PaperPlayerQuitListener implements Listener {
         return new PaperPlayerQuitListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void record(PlayerQuitEvent event) {
         Objects.requireNonNull(event, "event");
 

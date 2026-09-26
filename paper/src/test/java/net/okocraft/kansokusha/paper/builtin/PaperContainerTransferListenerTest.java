@@ -4,7 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
@@ -46,9 +45,7 @@ class PaperContainerTransferListenerTest {
         Mockito.when(event.getItem()).thenReturn(item);
         Mockito.when(event.isCancelled()).thenReturn(false);
 
-        listener.capture(event);
-        item.setAmount(1);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -73,19 +70,13 @@ class PaperContainerTransferListenerTest {
             "chest",
             string(payload.getCompoundOrEmpty("destination_inventory"), "type")
         );
+        Assertions.assertFalse(payload.contains("initial_item"));
         Assertions.assertEquals(
             2,
-            PaperItemStackPayloadCodec.decode(
-                payload.getCompoundOrEmpty("initial_item")
-            ).getAmount()
-        );
-        Assertions.assertEquals(
-            1,
             PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("item")).getAmount()
         );
 
         Mockito.verify(destination, Mockito.never()).getContents();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -101,11 +92,9 @@ class PaperContainerTransferListenerTest {
         Mockito.when(event.getItem()).thenReturn(ItemStack.of(Material.STONE, 1));
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperContainerTransferListener listener(
