@@ -1,9 +1,12 @@
 package net.okocraft.kansokusha.paper.plugin;
 
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
+import net.okocraft.kansokusha.paper.command.KansokushaCommands;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,6 +32,10 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                 (message, failure) -> this.getLogger().log(Level.SEVERE, message, failure)
             );
             this.runtime = runtime;
+            this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
+                Commands commands = event.registrar();
+                KansokushaCommands.register(commands);
+            });
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {

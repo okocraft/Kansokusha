@@ -14,6 +14,7 @@ import net.okocraft.kansokusha.velocity.builtin.VelocityChatSubscriber;
 import net.okocraft.kansokusha.velocity.builtin.VelocityCommandSubscriber;
 import net.okocraft.kansokusha.velocity.builtin.VelocityPlayerSessionListener;
 import net.okocraft.kansokusha.velocity.builtin.VelocityServerConnectedListener;
+import net.okocraft.kansokusha.velocity.command.KansokushaCommands;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -65,6 +66,7 @@ public final class KansokushaVelocityPlugin {
             this.proxyServer.getEventManager().register(this, listener);
         }
 
+        KansokushaCommands.register(this.proxyServer.getCommandManager(), this);
         Kansokusha.setApi(runtime);
     }
 
