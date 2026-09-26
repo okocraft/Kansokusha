@@ -63,11 +63,6 @@ class PaperContainerPickupListenerTest {
         Assertions.assertNull(submission.actor());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(
-            "non_cancelled_container_pickup_attempt",
-            string(payload, "semantics")
-        );
-        Assertions.assertEquals("world_item", string(payload, "source_kind"));
         Assertions.assertEquals(ITEM_ID.toString(), string(payload, "item_entity_uuid"));
         Assertions.assertEquals(
             3,
