@@ -45,6 +45,7 @@ public final class KansokushaVelocityPlugin {
                 this.dataDirectory,
                 KansokushaConfig.load(this.dataDirectory),
                 null,
+                this.logger::info,
                 (message, failure) -> this.logger.error(message, failure)
             );
         } catch (IOException | SQLException e) {
