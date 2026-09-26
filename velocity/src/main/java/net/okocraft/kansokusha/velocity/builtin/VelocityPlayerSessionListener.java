@@ -72,7 +72,7 @@ public final class VelocityPlayerSessionListener {
             ) {
                 throw new IllegalStateException(
                     "Could not register built-in event type "
-                        + definition.eventType()
+                        + definition.key()
                         + ": "
                         + outcome
                 );
