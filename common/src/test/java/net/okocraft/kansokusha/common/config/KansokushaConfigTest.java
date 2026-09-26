@@ -85,6 +85,7 @@ class KansokushaConfigTest {
         Assertions.assertFalse(skeleton.contains("kansokusha:audit"));
         Assertions.assertFalse(skeleton.contains("kansokusha:session"));
         Assertions.assertFalse(skeleton.contains("kansokusha:default"));
+        Assertions.assertFalse(skeleton.contains("kansokusha:short"));
     }
 
     @Test
