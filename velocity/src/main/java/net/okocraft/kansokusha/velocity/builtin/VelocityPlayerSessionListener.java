@@ -147,7 +147,7 @@ public final class VelocityPlayerSessionListener {
         }
 
         var result = event.getResult();
-        var action = finalAction(result);
+        var action = finalAction(result, event.kickedDuringServerConnect());
         Key redirectTarget = null;
         if (result instanceof KickedFromServerEvent.RedirectPlayer redirect) {
             redirectTarget = this.serverKey(redirect.getServer());
@@ -190,7 +190,8 @@ public final class VelocityPlayerSessionListener {
     }
 
     private static VelocityPlayerSessionPayloadCodec.ProxyAction finalAction(
-        KickedFromServerEvent.ServerKickResult result
+        KickedFromServerEvent.ServerKickResult result,
+        boolean kickedDuringServerConnect
     ) {
         if (result instanceof KickedFromServerEvent.DisconnectPlayer) {
             return VelocityPlayerSessionPayloadCodec.ProxyAction.DISCONNECT;
@@ -199,7 +200,9 @@ public final class VelocityPlayerSessionListener {
             return VelocityPlayerSessionPayloadCodec.ProxyAction.REDIRECT;
         }
         if (result instanceof KickedFromServerEvent.Notify) {
-            return VelocityPlayerSessionPayloadCodec.ProxyAction.NOTIFY;
+            return kickedDuringServerConnect
+                ? VelocityPlayerSessionPayloadCodec.ProxyAction.NOTIFY
+                : VelocityPlayerSessionPayloadCodec.ProxyAction.DISCONNECT;
         }
         throw new IllegalArgumentException("Unknown ServerKickResult: " + result.getClass());
     }
