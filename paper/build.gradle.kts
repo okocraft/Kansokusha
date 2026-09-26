@@ -11,6 +11,8 @@ plugins {
     alias(libs.plugins.run.server)
 }
 
+apply(from = rootProject.file("gradle/merge-languages.gradle.kts"))
+
 val paperApiVersion = libs.versions.paper.get()
 val minecraftVersion = paperApiVersion.substringBefore(".build.")
 val paperBuild = paperApiVersion.substringAfter(".build.").substringBefore('-').toInt()
@@ -92,6 +94,9 @@ tasks {
             ZipFile(packagedJar).use { jar ->
                 check(jar.getEntry("org/duckdb/DuckDBDriver.class") == null) {
                     "Packaged Kansokusha jar must not contain the DuckDB JDBC driver."
+                }
+                check(jar.getEntry("languages/ja.properties") != null) {
+                    "Packaged Kansokusha jar must contain the bundled Japanese language file."
                 }
             }
 

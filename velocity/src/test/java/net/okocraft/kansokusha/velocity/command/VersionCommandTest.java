@@ -5,6 +5,7 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
+import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.velocity.testsupport.CommandTester;
 import net.okocraft.kansokusha.velocity.testsupport.TestSources;
 import org.junit.jupiter.api.Assertions;
@@ -24,7 +25,7 @@ class VersionCommandTest {
 
         Assertions.assertEquals(1, this.tester.execute(console, "version"));
 
-        Mockito.verify(console).sendMessage(VersionCommand.versionMessage(VersionCommand.UNKNOWN_VERSION));
+        Mockito.verify(console).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
     }
 
     @Test
@@ -34,7 +35,7 @@ class VersionCommandTest {
 
         Assertions.assertEquals(1, this.tester.execute(player, "version"));
 
-        Mockito.verify(player).sendMessage(VersionCommand.versionMessage(VersionCommand.UNKNOWN_VERSION));
+        Mockito.verify(player).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
     }
 
     @Test

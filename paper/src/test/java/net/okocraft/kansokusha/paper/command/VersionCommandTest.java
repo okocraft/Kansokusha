@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.kyori.adventure.text.ComponentLike;
+import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.command.ConsoleCommandSender;
@@ -23,7 +24,7 @@ class VersionCommandTest {
 
         Assertions.assertEquals(1, this.tester.execute(TestSources.ofSenderOnly(console), "version"));
 
-        Mockito.verify(console).sendMessage(VersionCommand.versionMessage(VersionCommand.UNKNOWN_VERSION));
+        Mockito.verify(console).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
     }
 
     @Test
@@ -33,7 +34,7 @@ class VersionCommandTest {
 
         Assertions.assertEquals(1, this.tester.execute(TestSources.of(player), "version"));
 
-        Mockito.verify(player).sendMessage(VersionCommand.versionMessage(VersionCommand.UNKNOWN_VERSION));
+        Mockito.verify(player).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
     }
 
     @Test

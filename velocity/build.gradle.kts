@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.run.velocity)
 }
 
+apply(from = rootProject.file("gradle/merge-languages.gradle.kts"))
+
 val externalApiTestDirectory = layout.buildDirectory.dir("velocity-external-api-integration")
 val externalApiFixtureJar = project(":kansokusha-velocity-test-plugin")
     .tasks.named<Jar>("jar")
@@ -77,6 +79,9 @@ tasks {
             ZipFile(packagedJar).use { jar ->
                 check(jar.getEntry("org/duckdb/DuckDBDriver.class") == null) {
                     "Packaged Kansokusha jar must not contain the DuckDB JDBC driver."
+                }
+                check(jar.getEntry("languages/ja.properties") != null) {
+                    "Packaged Kansokusha jar must contain the bundled Japanese language file."
                 }
             }
 

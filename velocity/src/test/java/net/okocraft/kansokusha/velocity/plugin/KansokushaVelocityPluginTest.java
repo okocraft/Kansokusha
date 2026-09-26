@@ -44,6 +44,9 @@ class KansokushaVelocityPluginTest {
 
         plugin.onProxyInitialize(null);
 
+        Assertions.assertTrue(Files.isRegularFile(dir.resolve("languages/en.properties")));
+        Assertions.assertTrue(Files.isRegularFile(dir.resolve("languages/ja.properties")));
+
         var listenerCaptor = ArgumentCaptor.forClass(Object.class);
         Mockito.verify(eventManager, Mockito.times(5))
             .register(Mockito.eq(plugin), listenerCaptor.capture());

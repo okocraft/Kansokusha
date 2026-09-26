@@ -4,7 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
-import net.kyori.adventure.text.Component;
+import net.okocraft.kansokusha.common.command.CommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
 @NotNullByDefault
@@ -16,14 +16,10 @@ final class VersionCommand {
         return BrigadierCommand.literalArgumentBuilder("version")
             .requires(source -> source.hasPermission("kansokusha.command.version"))
             .executes(context -> {
-                context.getSource().sendMessage(versionMessage(detectVersion()));
+                context.getSource().sendMessage(CommandMessages.VERSION_PRINT.apply(detectVersion()));
                 return Command.SINGLE_SUCCESS;
             })
             .build();
-    }
-
-    static Component versionMessage(String version) {
-        return Component.text("Kansokusha " + version);
     }
 
     private static String detectVersion() {
