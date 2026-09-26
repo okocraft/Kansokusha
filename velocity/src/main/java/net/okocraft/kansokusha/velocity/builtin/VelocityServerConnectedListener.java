@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.velocity.builtin;
 
+import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.key.Key;
@@ -57,6 +58,7 @@ public final class VelocityServerConnectedListener {
         return new VelocityServerConnectedListener(api, logger, clock);
     }
 
+    @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
         Objects.requireNonNull(event, "event");
 
