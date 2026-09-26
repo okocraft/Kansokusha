@@ -77,6 +77,7 @@ class KansokushaRuntimeReloadTest {
         var expiries = persistedExpiries(
             dir.resolve(KansokushaRuntime.DATABASE_FILENAME)
         );
+        Assertions.assertEquals(3, expiries.size());
         Assertions.assertEquals(
             OCCURRED_AT.plus(Duration.ofDays(100)).toEpochMilli(),
             expiries.get("01")
@@ -128,6 +129,7 @@ class KansokushaRuntimeReloadTest {
         var expiries = persistedExpiries(
             dir.resolve(KansokushaRuntime.DATABASE_FILENAME)
         );
+        Assertions.assertEquals(2, expiries.size());
         Assertions.assertEquals(
             OCCURRED_AT.plus(Duration.ofDays(7)).toEpochMilli(),
             expiries.get("01")
@@ -196,7 +198,6 @@ class KansokushaRuntimeReloadTest {
             }
         }
 
-        Assertions.assertEquals(3, result.size());
         return result;
     }
 
