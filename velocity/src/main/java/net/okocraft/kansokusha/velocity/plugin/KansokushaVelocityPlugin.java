@@ -2,14 +2,13 @@ package net.okocraft.kansokusha.velocity.plugin;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ProxyServer;
 import net.okocraft.kansokusha.common.api.CommonKansokushaApiProvider;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
-import net.okocraft.kansokusha.velocity.builtin.VelocityServerConnectedListener;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -20,15 +19,21 @@ import java.util.Objects;
 public final class KansokushaVelocityPlugin {
 
     private final Logger logger;
+    private final ProxyServer proxyServer;
     private final Path dataDirectory;
     private final KansokushaConfig.Holder config;
 
     private KansokushaRuntime runtime;
-    private volatile VelocityServerConnectedListener serverConnectedListener;
+    private VelocityBuiltInListeners builtInListeners;
 
     @Inject
-    public KansokushaVelocityPlugin(Logger logger, @DataDirectory Path dataDirectory) {
+    public KansokushaVelocityPlugin(
+        Logger logger,
+        ProxyServer proxyServer,
+        @DataDirectory Path dataDirectory
+    ) {
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.proxyServer = Objects.requireNonNull(proxyServer, "proxyServer");
         this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
         this.config = new KansokushaConfig.Holder(dataDirectory);
     }
@@ -61,16 +66,23 @@ public final class KansokushaVelocityPlugin {
             return;
         }
 
+        final VelocityBuiltInListeners builtInListeners;
         try {
             if (!CommonKansokushaApiProvider.publish(runtime.api())) {
                 throw new IllegalStateException("Kansokusha API is already published.");
             }
-            this.serverConnectedListener = VelocityServerConnectedListener.register(runtime.api(), this.logger);
+            builtInListeners = VelocityBuiltInListeners.register(
+                this.proxyServer.getEventManager(),
+                this,
+                runtime.api(),
+                this.logger
+            );
         } catch (RuntimeException | Error failure) {
             this.closeRuntime(runtime);
             throw failure;
         }
 
+        this.builtInListeners = builtInListeners;
         this.runtime = runtime;
     }
 
@@ -95,20 +107,25 @@ public final class KansokushaVelocityPlugin {
 
     @Subscribe(priority = Short.MAX_VALUE)
     public synchronized void onProxyShutdown(ProxyShutdownEvent event) {
-        this.serverConnectedListener = null;
+        var builtInListeners = this.builtInListeners;
+        this.builtInListeners = null;
+
         var runtime = this.runtime;
         this.runtime = null;
 
+        if (builtInListeners != null) {
+            try {
+                builtInListeners.close();
+            } catch (RuntimeException | Error failure) {
+                this.logger.error(
+                    "Velocity built-in listeners failed to shut down cleanly.",
+                    failure
+                );
+            }
+        }
+
         if (runtime != null) {
             this.closeRuntime(runtime);
-        }
-    }
-
-    @Subscribe
-    public void onServerConnected(ServerConnectedEvent event) {
-        var listener = this.serverConnectedListener;
-        if (listener != null) {
-            listener.onServerConnected(event);
         }
     }
 
