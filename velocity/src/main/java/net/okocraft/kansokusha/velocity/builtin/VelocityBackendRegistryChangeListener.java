@@ -70,7 +70,7 @@ public final class VelocityBackendRegistryChangeListener {
         return new VelocityBackendRegistryChangeListener(api, logger, clock);
     }
 
-    @Subscribe
+    @Subscribe(async = false)
     public void onServerRegistered(ServerRegisteredEvent event) {
         Objects.requireNonNull(event, "event");
         this.record(
@@ -79,7 +79,7 @@ public final class VelocityBackendRegistryChangeListener {
         );
     }
 
-    @Subscribe
+    @Subscribe(async = false)
     public void onServerUnregistered(ServerUnregisteredEvent event) {
         Objects.requireNonNull(event, "event");
         this.record(
