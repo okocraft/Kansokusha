@@ -109,7 +109,6 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     ) {
         return encodeBlockHarvest(
             "harvest",
-            "org.bukkit.event.player.PlayerHarvestBlockEvent",
             hand,
             snapshotBlockState(preState),
             snapshotItems(harvestedItems),
@@ -126,7 +125,6 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     ) {
         return encodeBlockHarvest(
             "shear",
-            "io.papermc.paper.event.block.PlayerShearBlockEvent",
             hand,
             snapshotBlockState(preState),
             new ListTag(),
@@ -147,7 +145,6 @@ public final class PaperAdditionalBuiltInPayloadCodec {
 
     private static EventPayload encodeBlockHarvest(
         String operation,
-        String sourceEvent,
         EquipmentSlot hand,
         CompoundTag preState,
         ListTag harvestedItems,
@@ -156,7 +153,6 @@ public final class PaperAdditionalBuiltInPayloadCodec {
     ) {
         var payload = new CompoundTag();
         payload.putString("operation", operation);
-        payload.putString("source_event", sourceEvent);
         payload.putString("hand", enumName(hand));
         payload.put("pre_state", preState);
         payload.put("harvest_items", harvestedItems);
