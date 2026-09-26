@@ -72,26 +72,27 @@ class PaperPayloadSizeTest {
     private static List<Sample> samples() throws Exception {
         var result = new ArrayList<Sample>();
 
-        add(
-            result,
+        var broken = Blocks.CAKE.defaultBlockState()
+            .setValue(CakeBlock.BITES, 3)
+            .asBlockData();
+        result.add(new Sample(
             "block_break",
-            PaperBlockStatePayloadCodec.encodeBlockBreak(
-                Blocks.CAKE.defaultBlockState()
-                    .setValue(CakeBlock.BITES, 3)
-                    .asBlockData()
-            )
-        );
+            PaperBlockStatePayloadCodec.blockState(broken),
+            PaperBlockStatePayloadCodec.encodeBlockBreak(broken)
+        ));
 
-        add(
-            result,
+        var replaced = Blocks.WATER.defaultBlockState().asBlockData();
+        var placed = Blocks.OAK_LOG.defaultBlockState()
+            .setValue(RotatedPillarBlock.AXIS, Direction.Axis.X)
+            .asBlockData();
+        var legacyPlace = new CompoundTag();
+        legacyPlace.put("replaced", PaperBlockStatePayloadCodec.blockState(replaced));
+        legacyPlace.put("placed", PaperBlockStatePayloadCodec.blockState(placed));
+        result.add(new Sample(
             "block_place",
-            PaperBlockStatePayloadCodec.encodeBlockPlace(
-                Blocks.WATER.defaultBlockState().asBlockData(),
-                Blocks.OAK_LOG.defaultBlockState()
-                    .setValue(RotatedPillarBlock.AXIS, Direction.Axis.X)
-                    .asBlockData()
-            )
-        );
+            legacyPlace,
+            PaperBlockStatePayloadCodec.encodeBlockPlace(replaced, placed)
+        ));
 
         add(
             result,
@@ -139,16 +140,16 @@ class PaperPayloadSizeTest {
             180.0F,
             -5.0F
         );
-        add(
-            result,
-            "player_teleport",
-            PaperPlayerStatePayloadCodec.encodeTeleport(
-                from,
-                to,
-                "ender_pearl",
-                Set.of("x", "y_rot")
-            )
+        var teleport = PaperPlayerStatePayloadCodec.encodeTeleport(
+            from,
+            to,
+            "ender_pearl",
+            Set.of("x", "y_rot")
         );
+        var legacyTeleport = PaperPayloadNbtCodec.decode(teleport);
+        legacyTeleport.putString("semantics", "successful_teleport_operation");
+        legacyTeleport.getCompoundOrEmpty("to").putString("world", to.worldKey().asString());
+        result.add(new Sample("player_teleport", legacyTeleport, teleport));
 
         add(
             result,
