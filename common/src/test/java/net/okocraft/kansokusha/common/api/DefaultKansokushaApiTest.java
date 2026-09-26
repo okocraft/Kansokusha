@@ -31,6 +31,7 @@ class DefaultKansokushaApiTest {
 
     private static final Key EVENT_KEY = Key.key("fixture", "block-break");
     private static final Key SERVER_KEY = Key.key("fixture", "server");
+    private static final Key RETENTION_QUALIFIER = Key.key("fixture", "natural");
     private static final Instant OCCURRED_AT = Instant.parse("2026-01-02T03:04:05Z");
 
     private KansokushaApi publishedApi;
@@ -198,7 +199,17 @@ class DefaultKansokushaApiTest {
     private static final class ExternalProviderFixture {
 
         private final EventTypeDefinition definition = definition(1);
-        private final EventSubmission submission = DefaultKansokushaApiTest.submission(1);
+        private final EventSubmission submission = new EventSubmission(
+            EVENT_KEY,
+            new PayloadGeneration(1),
+            OCCURRED_AT,
+            SERVER_KEY,
+            null,
+            null,
+            null,
+            EventPayload.copyOf(new byte[]{1, 2, 3})
+                .withRetentionQualifier(RETENTION_QUALIFIER)
+        );
 
         private RegistrationOutcome register() {
             KansokushaApi api = Kansokusha.api();
