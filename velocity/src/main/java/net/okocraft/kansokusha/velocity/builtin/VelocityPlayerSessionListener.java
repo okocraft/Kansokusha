@@ -117,9 +117,6 @@ public final class VelocityPlayerSessionListener {
         var currentServer = player.getCurrentServer();
         if (currentServer.isPresent()) {
             currentBackendKey = this.serverKey(currentServer.get().getServer());
-            if (currentBackendKey == null) {
-                return;
-            }
         }
 
         this.api.submit(
