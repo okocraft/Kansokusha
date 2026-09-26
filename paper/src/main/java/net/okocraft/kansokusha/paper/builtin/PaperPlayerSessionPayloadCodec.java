@@ -18,8 +18,10 @@ public final class PaperPlayerSessionPayloadCodec {
     private PaperPlayerSessionPayloadCodec() {
     }
 
-    static EventPayload encodeJoin() {
-        return PaperPayloadNbtCodec.encode(new CompoundTag());
+    static EventPayload encodeJoin(String username) {
+        var payload = new CompoundTag();
+        payload.putString("username", Objects.requireNonNull(username, "username"));
+        return PaperPayloadNbtCodec.encode(payload);
     }
 
     static EventPayload encodeQuit(PlayerQuitEvent.QuitReason reason) {
