@@ -70,11 +70,8 @@ class PaperEntityBlockChangeListenerTest {
             PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData()),
             payload.get("to")
         );
-        Assertions.assertEquals(
-            PLAYER_ID.toString(),
-            payload.getString("actor_entity_uuid").orElseThrow()
-        );
-        Assertions.assertEquals("PLAYER", payload.getString("actor_entity_type").orElseThrow());
+        Assertions.assertFalse(payload.contains("actor_entity_uuid"));
+        Assertions.assertFalse(payload.contains("actor_entity_type"));
     }
 
     @Test
@@ -103,7 +100,7 @@ class PaperEntityBlockChangeListenerTest {
         Assertions.assertEquals(new EntityActor(actorId, Key.key("minecraft", "enderman")), submission.actor());
         Assertions.assertEquals(Key.key("minecraft", "grass_block"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals("ENDERMAN", payload.getString("actor_entity_type").orElseThrow());
+        Assertions.assertFalse(payload.contains("actor_entity_type"));
     }
 
     @Test
@@ -168,8 +165,8 @@ class PaperEntityBlockChangeListenerTest {
             PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData()),
             payload.get("to")
         );
-        Assertions.assertEquals(actorId.toString(), payload.getString("actor_entity_uuid").orElseThrow());
-        Assertions.assertEquals("ZOMBIE", payload.getString("actor_entity_type").orElseThrow());
+        Assertions.assertFalse(payload.contains("actor_entity_uuid"));
+        Assertions.assertFalse(payload.contains("actor_entity_type"));
     }
 
     @Test
