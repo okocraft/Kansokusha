@@ -71,8 +71,7 @@ public final class PaperEntityBreakListener implements Listener {
                     event.getCause().name().toLowerCase(Locale.ROOT),
                     damageSource.getDamageType().getKey().toString(),
                     damageSource.isIndirect(),
-                    HANGING_SOURCE_EVENT,
-                    true
+                    HANGING_SOURCE_EVENT
                 )
             )
         );

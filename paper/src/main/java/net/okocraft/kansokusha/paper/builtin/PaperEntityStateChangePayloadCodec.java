@@ -64,8 +64,7 @@ final class PaperEntityStateChangePayloadCodec {
         CompoundTag itemAfter,
         Rotation rotationBefore,
         Rotation rotationAfter,
-        boolean fixedBefore,
-        boolean fixedAfter
+        boolean fixed
     ) {
         var payload = new CompoundTag();
         putEntity(payload, "target", target);
@@ -74,8 +73,7 @@ final class PaperEntityStateChangePayloadCodec {
         payload.put("item_after", itemAfter.copy());
         payload.putString("rotation_before", enumName(rotationBefore));
         payload.putString("rotation_after", enumName(rotationAfter));
-        payload.putBoolean("fixed_before", fixedBefore);
-        payload.putBoolean("fixed_after", fixedAfter);
+        payload.putBoolean("fixed", fixed);
         return PaperPayloadNbtCodec.encode(payload);
     }
 

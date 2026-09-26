@@ -57,10 +57,7 @@ class PaperEntityBreakListenerTest {
             PaperEntityBreakListener.HANGING_SOURCE_EVENT,
             payload.getString("source_event").orElseThrow()
         );
-        Assertions.assertEquals(
-            "explosion",
-            payload.getCompoundOrEmpty("hanging").getString("remove_cause").orElseThrow()
-        );
+        Assertions.assertFalse(payload.contains("hanging"));
     }
 
     @Test

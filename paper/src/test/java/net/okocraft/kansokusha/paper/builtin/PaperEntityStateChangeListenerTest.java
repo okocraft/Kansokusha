@@ -272,8 +272,7 @@ class PaperEntityStateChangeListenerTest {
             "clockwise",
             payload.getString("rotation_after").orElseThrow()
         );
-        Assertions.assertTrue(payload.getBoolean("fixed_before").orElseThrow());
-        Assertions.assertTrue(payload.getBoolean("fixed_after").orElseThrow());
+        Assertions.assertTrue(payload.getBoolean("fixed").orElseThrow());
         assertEntity(
             payload.getCompoundOrEmpty("target"),
             TARGET_ID,

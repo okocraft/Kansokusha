@@ -162,7 +162,6 @@ public final class PaperEntityStateChangeListener implements Listener {
                 snapshotItemFrameResult(action, event.getItemStack()),
                 rotationBefore,
                 rotationAfter,
-                frame.isFixed(),
                 frame.isFixed()
             )
         );
