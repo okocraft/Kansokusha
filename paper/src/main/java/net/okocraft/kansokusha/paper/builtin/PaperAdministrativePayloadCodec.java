@@ -16,16 +16,13 @@ final class PaperAdministrativePayloadCodec {
     }
 
     static EventPayload encodeGameRuleChange(
-        String gameRule,
         String before,
         String after,
         @Nullable PaperAdministrativeSource.Snapshot source
     ) {
         var payload = new CompoundTag();
-        payload.putString("game_rule", Objects.requireNonNull(gameRule, "gameRule"));
         payload.putString("before", Objects.requireNonNull(before, "before"));
         payload.putString("after", Objects.requireNonNull(after, "after"));
-        payload.putString("source_event", "world_gamerule_change");
         putSource(payload, source);
         return PaperPayloadNbtCodec.encode(payload);
     }
@@ -38,7 +35,6 @@ final class PaperAdministrativePayloadCodec {
         var payload = new CompoundTag();
         payload.putString("before", Objects.requireNonNull(before, "before"));
         payload.putString("after", Objects.requireNonNull(after, "after"));
-        payload.putString("source_event", "world_difficulty_change");
         putSource(payload, source);
         return PaperPayloadNbtCodec.encode(payload);
     }
@@ -51,7 +47,6 @@ final class PaperAdministrativePayloadCodec {
         payload.putString("action", "center");
         payload.put("before", center(Objects.requireNonNull(before, "before")));
         payload.put("after", center(Objects.requireNonNull(after, "after")));
-        payload.putString("source_event", "world_border_center_change");
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -70,7 +65,6 @@ final class PaperAdministrativePayloadCodec {
             Objects.requireNonNull(transitionType, "transitionType")
         );
         payload.putLong("transition_duration_ticks", durationTicks);
-        payload.putString("source_event", "world_border_bounds_change");
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -79,10 +73,8 @@ final class PaperAdministrativePayloadCodec {
         PaperPlayerStatePayloadCodec.LocationSnapshot after
     ) {
         var payload = new CompoundTag();
-        payload.putString("scope", "world");
         payload.put("before", location(Objects.requireNonNull(before, "before")));
         payload.put("after", location(Objects.requireNonNull(after, "after")));
-        payload.putString("source_event", "spawn_change");
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -91,7 +83,6 @@ final class PaperAdministrativePayloadCodec {
         payload.putString("action", "global_toggle");
         payload.putBoolean("before_enabled", before);
         payload.putBoolean("after_enabled", after);
-        payload.putString("source_event", "whitelist_toggle");
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -111,7 +102,6 @@ final class PaperAdministrativePayloadCodec {
         if (profileName != null) {
             payload.putString("profile_name", profileName);
         }
-        payload.putString("source_event", "whitelist_state_update");
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -132,7 +122,6 @@ final class PaperAdministrativePayloadCodec {
 
     private static CompoundTag location(PaperPlayerStatePayloadCodec.LocationSnapshot location) {
         var payload = new CompoundTag();
-        payload.putString("world", location.worldKey().asString());
         payload.putDouble("x", location.x());
         payload.putDouble("y", location.y());
         payload.putDouble("z", location.z());
