@@ -5,6 +5,9 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -48,7 +51,7 @@ public record SearchQuery(
         }
         return implies(included.users(), excluded.users())
             && implies(included.actions(), excluded.actions())
-            && implies(included.timeRanges(), excluded.timeRanges())
+            && timeRangesImply(included.timeRanges(), excluded.timeRanges())
             && implies(included.radii(), excluded.radii())
             && implies(included.targets(), excluded.targets())
             && implies(included.filters(), excluded.filters())
@@ -77,6 +80,121 @@ public record SearchQuery(
 
     private static <T> boolean implies(Set<T> included, Set<T> excluded) {
         return excluded.isEmpty() || (!included.isEmpty() && excluded.containsAll(included));
+    }
+
+    private static boolean timeRangesImply(Set<TimeRange> included, Set<TimeRange> excluded) {
+        if (excluded.isEmpty()) {
+            return true;
+        }
+        if (included.isEmpty()) {
+            return false;
+        }
+
+        var excludedUnion = mergeTimeRanges(excluded);
+        for (var includedRange : included) {
+            if (!isCoveredByUnion(includedRange, excludedUnion)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<Interval> mergeTimeRanges(Set<TimeRange> ranges) {
+        var sorted = ranges.stream()
+            .map(range -> new Interval(range.fromInclusive(), range.toExclusive()))
+            .sorted(Comparator.comparing(
+                Interval::fromInclusive,
+                SearchQuery::compareLowerBounds
+            ))
+            .toList();
+
+        var merged = new ArrayList<Interval>();
+        for (var next : sorted) {
+            if (merged.isEmpty()) {
+                merged.add(next);
+                continue;
+            }
+
+            var lastIndex = merged.size() - 1;
+            var current = merged.get(lastIndex);
+            if (overlapsOrTouches(current, next)) {
+                merged.set(
+                    lastIndex,
+                    new Interval(
+                        current.fromInclusive(),
+                        laterUpperBound(current.toExclusive(), next.toExclusive())
+                    )
+                );
+            } else {
+                merged.add(next);
+            }
+        }
+        return List.copyOf(merged);
+    }
+
+    private static boolean isCoveredByUnion(TimeRange included, List<Interval> excludedUnion) {
+        for (var excluded : excludedUnion) {
+            if (
+                lowerBoundAtOrBefore(excluded.fromInclusive(), included.fromInclusive())
+                    && upperBoundAtOrAfter(excluded.toExclusive(), included.toExclusive())
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int compareLowerBounds(Optional<Instant> first, Optional<Instant> second) {
+        if (first.isEmpty()) {
+            return second.isEmpty() ? 0 : -1;
+        }
+        if (second.isEmpty()) {
+            return 1;
+        }
+        return first.get().compareTo(second.get());
+    }
+
+    private static boolean overlapsOrTouches(Interval current, Interval next) {
+        if (current.toExclusive().isEmpty() || next.fromInclusive().isEmpty()) {
+            return true;
+        }
+        return !current.toExclusive().get().isBefore(next.fromInclusive().get());
+    }
+
+    private static Optional<Instant> laterUpperBound(
+        Optional<Instant> first,
+        Optional<Instant> second
+    ) {
+        if (first.isEmpty() || second.isEmpty()) {
+            return Optional.empty();
+        }
+        return first.get().isAfter(second.get()) ? first : second;
+    }
+
+    private static boolean lowerBoundAtOrBefore(
+        Optional<Instant> outer,
+        Optional<Instant> inner
+    ) {
+        if (outer.isEmpty()) {
+            return true;
+        }
+        return inner.isPresent() && !outer.get().isAfter(inner.get());
+    }
+
+    private static boolean upperBoundAtOrAfter(
+        Optional<Instant> outer,
+        Optional<Instant> inner
+    ) {
+        if (outer.isEmpty()) {
+            return true;
+        }
+        return inner.isPresent() && !outer.get().isBefore(inner.get());
+    }
+
+    private record Interval(
+        Optional<Instant> fromInclusive,
+        Optional<Instant> toExclusive
+    ) {
     }
 
     public enum Order {
