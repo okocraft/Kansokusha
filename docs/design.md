@@ -8,7 +8,7 @@
 | モジュール | 役割 |
 | --- | --- |
 | `api` | 外部プラグイン向けの公開 API。platform / storage の型に依存しない |
-| `common` | 設定読み込み、キュー、DuckDB への書き込み、保持期限切れイベントの削除 |
+| `common` | 設定読み込み、キュー、DuckDB への書き込み、内部検索 projection / query、保持期限切れイベントの削除 |
 | `paper` | Paper / Folia プラグインと組み込みイベント |
 | `velocity` | Velocity プラグインと組み込みイベント |
 | `*-test-plugin` | 実サーバー上で公開 API と永続化を確認する結合テスト用プラグイン |
@@ -24,7 +24,7 @@
   - 未登録の event type、generation の不一致、保存できない発生時刻（保持期限の計算で範囲外になるものを含む）はプログラムの誤りなので `IllegalArgumentException`。この検証を submit 時に行うため、不正な 1 件が同じバッチの他のイベントの書き込みを失敗させることはない。
 - `localServerKey()`: Paper ではローカルサーバーの key。Velocity では空。
 
-`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / actor / target type を任意で持つ。player-name lookup は public `KansokushaApi` に公開せず、platform implementation と将来の内部検索処理だけが common の internal `PlayerNameDirectory` を使う。
+`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / actor / target type を任意で持つ。player-name lookup と本文検索は public `KansokushaApi` に公開せず、platform implementation と将来の内部検索処理だけが common の internal `PlayerNameDirectory` / `EventSearchBackend` を使う。
 world は server に、座標は world に属するため、それぞれ前者なしには指定できない。
 
 - actor（誰が）: イベントを直接起こした主体。`PlayerActor`（UUID）、`EntityActor`（UUID と entity type key）、`BlockActor`（block type key）のいずれか。プレイヤーが撃った矢や着火した TNT のような間接的な主体は actor にせず、必要なら payload に残す。
@@ -41,13 +41,13 @@ submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと / b
 - 呼び出し側はキューへの `offer` のみを行い、ブロックしない（要件 §11）。
 - キューは `queue-capacity` で上限を持ち、満杯時の submit は破棄する（要件 §12）。
 - `kansokusha-storage` スレッドが `flush-interval` ごとにキューのイベントを書き込む。キューが `batch-size` 件に達した場合は間隔を待たずに書き込む。1 トランザクションは最大 `batch-size` 件で、それを超える分は続けて別のトランザクションで書き込む。
-- 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。Paper join / Velocity post-login は username を internal metadata として同じ queue item に付加し、storage thread が login event の保存と同一 transaction で player-name projection を更新し、必要なら `player_name_change` event を追加する。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
+- 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。Paper join / Velocity post-login は username を internal metadata として同じ queue item に付加し、storage thread が login event の保存と同一 transaction で player-name projection を更新し、必要なら `player_name_change` event を追加する。chat / command は検索対象本文を internal metadata として同じ queue item に付加し、event row と検索 projection row を同一 transaction で保存する。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
 - 書き込みに失敗したバッチはサーバーログへ出力して破棄し、次のバッチの書き込みは続ける（要件 §13）。
 - 停止時は新しいイベントの受け付けを止め、キューに残ったイベントを書き込む。続いて保持期限切れイベントを最終削除し、DuckDB の `CHECKPOINT` を実行してから DB health（イベント件数、DB サイズ、使用中 / 再利用可能 block、WAL サイズ、停止時の削除件数）をログへ出して接続を閉じる。受け付けの停止とキューの排出は lock で順序付けており、停止後にキューへ入るイベントはない。
 
 ## ストレージ
 
-データディレクトリの `kansokusha.duckdb` に監査ログ本体 `events` と、名前検索支援用の derived projection `player_name_history` を持つ。名前変更履歴の source of truth は `events` であり、projection だけに監査情報を保存しない。
+データディレクトリの `kansokusha.duckdb` に監査ログ本体 `events`、名前検索支援用の derived projection `player_name_history`、chat / command 本文検索用の derived projection `event_search_text` を持つ。監査情報の source of truth は `events` と payload であり、projection だけに監査情報を保存しない。
 
 ```sql
 CREATE TABLE events (
@@ -80,6 +80,19 @@ CREATE TABLE player_name_history (
 );
 ```
 
+```sql
+CREATE TABLE event_search_text (
+    event_id UUID NOT NULL,
+    search_text VARCHAR NOT NULL
+);
+```
+
+`event_search_text.event_id` には unique index を張り、1 event につき高々1件の本文 projection とする。対象は `paper_chat`、`velocity_chat`、`paper_player_command`、`paper_server_command`、`velocity_command`。Paper chat は Adventure Component の監査 payload を変更せず、projection だけ plain text 化する。command は platform event で最初に観測した original raw command をそのまま projection に保存する。その他の event は row を作らない。
+
+本文検索は payload BLOB を decode せず `event_search_text` だけを走査し、`contains(lower(search_text), lower(?))` で case-insensitive literal substring を評価する。`LIKE` / regex は使わないため、`%`、`_`、`*` その他の記号に wildcard semantics はない。fuzzy search も行わない。将来の common search backend は internal `EventSearchBackend.findEventIdsContaining` で候補 event ID を取得し、公開 `KansokushaApi` にはこの機構を追加しない。
+
+event と本文 projection の insert は同一 transaction で commit する。retention cleanup は期限切れ event ID に対応する `event_search_text` row を先に削除し、その後 `events` row を削除して同一 transaction で commit する。このため supported lifecycle では event のない検索 row を残さない。projection は ingestion 時に生成し、検索時や cleanup 時に payload を再 decode しない。
+
 `player_name_history` は accepted `paper_join` / `velocity_post_login` からのみ更新する検索 projection である。`normalized_name` は `Locale.ROOT` lower-case で、名前→UUID は case-insensitive に比較し、`(last_seen, last_event_id)` が最新の UUID を採用する。同一 UUID・同一 exact name の再観測は同じ row を更新し、`first_seen` は最小値、`(last_seen, last_event_id)` は最大値を維持する。したがって時計の巻き戻り等で stale observation が後から処理されても latest state は巻き戻らない。case-only rename を含む exact name の変化は別 history row として残す。offline player-name completion は `normalized_name` ごとに最新 casing を1件返す。
 
 同じ UUID の current observation より `(occurred_at, event_id)` が新しい login で exact username が変化した場合、storage writer は login と同一 transaction で `kansokusha:player_name_change` を追加する。actor は `PlayerActor(uuid)`、`occurred_at` は login と同一、payload generation 1 は `previous_name` / `new_name` の2 field である。初回観測、同一名再 login、stale observation では生成しない。Paper `paper_join` と Velocity `velocity_post_login` 自体にも login 時点の username を payload に保存するため、projection は監査ログの代替ではない。
@@ -90,13 +103,13 @@ Paper `paper_join` は payload generation 1 のまま、`username` を backward-
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
 - actor は `actor_kind`（`player` / `entity` / `block`）、`actor_uuid`（player と entity）、`actor_type`（entity type または block type の key。player では NULL）の 3 列に保存する。種類ごとの列にせず 1 組の列にまとめることで、「このプレイヤー / このエンティティ個体（`actor_uuid`）」「クリーパー全般 / ピストン全般（`actor_type`）」のどちらも 1 列の条件で検索できる。
 - `target_type` と `actor_type` も key 文字列のまま保存する。
-- 起動時に `events` / `player_name_history` を `CREATE TABLE IF NOT EXISTS` で用意し、各列構成が期待と一致しなければ起動を失敗させる。projection には UUID/name と case-insensitive lookup 用 index を張る。本番運用前のため `event_id` 追加を含む旧 `events` schema からの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
+- 起動時に `events` / `player_name_history` / `event_search_text` を `CREATE TABLE IF NOT EXISTS` で用意し、各列構成が期待と一致しなければ起動を失敗させる。player-name projection には UUID/name と case-insensitive lookup 用 index、本文 projection には event ID unique index を張る。本番運用前のため `event_id` 追加を含む旧 `events` schema からの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
 
 ## 保持期間
 
 - 保持期間は `config.yml` の `retention` で event type ごとに設定する。一覧にない event type は `retention.default` を使う。
 - submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
-- `cleanup-interval` ごと（および起動直後）に `expires_at <= 現在時刻` の行を削除する。
+- `cleanup-interval` ごと（および起動直後）に `expires_at <= 現在時刻` の event と、それに対応する `event_search_text` row を同一 transaction で削除する。
 - 設定の変更は再起動で反映する。
 
 ## 設定
