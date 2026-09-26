@@ -66,7 +66,7 @@ class PaperBlockBreakListenerTest {
         Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
         Assertions.assertEquals(Key.key("minecraft", "diamond_ore"), submission.targetType());
         Assertions.assertEquals(
-            NbtUtils.writeBlockState(state),
+            PaperBlockStatePayloadCodec.blockProperties(state.asBlockData()),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
     }
