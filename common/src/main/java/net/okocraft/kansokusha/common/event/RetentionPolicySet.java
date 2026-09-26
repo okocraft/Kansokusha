@@ -19,13 +19,16 @@ public final class RetentionPolicySet {
     private static final long MAX_FINITE_TIMESTAMP_MILLIS = Long.MAX_VALUE - 1;
 
     private final Map<Key, RetentionPolicy> exactMappings;
+    private final Map<KansokushaConfig.QualifiedEventType, RetentionPolicy> qualifiedMappings;
     private final RetentionPolicy fallback;
 
     private RetentionPolicySet(
         Map<Key, RetentionPolicy> exactMappings,
+        Map<KansokushaConfig.QualifiedEventType, RetentionPolicy> qualifiedMappings,
         RetentionPolicy fallback
     ) {
         this.exactMappings = Map.copyOf(exactMappings);
+        this.qualifiedMappings = Map.copyOf(qualifiedMappings);
         this.fallback = fallback;
     }
 
@@ -36,7 +39,16 @@ public final class RetentionPolicySet {
         settings.eventTypeMappings().forEach(
             (eventType, policyKey) -> exactMappings.put(eventType, policy(settings, policyKey))
         );
-        return new RetentionPolicySet(exactMappings, policy(settings, settings.fallbackPolicy()));
+        var qualifiedMappings =
+            new HashMap<KansokushaConfig.QualifiedEventType, RetentionPolicy>();
+        settings.qualifiedEventTypeMappings().forEach(
+            (mapping, policyKey) -> qualifiedMappings.put(mapping, policy(settings, policyKey))
+        );
+        return new RetentionPolicySet(
+            exactMappings,
+            qualifiedMappings,
+            policy(settings, settings.fallbackPolicy())
+        );
     }
 
     private static RetentionPolicy policy(KansokushaConfig.RetentionSettings settings, Key key) {
@@ -48,10 +60,25 @@ public final class RetentionPolicySet {
         return this.exactMappings.getOrDefault(eventType, this.fallback);
     }
 
+    public RetentionPolicy resolvePolicy(EventSubmission submission) {
+        Objects.requireNonNull(submission, "submission");
+
+        var qualifier = submission.payload().retentionQualifier().orElse(null);
+        if (qualifier != null) {
+            var qualified = this.qualifiedMappings.get(
+                new KansokushaConfig.QualifiedEventType(submission.eventType(), qualifier)
+            );
+            if (qualified != null) {
+                return qualified;
+            }
+        }
+        return this.resolvePolicy(submission.eventType());
+    }
+
     public AcceptedEvent resolve(EventSubmission submission) throws RetentionResolutionException {
         Objects.requireNonNull(submission, "submission");
 
-        var policy = this.resolvePolicy(submission.eventType());
+        var policy = this.resolvePolicy(submission);
         var occurredAt = submission.occurredAt().truncatedTo(ChronoUnit.MILLIS);
 
         final long occurredAtMillis;
