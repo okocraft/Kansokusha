@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.junit.jupiter.api.Assertions;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 class PaperBuiltInListenersTest {
 
@@ -73,7 +76,7 @@ class PaperBuiltInListenersTest {
         }
     }
 
-    private static final class RegistrationRecordingApi implements KansokushaApi {
+    private static final class RegistrationRecordingApi implements KansokushaApi, EventSearchBackend {
 
         private final Set<EventTypeDefinition> registered = new HashSet<>();
 
@@ -90,6 +93,16 @@ class PaperBuiltInListenersTest {
         @Override
         public boolean submit(EventSubmission submission) {
             return true;
+        }
+
+        @Override
+        public boolean submitSearchable(EventSubmission submission, String searchText) {
+            return true;
+        }
+
+        @Override
+        public CompletableFuture<java.util.List<UUID>> findEventIdsContaining(String literal) {
+            return CompletableFuture.completedFuture(java.util.List.of());
         }
     }
 }
