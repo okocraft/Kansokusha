@@ -12,7 +12,6 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Statistic;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Lectern;
@@ -26,7 +25,6 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerTakeLecternBookEvent;
-import org.bukkit.event.player.PlayerStatisticIncrementEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.inventory.meta.BookMeta;
@@ -38,11 +36,9 @@ import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.BiConsumer;
 
 @SuppressWarnings("removal")
 class PaperPlayerItemAuditListenerTest {
@@ -254,7 +250,7 @@ class PaperPlayerItemAuditListenerTest {
     }
 
     @Test
-    void testTradeAndPurchaseShareCanonicalPurchaseHandlerWithoutDuplicateSubmission() throws Exception {
+    void testTradeAndPurchaseShareOneHandlerAndSubmitOnce() throws Exception {
         Assertions.assertTrue(PlayerPurchaseEvent.class.isAssignableFrom(PlayerTradeEvent.class));
         Assertions.assertSame(
             PlayerPurchaseEvent.getHandlerList(),
@@ -279,17 +275,9 @@ class PaperPlayerItemAuditListenerTest {
                 .filter(parameters -> parameters[0] == PlayerTradeEvent.class)
                 .count()
         );
-        Assertions.assertEquals(
-            1,
-            declaredHandlers.stream()
-                .map(Method::getParameterTypes)
-                .filter(parameters -> parameters[0] == PlayerStatisticIncrementEvent.class)
-                .count()
-        );
 
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var nextTick = new TestNextTickExecutor();
-        var listener = listener(api, nextTick);
+        var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
         var player = player(world, 3, 65, 4);
         var villager = Mockito.mock(AbstractVillager.class);
@@ -311,16 +299,9 @@ class PaperPlayerItemAuditListenerTest {
         Mockito.when(trade.isCancelled()).thenReturn(false);
 
         PaperListenerTestSupport.fire(listener, trade);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-
         result.setAmount(4);
         ingredient.setAmount(1);
         recipe.setUses(11);
-
-        var confirmation = tradeConfirmation(player, true);
-        listener.confirmTrade(confirmation);
-        nextTick.runAll();
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.element();
@@ -356,36 +337,9 @@ class PaperPlayerItemAuditListenerTest {
     }
 
     @Test
-    void testNonCancelledPurchaseWithoutPaperSuccessSignalIsNotSubmitted() {
+    void testStandalonePurchaseRecordsMerchantKind() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
-        var nextTick = new TestNextTickExecutor();
-        var listener = listener(api, nextTick);
-        var world = PaperBlockEventTestSupport.world();
-        var player = player(world, 9, 64, 9);
-        var merchant = Mockito.mock(org.bukkit.inventory.Merchant.class);
-        var replacement = new MerchantRecipe(ItemStack.of(Material.DIAMOND, 1), 5);
-        replacement.setIngredients(List.of(ItemStack.of(Material.DIAMOND, 64)));
-
-        var purchase = Mockito.mock(PlayerPurchaseEvent.class);
-        Mockito.when(purchase.getPlayer()).thenReturn(player);
-        Mockito.when(purchase.getMerchant()).thenReturn(merchant);
-        Mockito.when(purchase.getTrade()).thenReturn(replacement);
-        Mockito.when(purchase.isCancelled()).thenReturn(false);
-
-        PaperListenerTestSupport.fire(listener, purchase);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-
-        nextTick.runAll();
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
-    void testStandalonePurchaseRecordsMerchantKindAfterSuccessConfirmation() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var nextTick = new TestNextTickExecutor();
-        var listener = listener(api, nextTick);
+        var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
         var player = player(world, 9, 64, 9);
         var merchant = Mockito.mock(org.bukkit.inventory.Merchant.class);
@@ -399,10 +353,6 @@ class PaperPlayerItemAuditListenerTest {
         Mockito.when(purchase.isCancelled()).thenReturn(false);
 
         PaperListenerTestSupport.fire(listener, purchase);
-        Assertions.assertTrue(api.submissions.isEmpty());
-
-        listener.confirmTrade(tradeConfirmation(player, false));
-        nextTick.runAll();
 
         var payload = PaperPayloadNbtCodec.decode(api.submissions.element().payload());
         Assertions.assertEquals(
@@ -507,29 +457,6 @@ class PaperPlayerItemAuditListenerTest {
         );
     }
 
-    private static PaperPlayerItemAuditListener listener(
-        PaperBlockEventTestSupport.RecordingApi api,
-        BiConsumer<Player, Runnable> nextTickExecutor
-    ) {
-        return PaperPlayerItemAuditListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC),
-            nextTickExecutor
-        );
-    }
-
-    private static PlayerStatisticIncrementEvent tradeConfirmation(
-        Player player,
-        boolean cancelled
-    ) {
-        var event = Mockito.mock(PlayerStatisticIncrementEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getStatistic()).thenReturn(Statistic.TRADED_WITH_VILLAGER);
-        Mockito.when(event.isCancelled()).thenReturn(cancelled);
-        return event;
-    }
-
     private static Player player(World world, double x, double y, double z) {
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
@@ -591,21 +518,5 @@ class PaperPlayerItemAuditListenerTest {
 
     private static String string(CompoundTag tag, String key) {
         return tag.getString(key).orElseThrow();
-    }
-
-    private static final class TestNextTickExecutor implements BiConsumer<Player, Runnable> {
-
-        private final ArrayDeque<Runnable> tasks = new ArrayDeque<>();
-
-        @Override
-        public void accept(Player player, Runnable task) {
-            this.tasks.addLast(task);
-        }
-
-        private void runAll() {
-            while (!this.tasks.isEmpty()) {
-                this.tasks.removeFirst().run();
-            }
-        }
     }
 }

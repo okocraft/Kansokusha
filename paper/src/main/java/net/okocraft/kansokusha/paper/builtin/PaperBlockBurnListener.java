@@ -2,27 +2,18 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
-import org.bukkit.block.Block;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBurnEvent;
-import org.bukkit.event.block.TNTPrimeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
-import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
@@ -36,11 +27,6 @@ public final class PaperBlockBurnListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final Map<BlockBurnEvent, Snapshot> inFlight = new IdentityHashMap<>();
-    private final PaperTntTransitionTracker<Snapshot> pendingTntBurns =
-        new PaperTntTransitionTracker<>();
-    private final Map<com.destroystokyo.paper.event.block.TNTPrimeEvent, LegacyTntPrimeCapture>
-        legacyTntPrimeCaptures = new IdentityHashMap<>();
 
     private PaperBlockBurnListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -57,143 +43,30 @@ public final class PaperBlockBurnListener implements Listener {
         return new PaperBlockBurnListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(BlockBurnEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(BlockBurnEvent event) {
         Objects.requireNonNull(event, "event");
+
         var block = event.getBlock();
-        var source = source(event.getIgnitingBlock());
-        var snapshot = new Snapshot(
+        // Burning TNT is primed instead of destroyed; tnt_prime records it.
+        if (block.getType() == Material.TNT && PaperBuiltInSupport.tntExplodes(block.getWorld())) {
+            return;
+        }
+
+        var source = event.getIgnitingBlock();
+        this.api.submit(new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
             this.clock.instant(),
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            block.getType() == Material.TNT,
+            null,
             PaperBlockEventPayloadCodec.encodeBurn(
                 block.getBlockData(),
-                source == null ? null : source.position(),
-                source == null ? null : source.state()
+                source == null ? null : position(source),
+                source == null ? null : source.getBlockData()
             )
-        );
-        synchronized (this.inFlight) {
-            this.inFlight.put(event, snapshot);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(BlockBurnEvent event) {
-        Objects.requireNonNull(event, "event");
-        Snapshot snapshot;
-        synchronized (this.inFlight) {
-            snapshot = this.inFlight.remove(event);
-        }
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-        if (snapshot.awaitTntPrime()) {
-            synchronized (this.inFlight) {
-                this.pendingTntBurns.add(snapshot.worldKey(), snapshot.position(), snapshot);
-            }
-            return;
-        }
-        submit(snapshot);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeTntPrime(TNTPrimeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.getCause() != TNTPrimeEvent.PrimeCause.FIRE || !event.isCancelled()) {
-            return;
-        }
-        removePendingTntBurn(event.getBlock());
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    @SuppressWarnings({"deprecation", "removal"})
-    public void captureTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
-            return;
-        }
-        synchronized (this.inFlight) {
-            this.legacyTntPrimeCaptures.put(
-                event,
-                new LegacyTntPrimeCapture(event.getBlock().getType() == Material.FIRE)
-            );
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    @SuppressWarnings({"deprecation", "removal"})
-    public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.getReason() != com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE) {
-            return;
-        }
-        LegacyTntPrimeCapture capture;
-        synchronized (this.inFlight) {
-            capture = this.legacyTntPrimeCaptures.remove(event);
-        }
-        var snapshot = removePendingTntBurn(event.getBlock());
-        if (snapshot == null) {
-            return;
-        }
-        if (event.isCancelled()) {
-            if (
-                capture == null
-                    || !capture.alreadyBurned()
-                    || event.getBlock().getType() != Material.FIRE
-            ) {
-                return;
-            }
-        }
-        submit(snapshot);
-    }
-
-    int inFlightCount() {
-        synchronized (this.inFlight) {
-            return this.inFlight.size()
-                + this.pendingTntBurns.size()
-                + this.legacyTntPrimeCaptures.size();
-        }
-    }
-
-    private void submit(Snapshot snapshot) {
-        this.api.submit(new EventSubmission(
-            EVENT_TYPE,
-            PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
-            snapshot.worldKey(),
-            snapshot.position(),
-            null,
-            snapshot.payload()
         ));
-    }
-
-    private @Nullable Snapshot removePendingTntBurn(Block block) {
-        synchronized (this.inFlight) {
-            return this.pendingTntBurns.remove(block);
-        }
-    }
-
-    private static @Nullable SourceBlock source(@Nullable Block block) {
-        return block == null ? null : new SourceBlock(position(block), block.getBlockData());
-    }
-
-
-    private record SourceBlock(BlockPosition position, BlockData state) {
-    }
-
-    private record LegacyTntPrimeCapture(boolean alreadyBurned) {
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        boolean awaitTntPrime,
-        EventPayload payload
-    ) {
     }
 }

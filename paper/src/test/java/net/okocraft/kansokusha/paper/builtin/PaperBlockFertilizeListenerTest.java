@@ -6,12 +6,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CocoaBlock;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.TreeType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockFertilizeEvent;
-import org.bukkit.event.world.StructureGrowEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -20,7 +17,6 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -176,75 +172,6 @@ class PaperBlockFertilizeListenerTest {
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Mockito.verify(changed, Mockito.never()).getBlockData();
-    }
-
-    @Test
-    void testStructureGrowDuplicateTransitionHasSingleFertilizationCanonicalSource()
-        throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var deferred = new ArrayDeque<Runnable>();
-        var clock = Clock.fixed(OCCURRED_AT, ZoneOffset.UTC);
-        var natural = PaperNaturalBlockChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            clock,
-            (location, task) -> deferred.add(task)
-        );
-        var fertilize = PaperBlockFertilizeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            clock
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var source = PaperBlockEventTestSupport.block(
-            world, 20, 64, 20, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
-        );
-        var changedBlock = PaperBlockEventTestSupport.block(
-            world, 20, 65, 20, Blocks.AIR.defaultBlockState(), Material.AIR
-        );
-        var first = PaperBlockEventTestSupport.state(
-            world, changedBlock, 20, 65, 20, Blocks.OAK_LOG.defaultBlockState()
-        );
-        var last = PaperBlockEventTestSupport.state(
-            world, changedBlock, 20, 65, 20, Blocks.BIRCH_LOG.defaultBlockState()
-        );
-        var changedStates = new ArrayList<org.bukkit.block.BlockState>();
-        changedStates.add(first);
-
-        var structure = Mockito.mock(StructureGrowEvent.class);
-        Mockito.when(structure.isFromBonemeal()).thenReturn(false);
-        Mockito.when(structure.getSpecies()).thenReturn(TreeType.TREE);
-        Mockito.when(structure.getBlocks()).thenReturn(changedStates);
-        Mockito.when(structure.getLocation()).thenReturn(new Location(world, 20, 64, 20));
-
-        natural.capture(structure);
-        changedStates.add(last);
-        natural.finalizeEvent(structure);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(1, deferred.size());
-
-        var event = Mockito.mock(BlockFertilizeEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(source);
-        Mockito.when(event.getBlocks()).thenReturn(changedStates);
-
-        natural.capture(event);
-        natural.discardFertilizedChanges(event);
-        PaperListenerTestSupport.fire(fertilize, event);
-        deferred.remove().run();
-
-        Assertions.assertEquals(1, api.submissions.size());
-        var submission = api.submissions.remove();
-        Assertions.assertEquals(PaperBlockFertilizeListener.EVENT_TYPE, submission.eventType());
-        Assertions.assertNull(submission.subject());
-        Assertions.assertEquals(
-            fertilizePayload(
-                Blocks.AIR.defaultBlockState(),
-                Blocks.BIRCH_LOG.defaultBlockState(),
-                new BlockPosition(20, 64, 20)
-            ),
-            PaperPayloadNbtCodec.decode(submission.payload())
-        );
     }
 
     private static CompoundTag fertilizePayload(

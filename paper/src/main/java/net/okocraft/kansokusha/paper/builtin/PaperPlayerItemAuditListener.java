@@ -12,7 +12,6 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Location;
-import org.bukkit.Statistic;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -23,18 +22,12 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerTakeLecternBookEvent;
-import org.bukkit.event.player.PlayerStatisticIncrementEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
-import java.util.function.BiConsumer;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -54,40 +47,18 @@ public final class PaperPlayerItemAuditListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final BiConsumer<Player, Runnable> nextTickExecutor;
-    private final Map<UUID, PendingPurchase> pendingPurchases = new HashMap<>();
 
-    private PaperPlayerItemAuditListener(
-        KansokushaApi api,
-        Key serverKey,
-        Clock clock,
-        BiConsumer<Player, Runnable> nextTickExecutor
-    ) {
+    private PaperPlayerItemAuditListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.nextTickExecutor = Objects.requireNonNull(nextTickExecutor, "nextTickExecutor");
     }
 
     public static PaperPlayerItemAuditListener register(KansokushaApi api, Key serverKey) {
-        return register(
-            api,
-            serverKey,
-            Clock.systemUTC(),
-            PaperPlayerItemAuditListener::scheduleNextTick
-        );
+        return register(api, serverKey, Clock.systemUTC());
     }
 
     static PaperPlayerItemAuditListener register(KansokushaApi api, Key serverKey, Clock clock) {
-        return register(api, serverKey, clock, (player, task) -> task.run());
-    }
-
-    static PaperPlayerItemAuditListener register(
-        KansokushaApi api,
-        Key serverKey,
-        Clock clock,
-        BiConsumer<Player, Runnable> nextTickExecutor
-    ) {
         PaperBuiltInSupport.register(
             api,
             ITEM_DROP_EVENT_TYPE,
@@ -96,7 +67,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
             LECTERN_CHANGE_EVENT_TYPE,
             PLAYER_TRADE_EVENT_TYPE
         );
-        return new PaperPlayerItemAuditListener(api, serverKey, clock, nextTickExecutor);
+        return new PaperPlayerItemAuditListener(api, serverKey, clock);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -189,6 +160,9 @@ public final class PaperPlayerItemAuditListener implements Listener {
         );
     }
 
+    /**
+     * Handles both PlayerPurchaseEvent and its subclass PlayerTradeEvent, which share one handler list.
+     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void recordPurchase(PlayerPurchaseEvent event) {
         Objects.requireNonNull(event, "event");
@@ -197,7 +171,8 @@ public final class PaperPlayerItemAuditListener implements Listener {
         var merchant = event.getMerchant();
         var location =
             merchant instanceof Entity entity ? entity.getLocation() : player.getLocation();
-        var pending = new PendingPurchase(
+        this.submit(
+            PLAYER_TRADE_EVENT_TYPE,
             this.common(player, location),
             PaperPlayerItemAuditPayloadCodec.encodePlayerTrade(
                 event instanceof PlayerTradeEvent ? PLAYER_TRADE_SOURCE : PLAYER_PURCHASE_SOURCE,
@@ -207,29 +182,6 @@ public final class PaperPlayerItemAuditListener implements Listener {
                 event.willIncreaseTradeUses()
             )
         );
-        synchronized (this.pendingPurchases) {
-            this.pendingPurchases.put(player.getUniqueId(), pending);
-        }
-        this.nextTickExecutor.accept(
-            player,
-            () -> this.discardPendingPurchase(player.getUniqueId(), pending)
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void confirmTrade(PlayerStatisticIncrementEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.getStatistic() != Statistic.TRADED_WITH_VILLAGER) {
-            return;
-        }
-
-        PendingPurchase pending;
-        synchronized (this.pendingPurchases) {
-            pending = this.pendingPurchases.remove(event.getPlayer().getUniqueId());
-        }
-        if (pending != null) {
-            this.submit(PLAYER_TRADE_EVENT_TYPE, pending.common(), pending.payload());
-        }
     }
 
     private CommonSnapshot common(Player player, Location location) {
@@ -250,21 +202,6 @@ public final class PaperPlayerItemAuditListener implements Listener {
             PaperBuiltInSupport.position(block),
             new PlayerSubject(player.getUniqueId())
         );
-    }
-
-    private void discardPendingPurchase(UUID playerId, PendingPurchase expected) {
-        synchronized (this.pendingPurchases) {
-            if (this.pendingPurchases.get(playerId) == expected) {
-                this.pendingPurchases.remove(playerId);
-            }
-        }
-    }
-
-    private static void scheduleNextTick(Player player, Runnable task) {
-        var plugin = JavaPlugin.getProvidingPlugin(PaperPlayerItemAuditListener.class);
-        if (!player.getScheduler().execute(plugin, task, task, 1L)) {
-            task.run();
-        }
     }
 
     private void submit(Key eventType, CommonSnapshot common, EventPayload payload) {
@@ -293,8 +230,5 @@ public final class PaperPlayerItemAuditListener implements Listener {
         BlockPosition position,
         PlayerSubject subject
     ) {
-    }
-
-    private record PendingPurchase(CommonSnapshot common, EventPayload payload) {
     }
 }

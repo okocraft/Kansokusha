@@ -5,6 +5,8 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import org.bukkit.GameRules;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -25,6 +27,14 @@ final class PaperBuiltInSupport {
         for (var eventType : eventTypes) {
             api.registerEventType(new EventTypeDefinition(eventType, PayloadGeneration.FIRST));
         }
+    }
+
+    /**
+     * Whether TNT primes instead of being destroyed. While this is true, a TNT block that is
+     * lit or exploded is recorded as tnt_prime rather than as a block change.
+     */
+    static boolean tntExplodes(World world) {
+        return Boolean.TRUE.equals(world.getGameRuleValue(GameRules.TNT_EXPLODES));
     }
 
     static BlockPosition position(Block block) {

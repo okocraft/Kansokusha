@@ -26,13 +26,6 @@ class PaperBuiltInListenersTest {
         PaperPlayerCommandListener.class,
         PaperServerCommandListener.class
     );
-    private static final Set<Class<?>> PENDING_CORRELATION_LISTENERS = Set.of(
-        PaperBlockIgniteListener.class,
-        PaperBlockBurnListener.class,
-        PaperTntPrimeListener.class,
-        PaperExplosionBlockChangeListener.class,
-        PaperNaturalBlockChangeListener.class
-    );
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -63,12 +56,9 @@ class PaperBuiltInListenersTest {
         var api = new RegistrationRecordingApi();
         for (var factory : PaperBuiltInListeners.FACTORIES) {
             var listenerClass = factory.apply(api, SERVER_KEY).getClass();
-            if (PENDING_CORRELATION_LISTENERS.contains(listenerClass)) {
-                continue;
-            }
             for (var method : listenerClass.getDeclaredMethods()) {
                 var handler = method.getAnnotation(EventHandler.class);
-                if (handler == null || method.getName().equals("confirmTrade")) {
+                if (handler == null) {
                     continue;
                 }
                 var name = listenerClass.getSimpleName() + "#" + method.getName();
