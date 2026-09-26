@@ -5,6 +5,7 @@ import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.common.id.TimeBasedUUID;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import net.okocraft.kansokusha.common.storage.StorageHealth;
@@ -35,6 +36,7 @@ public final class DuckDbStorageImpl implements Storage {
 
     private static final String CREATE_EVENTS_TABLE = """
         CREATE TABLE IF NOT EXISTS events (
+            event_id UUID NOT NULL,
             event_type VARCHAR NOT NULL,
             payload_generation INTEGER NOT NULL,
             occurred_at TIMESTAMP_MS NOT NULL,
@@ -53,6 +55,7 @@ public final class DuckDbStorageImpl implements Storage {
         """;
 
     private static final List<String> EVENTS_COLUMNS = List.of(
+        "event_id",
         "event_type",
         "payload_generation",
         "occurred_at",
@@ -112,6 +115,7 @@ public final class DuckDbStorageImpl implements Storage {
             for (var queued : events) {
                 var event = queued.submission();
                 appender.beginRow()
+                    .append(TimeBasedUUID.generate())
                     .append(this.encode(event.eventType()))
                     .append(event.payloadGeneration().value())
                     .appendEpochMillis(queued.occurredAtMillis());
