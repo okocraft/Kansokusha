@@ -87,6 +87,22 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testAppenderCanBeReusedAcrossTransactions(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        try (var storage = DuckDbStorage.open(file)) {
+            storage.append(List.of(queued(event(SHORT))));
+            Assertions.assertEquals(0, storage.deleteExpired(NOW.minusMillis(1)));
+            storage.append(List.of(queued(event(LONG))));
+        }
+
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery("SELECT count(*) FROM events")) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(2, rows.getLong(1));
+        }
+    }
+
+    @Test
     void testReopeningKeepsExistingEvents(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         try (var storage = DuckDbStorage.open(file)) {
