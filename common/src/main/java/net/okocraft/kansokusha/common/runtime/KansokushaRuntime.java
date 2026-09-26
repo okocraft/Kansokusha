@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
 import net.okocraft.kansokusha.common.storage.PlayerNameObservation;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
@@ -22,6 +23,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -45,7 +47,7 @@ import java.util.function.Consumer;
  * access is never concurrent.</p>
  */
 @NotNullByDefault
-public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirectory, AutoCloseable {
+public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirectory, EventSearchBackend, AutoCloseable {
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
@@ -156,7 +158,19 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     public boolean submit(EventSubmission submission) {
         var registered = this.requireRegisteredEventType(submission);
         // Validate here so that one invalid event cannot make the whole batch fail to write.
-        return this.enqueue(toQueuedEvent(submission, registered.retentionMillis(), null));
+        return this.enqueue(toQueuedEvent(submission, registered.retentionMillis(), null, null));
+    }
+
+    @Override
+    public boolean submitSearchable(EventSubmission submission, String searchText) {
+        Objects.requireNonNull(searchText, "searchText");
+        var registered = this.requireRegisteredEventType(submission);
+        return this.enqueue(toQueuedEvent(
+            submission,
+            registered.retentionMillis(),
+            null,
+            searchText
+        ));
     }
 
     @Override
@@ -184,7 +198,8 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
                 submission,
                 occurredAtMillis,
                 loginExpiresAtMillis,
-                new PlayerNameObservation(username, nameChangeExpiresAtMillis)
+                new PlayerNameObservation(username, nameChangeExpiresAtMillis),
+                null
             ));
         } catch (ArithmeticException e) {
             throw new IllegalArgumentException(
@@ -202,6 +217,12 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     @Override
     public CompletableFuture<List<String>> offlinePlayerNames() {
         return this.queryStorage(this.storage::offlinePlayerNames);
+    }
+
+    @Override
+    public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
+        Objects.requireNonNull(literal, "literal");
+        return this.queryStorage(() -> this.storage.findEventIdsContaining(literal));
     }
 
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
@@ -236,7 +257,8 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     private static QueuedEvent toQueuedEvent(
         EventSubmission submission,
         long retentionMillis,
-        @Nullable PlayerNameObservation playerNameObservation
+        @Nullable PlayerNameObservation playerNameObservation,
+        @Nullable String searchText
     ) {
         try {
             // toEpochMilli() rounds towards negative infinity, the same as truncating to milliseconds.
@@ -245,7 +267,8 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
                 submission,
                 requireStorableMillis(occurredAtMillis),
                 requireStorableMillis(Math.addExact(occurredAtMillis, retentionMillis)),
-                playerNameObservation
+                playerNameObservation,
+                searchText
             );
         } catch (ArithmeticException e) {
             throw new IllegalArgumentException("occurredAt is out of range: " + submission.occurredAt(), e);
