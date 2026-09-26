@@ -19,6 +19,7 @@ class RetentionPolicySetTest {
     private static final Key AUDIT_POLICY = Key.key("test", "audit");
     private static final Key AUDIT_EVENT = Key.key("test", "audit-event");
     private static final Key OTHER_EVENT = Key.key("test", "other-event");
+    private static final Key NATURAL_QUALIFIER = Key.key("test", "natural");
     private static final Key SERVER_KEY = Key.key("test", "server");
     private static final EventPayload PAYLOAD = EventPayload.copyOf(new byte[]{1});
 
@@ -49,6 +50,39 @@ class RetentionPolicySetTest {
             Instant.parse("2026-01-02T04:04:05.987Z"),
             fallback.expiresAt()
         );
+    }
+
+
+    @Test
+    void testQualifiedMappingOverridesExactMappingWithoutChangingFallback() throws Exception {
+        var settings = new KansokushaConfig.RetentionSettings(
+            Map.of(
+                SHORT_POLICY, Duration.ofDays(7),
+                AUDIT_POLICY, Duration.ofDays(180)
+            ),
+            Map.of(AUDIT_EVENT, AUDIT_POLICY),
+            Map.of(
+                new KansokushaConfig.QualifiedEventType(AUDIT_EVENT, NATURAL_QUALIFIER),
+                SHORT_POLICY
+            ),
+            SHORT_POLICY
+        );
+        var policySet = RetentionPolicySet.from(settings);
+        var occurredAt = Instant.parse("2026-01-02T03:04:05Z");
+
+        var qualified = policySet.resolve(
+            submission(
+                AUDIT_EVENT,
+                occurredAt,
+                PAYLOAD.withRetentionQualifier(NATURAL_QUALIFIER)
+            )
+        );
+        var exact = policySet.resolve(submission(AUDIT_EVENT, occurredAt));
+        var fallback = policySet.resolve(submission(OTHER_EVENT, occurredAt));
+
+        Assertions.assertEquals(SHORT_POLICY, qualified.retentionPolicyKey());
+        Assertions.assertEquals(AUDIT_POLICY, exact.retentionPolicyKey());
+        Assertions.assertEquals(SHORT_POLICY, fallback.retentionPolicyKey());
     }
 
     @Test
@@ -179,6 +213,14 @@ class RetentionPolicySetTest {
     }
 
     private static EventSubmission submission(Key eventType, Instant occurredAt) {
+        return submission(eventType, occurredAt, PAYLOAD);
+    }
+
+    private static EventSubmission submission(
+        Key eventType,
+        Instant occurredAt,
+        EventPayload payload
+    ) {
         return new EventSubmission(
             eventType,
             PayloadGeneration.FIRST,
@@ -187,7 +229,7 @@ class RetentionPolicySetTest {
             null,
             null,
             null,
-            PAYLOAD
+            payload
         );
     }
 }
