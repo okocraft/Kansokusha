@@ -93,6 +93,48 @@ class SearchQueryParserTest {
     }
 
     @Test
+    void testPartialIncludeExcludeOverlapRemainsValid() {
+        var query = parse("user Alice user Bob exclude user Alice");
+
+        Assertions.assertEquals(Set.of("Alice", "Bob"), query.conditions().users());
+        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
+    }
+
+    @Test
+    void testCrossFieldExclusionDoesNotCreateFalseContradiction() {
+        var query = parse(
+            "user Alice action block_break "
+                + "exclude user Alice exclude action block_place"
+        );
+
+        Assertions.assertEquals(Set.of("Alice"), query.conditions().users());
+        Assertions.assertEquals(
+            Set.of(Key.key("kansokusha", "block_break")),
+            query.conditions().actions()
+        );
+        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
+        Assertions.assertEquals(
+            Set.of(Key.key("kansokusha", "block_place")),
+            query.exclusions().actions()
+        );
+    }
+
+    @Test
+    void testIncludePredicateFullyCoveredByExcludePredicateIsRejected() {
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> parse("user Alice exclude user Alice exclude user Bob")
+        );
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> parse(
+                "user Alice action block_break "
+                    + "exclude user Alice exclude action block_break exclude action block_place"
+            )
+        );
+    }
+
+    @Test
     void testActionNamespaceOmissionOnlyDefaultsToKansokusha() {
         var query = parse("action block_break action example:custom_event");
 
