@@ -25,6 +25,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.Locale;
 import java.util.Properties;
 
@@ -350,6 +352,16 @@ public final class DuckDbStorage {
         @Override
         public void append(List<QueuedEvent> events) throws SQLException {
             this.delegate.append(events);
+        }
+
+        @Override
+        public Optional<UUID> resolvePlayerName(String name) throws SQLException {
+            return this.delegate.resolvePlayerName(name);
+        }
+
+        @Override
+        public List<String> offlinePlayerNames() throws SQLException {
+            return this.delegate.offlinePlayerNames();
         }
 
         @Override
