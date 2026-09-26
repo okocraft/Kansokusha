@@ -51,7 +51,7 @@ class PaperPayloadSizeTest {
                 .append(" legacy=").append(legacy)
                 .append(" compact=").append(compact)
                 .append(" reduction=").append(String.format("%.1f%%", reductionPercent(legacy, compact)))
-                .append("\n");
+                .append("; ");
         }
 
         var totalReduction = reductionPercent(legacyTotal, compactTotal);
