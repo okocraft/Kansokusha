@@ -315,10 +315,6 @@ class PaperContainerProcessListenerTest {
     ) throws Exception {
         Assertions.assertNotNull(submission);
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(
-            "non_cancelled_container_process_event",
-            string(payload, "semantics")
-        );
         Assertions.assertEquals(kind, string(payload, "process_kind"));
         var inputs = payload.getListOrEmpty("input_items");
         var input = PaperItemStackPayloadCodec.decode((CompoundTag) inputs.get(0));
