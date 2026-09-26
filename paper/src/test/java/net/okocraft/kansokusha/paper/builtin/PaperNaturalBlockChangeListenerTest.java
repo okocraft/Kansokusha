@@ -1,11 +1,13 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
@@ -62,7 +64,8 @@ class PaperNaturalBlockChangeListenerTest {
         Assertions.assertEquals(PaperNaturalBlockChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(11, 64, 0), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "fire")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "fire"), submission.targetType());
         Assertions.assertEquals(
             naturalPayload(
                 Blocks.AIR.defaultBlockState(),

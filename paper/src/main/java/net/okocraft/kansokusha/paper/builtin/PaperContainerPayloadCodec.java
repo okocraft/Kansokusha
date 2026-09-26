@@ -3,6 +3,8 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
@@ -33,12 +35,15 @@ final class PaperContainerPayloadCodec {
         payload.putInt("size", inventory.getSize());
 
         var holder = inventory.getHolder();
+        EventActor holderActor = null;
         if (holder instanceof Entity entity) {
+            holderActor = PaperBuiltInSupport.actor(entity);
             payload.putString("holder_kind", "entity");
             payload.putString("holder_uuid", entity.getUniqueId().toString());
             payload.putString("holder_type", entity.getType().name().toLowerCase(Locale.ROOT));
         } else if (holder instanceof BlockState state) {
             payload.putString("holder_kind", "block");
+            holderActor = new BlockActor(PaperBuiltInSupport.type(state.getType()));
             payload.putString("holder_block_type", state.getType().key().asString());
         } else if (holder == null) {
             payload.putString("holder_kind", "none");
@@ -50,9 +55,9 @@ final class PaperContainerPayloadCodec {
         var location = snapshotLocation(inventory.getLocation());
         if (location != null) {
             payload.put("location", location.payload());
-            return new InventorySnapshot(payload, location.worldKey(), location.position());
+            return new InventorySnapshot(payload, location.worldKey(), location.position(), holderActor);
         }
-        return new InventorySnapshot(payload, null, null);
+        return new InventorySnapshot(payload, null, null, holderActor);
     }
 
     static InventorySnapshot snapshotBlockContainer(Block block, @Nullable Inventory inventory) {
@@ -79,7 +84,8 @@ final class PaperContainerPayloadCodec {
         return new InventorySnapshot(
             payload,
             PaperKansokusha.key(block.getWorld().getKey()),
-            PaperBuiltInSupport.position(block)
+            PaperBuiltInSupport.position(block),
+            new BlockActor(PaperBuiltInSupport.type(block.getType()))
         );
     }
 
@@ -193,7 +199,8 @@ final class PaperContainerPayloadCodec {
     record InventorySnapshot(
         CompoundTag payload,
         @Nullable Key worldKey,
-        @Nullable BlockPosition position
+        @Nullable BlockPosition position,
+        @Nullable EventActor holder
     ) {
     }
 

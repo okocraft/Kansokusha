@@ -5,8 +5,6 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -64,7 +62,8 @@ public final class PaperEntityBreakListener implements Listener {
                     (int) Math.floor(brokenEntity.y()),
                     (int) Math.floor(brokenEntity.z())
                 ),
-                remover instanceof Player player ? new PlayerSubject(player.getUniqueId()) : null,
+                PaperBuiltInSupport.actor(remover),
+                PaperBuiltInSupport.entityType(event.getEntity()),
                 PaperEntityEventPayloadCodec.encodeBreak(
                     brokenEntity,
                     PaperEntityEventPayloadCodec.snapshotEntity(remover),

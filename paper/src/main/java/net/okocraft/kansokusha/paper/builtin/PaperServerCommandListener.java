@@ -77,6 +77,7 @@ public final class PaperServerCommandListener implements Listener {
                 this.serverKey,
                 source.worldKey(),
                 source.position(),
+                PaperAdministrativeSource.actor(event.getSender()),
                 null,
                 PaperCommunicationPayloadCodec.encodeServerCommand(
                     source.kind(),

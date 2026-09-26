@@ -1,11 +1,13 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LayeredCauldronBlock;
+import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -69,7 +71,8 @@ class PaperCauldronLevelChangeListenerTest {
         Assertions.assertEquals(PaperCauldronLevelChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(10, 64, 10), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "water_cauldron"), submission.targetType());
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,
@@ -84,7 +87,7 @@ class PaperCauldronLevelChangeListenerTest {
     }
 
     @Test
-    void testNonPlayerActorIsPayloadMetadataWithoutSubject() throws Exception {
+    void testNonPlayerActorIsRecordedAsEntityActor() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperCauldronLevelChangeListener.register(
             api,
@@ -114,7 +117,8 @@ class PaperCauldronLevelChangeListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new EntityActor(ENTITY_ID, Key.key("minecraft", "zombie")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "water_cauldron"), submission.targetType());
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,
@@ -155,7 +159,7 @@ class PaperCauldronLevelChangeListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,

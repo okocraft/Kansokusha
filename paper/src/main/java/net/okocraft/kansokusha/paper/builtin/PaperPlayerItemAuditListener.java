@@ -5,13 +5,14 @@ import io.papermc.paper.event.player.PlayerPurchaseEvent;
 import io.papermc.paper.event.player.PlayerTradeEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -24,6 +25,7 @@ import org.bukkit.event.player.PlayerEditBookEvent;
 import org.bukkit.event.player.PlayerTakeLecternBookEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -79,6 +81,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             ITEM_DROP_EVENT_TYPE,
             this.common(event.getPlayer(), location),
+            PaperBuiltInSupport.itemType(item.getItemStack()),
             PaperPlayerItemAuditPayloadCodec.encodeItemEntityChange(
                 item.getUniqueId(),
                 PaperAdditionalBuiltInPayloadCodec.snapshotItem(item.getItemStack()),
@@ -101,6 +104,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             ITEM_PICKUP_EVENT_TYPE,
             this.common(player, location),
+            PaperBuiltInSupport.itemType(item.getItemStack()),
             PaperPlayerItemAuditPayloadCodec.encodeItemEntityChange(
                 item.getUniqueId(),
                 PaperAdditionalBuiltInPayloadCodec.snapshotItem(item.getItemStack()),
@@ -121,6 +125,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             BOOK_EDIT_EVENT_TYPE,
             this.common(player, player.getLocation()),
+            PaperBuiltInSupport.type(signing ? Material.WRITTEN_BOOK : Material.WRITABLE_BOOK),
             PaperPlayerItemAuditPayloadCodec.encodeBookEdit(
                 bookSlot(event),
                 PaperPlayerItemAuditPayloadCodec.snapshotBookMeta(event.getPreviousBookMeta(), false),
@@ -137,6 +142,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             LECTERN_CHANGE_EVENT_TYPE,
             this.common(event.getPlayer(), event.getBlock()),
+            PaperBuiltInSupport.itemType(event.getBook()),
             PaperPlayerItemAuditPayloadCodec.encodeLecternChange(
                 "insert",
                 PaperAdditionalBuiltInPayloadCodec.snapshotItem(null),
@@ -152,6 +158,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             LECTERN_CHANGE_EVENT_TYPE,
             this.common(event.getPlayer(), event.getLectern().getBlock()),
+            PaperBuiltInSupport.itemType(event.getBook()),
             PaperPlayerItemAuditPayloadCodec.encodeLecternChange(
                 "take",
                 PaperAdditionalBuiltInPayloadCodec.snapshotItem(event.getBook()),
@@ -174,6 +181,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         this.submit(
             PLAYER_TRADE_EVENT_TYPE,
             this.common(player, location),
+            PaperBuiltInSupport.itemType(event.getTrade().getResult()),
             PaperPlayerItemAuditPayloadCodec.encodePlayerTrade(
                 event instanceof PlayerTradeEvent ? PLAYER_TRADE_SOURCE : PLAYER_PURCHASE_SOURCE,
                 merchant,
@@ -191,7 +199,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
             this.clock.instant(),
             PaperKansokusha.key(world.getKey()),
             new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ()),
-            new PlayerSubject(player.getUniqueId())
+            new PlayerActor(player.getUniqueId())
         );
     }
 
@@ -200,11 +208,16 @@ public final class PaperPlayerItemAuditListener implements Listener {
             this.clock.instant(),
             PaperKansokusha.key(block.getWorld().getKey()),
             PaperBuiltInSupport.position(block),
-            new PlayerSubject(player.getUniqueId())
+            new PlayerActor(player.getUniqueId())
         );
     }
 
-    private void submit(Key eventType, CommonSnapshot common, EventPayload payload) {
+    private void submit(
+        Key eventType,
+        CommonSnapshot common,
+        @Nullable Key targetType,
+        EventPayload payload
+    ) {
         this.api.submit(
             new EventSubmission(
                 eventType,
@@ -213,7 +226,8 @@ public final class PaperPlayerItemAuditListener implements Listener {
                 this.serverKey,
                 common.worldKey(),
                 common.position(),
-                common.subject(),
+                common.actor(),
+                targetType,
                 payload
             )
         );
@@ -228,7 +242,7 @@ public final class PaperPlayerItemAuditListener implements Listener {
         Instant occurredAt,
         Key worldKey,
         BlockPosition position,
-        PlayerSubject subject
+        PlayerActor actor
     ) {
     }
 }

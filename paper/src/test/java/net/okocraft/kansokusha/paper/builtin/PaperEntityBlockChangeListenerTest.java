@@ -1,8 +1,10 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.world.level.block.Blocks;
+import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Material;
 import org.bukkit.entity.Enderman;
 import org.bukkit.entity.EntityType;
@@ -57,7 +59,8 @@ class PaperEntityBlockChangeListenerTest {
         var submission = api.submissions.remove();
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(10, 64, 10), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "sand"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(Blocks.SAND.defaultBlockState().asBlockData()),
@@ -75,7 +78,7 @@ class PaperEntityBlockChangeListenerTest {
     }
 
     @Test
-    void testNonPlayerActorHasNoCommonSubject() throws Exception {
+    void testNonPlayerActorIsRecordedAsEntityActor() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperEntityBlockChangeListener.register(
             api,
@@ -97,7 +100,8 @@ class PaperEntityBlockChangeListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new EntityActor(actorId, Key.key("minecraft", "enderman")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "grass_block"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("ENDERMAN", payload.getString("actor_entity_type").orElseThrow());
     }
@@ -153,7 +157,8 @@ class PaperEntityBlockChangeListenerTest {
         var submission = api.submissions.remove();
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(21, 64, 20), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new EntityActor(actorId, Key.key("minecraft", "zombie")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "oak_door"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             PaperBlockStatePayloadCodec.blockState(Blocks.OAK_DOOR.defaultBlockState().asBlockData()),

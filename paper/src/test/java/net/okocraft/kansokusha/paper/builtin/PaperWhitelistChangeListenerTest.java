@@ -40,7 +40,7 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertEquals(PaperWhitelistChangeListener.EVENT_TYPE, toggleSubmission.eventType());
         Assertions.assertNull(toggleSubmission.worldKey());
         Assertions.assertNull(toggleSubmission.position());
-        Assertions.assertNull(toggleSubmission.subject());
+        Assertions.assertNull(toggleSubmission.actor());
         var togglePayload = PaperPayloadNbtCodec.decode(toggleSubmission.payload());
         Assertions.assertEquals("global_toggle", string(togglePayload, "action"));
         Assertions.assertFalse(togglePayload.getBooleanOr("before_enabled", true));
@@ -76,7 +76,7 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertEquals(PaperWhitelistChangeListener.EVENT_TYPE, profileSubmission.eventType());
         Assertions.assertNull(profileSubmission.worldKey());
         Assertions.assertNull(profileSubmission.position());
-        Assertions.assertNull(profileSubmission.subject());
+        Assertions.assertNull(profileSubmission.actor());
         var profilePayload = PaperPayloadNbtCodec.decode(profileSubmission.payload());
         Assertions.assertEquals("profile_add", string(profilePayload, "action"));
         Assertions.assertFalse(profilePayload.getBooleanOr("before_whitelisted", true));

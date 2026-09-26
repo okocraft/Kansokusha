@@ -8,7 +8,7 @@ import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Rotation;
@@ -78,7 +78,8 @@ class PaperEntityStateChangeListenerTest {
             PaperEntityStateChangeListener.ARMOR_STAND_MANIPULATE_EVENT_TYPE,
             new BlockPosition(12, 64, -7)
         );
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "armor_stand"), submission.targetType());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         assertEntity(payload.getCompoundOrEmpty("target"), TARGET_ID, "minecraft:armor_stand");
@@ -152,7 +153,8 @@ class PaperEntityStateChangeListenerTest {
             PaperEntityStateChangeListener.ENTITY_LEASH_CHANGE_EVENT_TYPE,
             new BlockPosition(6, 65, 5)
         );
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), leashSubmission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), leashSubmission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "cow"), leashSubmission.targetType());
         var leashPayload = PaperPayloadNbtCodec.decode(leashSubmission.payload());
         Assertions.assertEquals("leash", leashPayload.getString("action").orElseThrow());
         Assertions.assertEquals(
@@ -250,7 +252,8 @@ class PaperEntityStateChangeListenerTest {
             PaperEntityStateChangeListener.ITEM_FRAME_CHANGE_EVENT_TYPE,
             new BlockPosition(20, 70, 30)
         );
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "item_frame"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("rotate", payload.getString("action").orElseThrow());
         Assertions.assertEquals(
@@ -376,7 +379,8 @@ class PaperEntityStateChangeListenerTest {
             PaperEntityStateChangeListener.ENTITY_TAME_EVENT_TYPE,
             new BlockPosition(-9, 63, 10)
         );
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "wolf"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         assertEntity(payload.getCompoundOrEmpty("target"), TARGET_ID, "minecraft:wolf");
         assertEntity(
@@ -416,7 +420,8 @@ class PaperEntityStateChangeListenerTest {
             PaperEntityStateChangeListener.ENTITY_NAME_CHANGE_EVENT_TYPE,
             new BlockPosition(9, 81, -3)
         );
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "villager"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         assertEntity(
             payload.getCompoundOrEmpty("target"),

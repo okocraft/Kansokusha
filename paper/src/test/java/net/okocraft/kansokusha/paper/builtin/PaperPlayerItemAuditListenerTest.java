@@ -5,11 +5,12 @@ import io.papermc.paper.event.player.PlayerLecternPageChangeEvent;
 import io.papermc.paper.event.player.PlayerPurchaseEvent;
 import io.papermc.paper.event.player.PlayerTradeEvent;
 import io.papermc.paper.event.player.PlayerInventorySlotChangeEvent;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -79,7 +80,8 @@ class PaperPlayerItemAuditListenerTest {
 
         Assertions.assertEquals(2, api.submissions.size());
         var dropSubmission = submission(api, PaperPlayerItemAuditListener.ITEM_DROP_EVENT_TYPE);
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), dropSubmission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), dropSubmission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "diamond"), dropSubmission.targetType());
         Assertions.assertEquals(new BlockPosition(10, 70, -4), dropSubmission.position());
         var dropPayload = PaperPayloadNbtCodec.decode(dropSubmission.payload());
         Assertions.assertEquals(ITEM_ID.toString(), string(dropPayload, "item_entity_uuid"));
@@ -92,7 +94,8 @@ class PaperPlayerItemAuditListenerTest {
         Assertions.assertTrue(dropPayload.contains("position"));
 
         var pickupSubmission = submission(api, PaperPlayerItemAuditListener.ITEM_PICKUP_EVENT_TYPE);
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), pickupSubmission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), pickupSubmission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "emerald"), pickupSubmission.targetType());
         Assertions.assertEquals(new BlockPosition(20, 71, -5), pickupSubmission.position());
         var pickupPayload = PaperPayloadNbtCodec.decode(pickupSubmission.payload());
         Assertions.assertEquals(ITEM_ID.toString(), string(pickupPayload, "item_entity_uuid"));
@@ -306,7 +309,8 @@ class PaperPlayerItemAuditListenerTest {
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.element();
         Assertions.assertEquals(PaperPlayerItemAuditListener.PLAYER_TRADE_EVENT_TYPE, submission.eventType());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "diamond"), submission.targetType());
         Assertions.assertEquals(new BlockPosition(12, 64, -9), submission.position());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());

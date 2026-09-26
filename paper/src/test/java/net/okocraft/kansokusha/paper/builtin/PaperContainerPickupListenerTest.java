@@ -60,7 +60,7 @@ class PaperContainerPickupListenerTest {
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
         Assertions.assertEquals(new BlockPosition(10, 65, 20), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(

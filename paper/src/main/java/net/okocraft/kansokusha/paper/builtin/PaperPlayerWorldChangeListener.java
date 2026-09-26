@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -62,7 +62,8 @@ public final class PaperPlayerWorldChangeListener implements Listener {
             this.serverKey,
             destination.worldKey(),
             destination.blockPosition(),
-            new PlayerSubject(player.getUniqueId()),
+            new PlayerActor(player.getUniqueId()),
+            null,
             PaperPlayerStatePayloadCodec.encodeWorldChange(
                 PaperKansokusha.key(event.getFrom().getKey()),
                 destination

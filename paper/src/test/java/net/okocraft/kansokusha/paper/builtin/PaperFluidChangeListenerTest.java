@@ -1,8 +1,10 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -51,7 +53,8 @@ class PaperFluidChangeListenerTest {
         Assertions.assertEquals(PaperFluidChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(11, 62, 10), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "water")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "water"), submission.targetType());
 
         var expected = new CompoundTag();
         expected.putString("fluid", "water");

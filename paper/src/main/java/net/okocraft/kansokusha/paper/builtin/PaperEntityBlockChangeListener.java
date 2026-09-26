@@ -4,10 +4,8 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -63,7 +61,6 @@ public final class PaperEntityBlockChangeListener implements Listener {
             return;
         }
 
-        var actorId = actor.getUniqueId();
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -71,11 +68,12 @@ public final class PaperEntityBlockChangeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             PaperBuiltInSupport.position(block),
-            actor instanceof Player ? new PlayerSubject(actorId) : null,
+            PaperBuiltInSupport.actor(actor),
+            PaperBuiltInSupport.changedBlockType(block.getBlockData(), to),
             PaperWorldMutationPayloadCodec.encodeEntityBlockChange(
                 block.getBlockData(),
                 to,
-                actorId,
+                actor.getUniqueId(),
                 actor.getType().name()
             )
         ));

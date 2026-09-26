@@ -2,11 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
@@ -25,14 +23,13 @@ record PaperEntityAttribution(
     @Nullable UUID shooterEntityId,
     @Nullable String shooterEntityType,
     @Nullable BlockReference shooterBlock,
-    @Nullable UUID ownerId,
-    @Nullable PlayerSubject subject
+    @Nullable UUID ownerId
 ) {
 
     static PaperEntityAttribution capture(@Nullable Entity entity) {
         if (entity == null) {
             return new PaperEntityAttribution(
-                null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null
             );
         }
 
@@ -44,18 +41,12 @@ record PaperEntityAttribution(
         String shooterEntityType = null;
         BlockReference shooterBlock = null;
         UUID ownerId = null;
-        PlayerSubject subject = entity instanceof Player
-            ? new PlayerSubject(entityId)
-            : null;
 
         if (entity instanceof TNTPrimed primed) {
             var source = primed.getSource();
             if (source != null) {
                 sourceEntityId = source.getUniqueId();
                 sourceEntityType = source.getType().name();
-                if (subject == null && source instanceof Player) {
-                    subject = new PlayerSubject(sourceEntityId);
-                }
             }
         }
 
@@ -65,9 +56,6 @@ record PaperEntityAttribution(
             if (shooter instanceof Entity shooterEntity) {
                 shooterEntityId = shooterEntity.getUniqueId();
                 shooterEntityType = shooterEntity.getType().name();
-                if (subject == null && shooterEntity instanceof Player) {
-                    subject = new PlayerSubject(shooterEntityId);
-                }
             } else if (shooter instanceof BlockProjectileSource blockSource) {
                 shooterBlock = BlockReference.capture(blockSource.getBlock());
             }
@@ -85,8 +73,7 @@ record PaperEntityAttribution(
             shooterEntityId,
             shooterEntityType,
             shooterBlock,
-            ownerId,
-            subject
+            ownerId
         );
     }
 

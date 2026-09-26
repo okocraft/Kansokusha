@@ -1,7 +1,8 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.damage.DamageSource;
@@ -45,7 +46,8 @@ class PaperEntityBreakListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
-        Assertions.assertEquals(new PlayerSubject(BREAKER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(BREAKER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "item_frame"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("explosion", payload.getString("cause").orElseThrow());
         Assertions.assertEquals(

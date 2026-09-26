@@ -9,7 +9,7 @@ import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.identity.Identity;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,7 +60,7 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
         Assertions.assertEquals(
             "original message",
             VelocityCommunicationPayloadCodec.decodeChat(submission.payload())
@@ -87,7 +87,7 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
         var payload = VelocityCommunicationPayloadCodec.decodeCommand(submission.payload());
         Assertions.assertEquals("player", payload.sourceKind());
         Assertions.assertEquals("TestPlayer", payload.sourceName());
@@ -106,7 +106,7 @@ class VelocityCommunicationSubscriberTest {
 
         var submission = submission(api);
         Assertions.assertNull(submission.serverKey());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
         var payload = VelocityCommunicationPayloadCodec.decodeCommand(submission.payload());
         Assertions.assertEquals("console", payload.sourceKind());
         Assertions.assertEquals("CONSOLE", payload.sourceName());
@@ -125,7 +125,7 @@ class VelocityCommunicationSubscriberTest {
 
         var submission = submission(api);
         Assertions.assertNull(submission.serverKey());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
         var payload = VelocityCommunicationPayloadCodec.decodeCommand(submission.payload());
         Assertions.assertEquals("api", payload.sourceKind());
         Assertions.assertEquals("automation", payload.sourceName());

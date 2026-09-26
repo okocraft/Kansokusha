@@ -1,9 +1,10 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -59,7 +60,8 @@ class PaperBlockIgniteListenerTest {
         Assertions.assertEquals(PaperBlockIgniteListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(10, 64, 20), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "fire"), submission.targetType());
 
         var expected = new CompoundTag();
         expected.put(
@@ -89,7 +91,7 @@ class PaperBlockIgniteListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
-        Assertions.assertNull(api.submissions.remove().subject());
+        Assertions.assertNull(api.submissions.remove().actor());
     }
 
     @Test

@@ -103,6 +103,7 @@ public final class PaperWhitelistChangeListener implements Listener {
             null,
             null,
             null,
+            null,
             payload
         ));
     }

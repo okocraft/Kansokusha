@@ -65,7 +65,8 @@ public final class PaperContainerTransferListener implements Listener {
                 this.serverKey,
                 common == null ? null : common.worldKey(),
                 common == null ? null : common.position(),
-                null,
+                initiator.holder(),
+                PaperBuiltInSupport.itemType(event.getItem()),
                 PaperContainerPayloadCodec.encodeTransfer(
                     source,
                     destination,

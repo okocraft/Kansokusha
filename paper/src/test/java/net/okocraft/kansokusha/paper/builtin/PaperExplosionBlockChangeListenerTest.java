@@ -1,9 +1,11 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.world.level.block.Blocks;
+import net.okocraft.kansokusha.api.actor.EntityActor;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.ExplosionResult;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
@@ -81,7 +83,9 @@ class PaperExplosionBlockChangeListenerTest {
         var byX = submissionsByX(api);
         Assertions.assertEquals(OCCURRED_AT, byX.get(10).occurredAt());
         Assertions.assertEquals(OCCURRED_AT, byX.get(12).occurredAt());
-        Assertions.assertNull(byX.get(10).subject());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "respawn_anchor")), byX.get(10).actor());
+        Assertions.assertEquals(Key.key("minecraft", "stone"), byX.get(10).targetType());
+        Assertions.assertEquals(Key.key("minecraft", "diamond_ore"), byX.get(12).targetType());
 
         var stonePayload = PaperPayloadNbtCodec.decode(byX.get(10).payload());
         Assertions.assertEquals(
@@ -192,7 +196,8 @@ class PaperExplosionBlockChangeListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
-        Assertions.assertEquals(new PlayerSubject(shooterId), submission.subject());
+        Assertions.assertEquals(new EntityActor(projectileId, Key.key("minecraft", "arrow")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "oak_planks"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             projectileId.toString(),
@@ -210,7 +215,7 @@ class PaperExplosionBlockChangeListenerTest {
     }
 
     @Test
-    void testNonPlayerProjectileOwnerDoesNotBecomeCommonPlayerSubject() throws Exception {
+    void testNonPlayerProjectileIsRecordedAsDirectActor() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperExplosionBlockChangeListener.register(
             api,
@@ -239,7 +244,7 @@ class PaperExplosionBlockChangeListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new EntityActor(projectileId, Key.key("minecraft", "fireball")), submission.actor());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             ghastId.toString(),

@@ -3,9 +3,11 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.tags.FluidTags;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.event.EventHandler;
@@ -56,7 +58,9 @@ public final class PaperFluidChangeListener implements Listener {
             return;
         }
 
+        var fluidType = PaperBuiltInSupport.type("water".equals(fluidKind) ? Material.WATER : Material.LAVA);
         var destination = event.getToBlock();
+        var destinationType = destination.getType();
         var destinationPosition = position(destination);
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
@@ -65,7 +69,8 @@ public final class PaperFluidChangeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(destination.getWorld().getKey()),
             destinationPosition,
-            null,
+            new BlockActor(fluidType),
+            destinationType.isAir() ? fluidType : PaperBuiltInSupport.type(destinationType),
             PaperBlockEventPayloadCodec.encodeFluidChange(
                 fluidKind,
                 position(source),

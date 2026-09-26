@@ -7,7 +7,7 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -47,7 +47,7 @@ class VelocityServerConnectedListenerTest {
         Assertions.assertEquals(VelocityServerKeyCodec.encode("lobby").orElseThrow(), submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
         Assertions.assertTrue(
             VelocityServerConnectedPayloadCodec.decode(submission.payload()).isEmpty()
         );

@@ -1,10 +1,11 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -199,8 +200,8 @@ class PaperPlayerSessionListenerTest {
 
         Assertions.assertEquals(PaperPlayerKickListener.EVENT_TYPE, kickSubmission.eventType());
         Assertions.assertEquals(PaperPlayerQuitListener.EVENT_TYPE, quitSubmission.eventType());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), kickSubmission.subject());
-        Assertions.assertEquals(kickSubmission.subject(), quitSubmission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), kickSubmission.actor());
+        Assertions.assertEquals(kickSubmission.actor(), quitSubmission.actor());
         Assertions.assertEquals(kickSubmission.worldKey(), quitSubmission.worldKey());
         Assertions.assertEquals(kickSubmission.position(), quitSubmission.position());
         Assertions.assertEquals(
@@ -237,9 +238,10 @@ class PaperPlayerSessionListenerTest {
         Assertions.assertEquals(eventType, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
-        Assertions.assertEquals(net.kyori.adventure.key.Key.key("example", "world"), submission.worldKey());
+        Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
         Assertions.assertEquals(position, submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertNull(submission.targetType());
     }
 
     private static CompoundTag quitPayload(PlayerQuitEvent.QuitReason reason) {

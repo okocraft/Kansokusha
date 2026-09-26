@@ -3,9 +3,9 @@ package net.okocraft.kansokusha.paper.builtin;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -49,7 +49,7 @@ public final class PaperChatListener implements Listener {
 
         var occurredAt = this.clock.instant();
         var player = event.getPlayer();
-        var subject = new PlayerSubject(player.getUniqueId());
+        var actor = new PlayerActor(player.getUniqueId());
         var payload = PaperCommunicationPayloadCodec.encodeChat(event.originalMessage());
 
         this.api.submit(
@@ -60,7 +60,8 @@ public final class PaperChatListener implements Listener {
                 this.serverKey,
                 null,
                 null,
-                subject,
+                actor,
+                null,
                 payload
             )
         );

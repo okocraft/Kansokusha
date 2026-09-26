@@ -91,6 +91,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 null,
                 null,
                 null,
+                null,
                 EventPayload.copyOf(new byte[]{1, 2, 3})
             );
             check(api.submit(submission), "External event submission was not accepted.");

@@ -3,10 +3,10 @@ package net.okocraft.kansokusha.paper.builtin;
 import io.papermc.paper.event.block.PlayerShearBlockEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -85,7 +85,8 @@ public final class PaperBlockHarvestListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(block.getWorld().getKey()),
                 PaperBuiltInSupport.position(block),
-                new PlayerSubject(player.getUniqueId()),
+                new PlayerActor(player.getUniqueId()),
+                PaperBuiltInSupport.blockType(block.getBlockData()),
                 payload
             )
         );

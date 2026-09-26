@@ -8,9 +8,9 @@ import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.identity.Identity;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -60,7 +60,8 @@ public final class VelocityCommandSubscriber {
                 null,
                 null,
                 null,
-                source.subject(),
+                source.actor(),
+                null,
                 VelocityCommunicationPayloadCodec.encodeCommand(
                     source.kind(),
                     source.name(),
@@ -77,7 +78,7 @@ public final class VelocityCommandSubscriber {
             return new SourceSnapshot(
                 "player",
                 player.getUsername(),
-                new PlayerSubject(player.getUniqueId())
+                new PlayerActor(player.getUniqueId())
             );
         }
 
@@ -98,7 +99,7 @@ public final class VelocityCommandSubscriber {
     private record SourceSnapshot(
         String kind,
         String name,
-        @Nullable PlayerSubject subject
+        @Nullable PlayerActor actor
     ) {
     }
 }

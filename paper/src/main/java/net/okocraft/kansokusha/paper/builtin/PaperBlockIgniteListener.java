@@ -2,16 +2,20 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.Objects;
@@ -56,7 +60,6 @@ public final class PaperBlockIgniteListener implements Listener {
         var block = event.getBlock();
         var source = event.getIgnitingBlock();
         var entity = event.getIgnitingEntity();
-        var player = event.getPlayer();
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -64,7 +67,8 @@ public final class PaperBlockIgniteListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            player == null ? null : new PlayerSubject(player.getUniqueId()),
+            actor(entity, source),
+            igniteTarget(block.getBlockData().getMaterial()),
             PaperBlockEventPayloadCodec.encodeIgnite(
                 block.getBlockData(),
                 cause.name(),
@@ -74,5 +78,17 @@ public final class PaperBlockIgniteListener implements Listener {
                 entity == null ? null : entity.getType().name()
             )
         ));
+    }
+
+    private static @Nullable EventActor actor(@Nullable Entity entity, @Nullable Block source) {
+        if (entity != null) {
+            return PaperBuiltInSupport.actor(entity);
+        }
+        return source == null ? null : PaperBuiltInSupport.actor(source.getBlockData());
+    }
+
+    // Igniting an empty block places fire, which is what a search for ignitions looks for.
+    private static Key igniteTarget(Material material) {
+        return PaperBuiltInSupport.type(material.isAir() ? Material.FIRE : material);
     }
 }

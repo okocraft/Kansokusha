@@ -1,7 +1,9 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.GameRules;
 import org.bukkit.Material;
@@ -41,7 +43,8 @@ class PaperBlockBurnListenerTest {
         Assertions.assertEquals(PaperBlockBurnListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(20, 65, 30), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "fire")), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "oak_planks"), submission.targetType());
 
         var expected = new CompoundTag();
         expected.put(

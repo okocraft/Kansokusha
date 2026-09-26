@@ -49,6 +49,7 @@ public final class PaperContainerPickupListener implements Listener {
 
         var inventory = PaperContainerPayloadCodec.snapshotInventory(event.getInventory());
         var itemEntity = event.getItem();
+        var item = itemEntity.getItemStack();
         var origin = Objects.requireNonNull(
             PaperContainerPayloadCodec.snapshotLocation(itemEntity.getLocation()),
             "item origin"
@@ -62,11 +63,12 @@ public final class PaperContainerPickupListener implements Listener {
                 this.serverKey,
                 inventory.worldKey() != null ? inventory.worldKey() : origin.worldKey(),
                 inventory.position() != null ? inventory.position() : origin.position(),
-                null,
+                inventory.holder(),
+                PaperBuiltInSupport.itemType(item),
                 PaperContainerPayloadCodec.encodePickup(
                     inventory,
                     itemEntity.getUniqueId().toString(),
-                    PaperContainerPayloadCodec.snapshotItem(itemEntity.getItemStack()),
+                    PaperContainerPayloadCodec.snapshotItem(item),
                     origin
                 )
             )

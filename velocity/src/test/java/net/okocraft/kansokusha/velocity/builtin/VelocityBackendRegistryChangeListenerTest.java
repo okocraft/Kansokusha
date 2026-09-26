@@ -128,7 +128,7 @@ class VelocityBackendRegistryChangeListenerTest {
         Assertions.assertEquals(expectedKey, submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
 
         var payload = VelocityBackendRegistryChangePayloadCodec.decode(submission.payload());
         Assertions.assertEquals(action, payload.action());

@@ -57,7 +57,8 @@ public final class PaperWorldDifficultyChangeListener implements Listener {
             return;
         }
 
-        var source = PaperAdministrativeSource.snapshot(event.getCommandSource());
+        var commandSource = event.getCommandSource();
+        var source = PaperAdministrativeSource.snapshot(commandSource);
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -65,7 +66,8 @@ public final class PaperWorldDifficultyChangeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(world.getKey()),
             null,
-            PaperAdministrativeSource.subject(source),
+            PaperAdministrativeSource.actor(commandSource),
+            null,
             PaperAdministrativePayloadCodec.encodeDifficultyChange(
                 PaperAdministrativePayloadCodec.enumName(before),
                 PaperAdministrativePayloadCodec.enumName(after),

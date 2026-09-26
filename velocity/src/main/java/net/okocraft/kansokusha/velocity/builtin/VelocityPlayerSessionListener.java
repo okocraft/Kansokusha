@@ -7,9 +7,9 @@ import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -77,7 +77,8 @@ public final class VelocityPlayerSessionListener {
                 null,
                 null,
                 null,
-                new PlayerSubject(player.getUniqueId()),
+                new PlayerActor(player.getUniqueId()),
+                null,
                 VelocityPlayerSessionPayloadCodec.encodePostLogin(
                     player.getUsername(),
                     remoteAddress,
@@ -107,7 +108,8 @@ public final class VelocityPlayerSessionListener {
                 null,
                 null,
                 null,
-                new PlayerSubject(player.getUniqueId()),
+                new PlayerActor(player.getUniqueId()),
+                null,
                 VelocityPlayerSessionPayloadCodec.encodeDisconnect(
                     player.getUsername(),
                     event.getLoginStatus(),
@@ -144,7 +146,8 @@ public final class VelocityPlayerSessionListener {
                 sourceServerKey,
                 null,
                 null,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+                new PlayerActor(event.getPlayer().getUniqueId()),
+                null,
                 VelocityPlayerSessionPayloadCodec.encodeBackendKick(
                     event.getServerKickReason().orElse(null),
                     event.kickedDuringServerConnect(),

@@ -61,7 +61,8 @@ public final class PaperBlockBurnListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            null,
+            source == null ? null : PaperBuiltInSupport.actor(source.getBlockData()),
+            PaperBuiltInSupport.blockType(block.getBlockData()),
             PaperBlockEventPayloadCodec.encodeBurn(
                 block.getBlockData(),
                 source == null ? null : position(source),

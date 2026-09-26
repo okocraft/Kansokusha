@@ -6,11 +6,12 @@ import io.papermc.paper.event.player.PlayerNameEntityEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -88,7 +89,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         this.submit(
             ARMOR_STAND_MANIPULATE_EVENT_TYPE,
             target,
-            new PlayerSubject(event.getPlayer().getUniqueId()),
+            new PlayerActor(event.getPlayer().getUniqueId()),
+            PaperBuiltInSupport.entityType(event.getRightClicked()),
             PaperEntityStateChangePayloadCodec.encodeArmorStandManipulate(
                 target,
                 event.getSlot(),
@@ -107,7 +109,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         this.submit(
             ENTITY_LEASH_CHANGE_EVENT_TYPE,
             target,
-            new PlayerSubject(event.getPlayer().getUniqueId()),
+            new PlayerActor(event.getPlayer().getUniqueId()),
+            PaperBuiltInSupport.entityType(event.getEntity()),
             PaperEntityStateChangePayloadCodec.encodeLeashChange(
                 "leash",
                 target,
@@ -128,7 +131,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         this.submit(
             ENTITY_LEASH_CHANGE_EVENT_TYPE,
             target,
-            new PlayerSubject(event.getPlayer().getUniqueId()),
+            new PlayerActor(event.getPlayer().getUniqueId()),
+            PaperBuiltInSupport.entityType(targetEntity),
             PaperEntityStateChangePayloadCodec.encodeLeashChange(
                 "unleash",
                 target,
@@ -154,7 +158,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         this.submit(
             ITEM_FRAME_CHANGE_EVENT_TYPE,
             target,
-            new PlayerSubject(event.getPlayer().getUniqueId()),
+            new PlayerActor(event.getPlayer().getUniqueId()),
+            PaperBuiltInSupport.entityType(frame),
             PaperEntityStateChangePayloadCodec.encodeItemFrameChange(
                 target,
                 enumName(action),
@@ -171,12 +176,14 @@ public final class PaperEntityStateChangeListener implements Listener {
     public void recordTame(EntityTameEvent event) {
         Objects.requireNonNull(event, "event");
 
-        var target = PaperEntityEventPayloadCodec.snapshotEntity(event.getEntity());
+        var entity = event.getEntity();
+        var target = PaperEntityEventPayloadCodec.snapshotEntity(entity);
         var owner = event.getOwner();
         this.submit(
             ENTITY_TAME_EVENT_TYPE,
             target,
-            owner instanceof Player player ? new PlayerSubject(player.getUniqueId()) : null,
+            owner instanceof Entity ownerEntity ? PaperBuiltInSupport.actor(ownerEntity) : null,
+            PaperBuiltInSupport.entityType(entity),
             PaperEntityStateChangePayloadCodec.encodeTame(target, owner)
         );
     }
@@ -190,7 +197,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         this.submit(
             ENTITY_NAME_CHANGE_EVENT_TYPE,
             target,
-            new PlayerSubject(event.getPlayer().getUniqueId()),
+            new PlayerActor(event.getPlayer().getUniqueId()),
+            PaperBuiltInSupport.entityType(entity),
             PaperEntityStateChangePayloadCodec.encodeNameChange(
                 target,
                 entity.customName(),
@@ -203,7 +211,8 @@ public final class PaperEntityStateChangeListener implements Listener {
     private void submit(
         Key eventType,
         PaperEntityEventPayloadCodec.EntitySnapshot target,
-        @Nullable PlayerSubject subject,
+        @Nullable EventActor actor,
+        Key targetType,
         EventPayload payload
     ) {
         this.api.submit(
@@ -218,7 +227,8 @@ public final class PaperEntityStateChangeListener implements Listener {
                     (int) Math.floor(target.y()),
                     (int) Math.floor(target.z())
                 ),
-                subject,
+                actor,
+                targetType,
                 payload
             )
         );

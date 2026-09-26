@@ -24,8 +24,11 @@
   - 未登録の event type、generation の不一致、保存できない発生時刻（保持期限の計算で範囲外になるものを含む）はプログラムの誤りなので `IllegalArgumentException`。この検証を submit 時に行うため、不正な 1 件が同じバッチの他のイベントの書き込みを失敗させることはない。
 - `localServerKey()`: Paper ではローカルサーバーの key。Velocity では空。
 
-`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / player を任意で持つ。
+`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / actor / target type を任意で持つ。
 world は server に、座標は world に属するため、それぞれ前者なしには指定できない。
+
+- actor（誰が）: イベントを直接起こした主体。`PlayerActor`（UUID）、`EntityActor`（UUID と entity type key）、`BlockActor`（block type key）のいずれか。プレイヤーが撃った矢や着火した TNT のような間接的な主体は actor にせず、必要なら payload に残す。
+- target type（何を）: イベントが作用した対象の種類 key（例: 破壊されたブロックの `minecraft:stone`、落としたアイテムの `minecraft:diamond`、設置したエンティティの `minecraft:armor_stand`）。個体の識別子は持たない。
 payload の形式と解釈は提供側の責任で、形式を非互換に変えるときは payload generation を上げる。
 
 ## 記録パイプライン
@@ -56,14 +59,19 @@ CREATE TABLE events (
     x INTEGER,
     y INTEGER,
     z INTEGER,
-    player UUID,
+    actor_kind VARCHAR,
+    actor_uuid UUID,
+    actor_type VARCHAR,
+    target_type VARCHAR,
     expires_at TIMESTAMP_MS NOT NULL,
     payload BLOB NOT NULL
 );
 ```
 
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
-- 起動時に `CREATE TABLE IF NOT EXISTS` でテーブルを作る。スキーマを変更する必要が生じた時点で、バージョン管理と migration を導入する（要件 §15）。現時点のスキーマにはバージョン表がないため、「バージョン表がない DB = 初版スキーマ」として扱える。
+- actor は `actor_kind`（`player` / `entity` / `block`）、`actor_uuid`（player と entity）、`actor_type`（entity type または block type の key。player では NULL）の 3 列に保存する。種類ごとの列にせず 1 組の列にまとめることで、「このプレイヤー / このエンティティ個体（`actor_uuid`）」「クリーパー全般 / ピストン全般（`actor_type`）」のどちらも 1 列の条件で検索できる。
+- `target_type` と `actor_type` も key 文字列のまま保存する。
+- 起動時に `CREATE TABLE IF NOT EXISTS` でテーブルを作り、列構成が期待と一致しなければ起動を失敗させる。actor / target 列の導入時は運用データが存在しなかったため migration を用意せず、旧スキーマ（`player` 列）の DB は拒否する。以後スキーマを変更する必要が生じた時点で、バージョン管理と migration を導入する（要件 §15）。
 
 ## 保持期間
 
@@ -106,7 +114,9 @@ CREATE TABLE events (
 | 書き込み失敗後の恒久停止 | 一時的な失敗でも記録が永久に止まる。失敗したバッチだけを破棄してログに出す |
 | 1 回の削除件数の上限 | DuckDB の一括削除で十分に速い |
 | 辞書テーブルと整数 ID | DuckDB の列圧縮で代替できる |
-| migration 履歴とチェックサム検証 | スキーマ変更がまだ存在しない |
+| migration 履歴とチェックサム検証 | 運用データのあるスキーマ変更がまだ存在しない |
+| 間接的な主体（矢の射手、TNT の着火者、飼い主）の列 | actor は直接の主体に限定する。間接的な主体は payload に残す |
+| 対象の個体識別子（UUID）の列 | 検索対象は種類（`target_type`）に限定する。個体は payload に残す |
 | 登録・送信結果の詳細な enum | 組み込みリスナーは結果を使っておらず、未登録・世代不一致はプログラムの誤りである |
 | 無効化時のリスナー登録解除 | Bukkit / Velocity がプラグイン停止時に行う |
 | 未リリースの Paper API へのリフレクションによる対応 | 対象バージョンを上げた時点で直接実装する |

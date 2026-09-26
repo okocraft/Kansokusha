@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
@@ -15,6 +15,7 @@ import org.bukkit.event.player.PlayerBucketEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.Objects;
@@ -47,7 +48,7 @@ public final class PaperBucketListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void recordEmpty(PlayerBucketEmptyEvent event) {
-        this.record(event, EMPTY_EVENT_TYPE, "empty");
+        this.record(event, EMPTY_EVENT_TYPE, "empty", PaperBuiltInSupport.type(event.getBucket()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -55,10 +56,15 @@ public final class PaperBucketListener implements Listener {
         if (event.getBlockFace() == BlockFace.SELF) {
             return;
         }
-        this.record(event, FILL_EVENT_TYPE, "fill");
+        this.record(event, FILL_EVENT_TYPE, "fill", PaperBuiltInSupport.itemType(event.getItemStack()));
     }
 
-    private void record(PlayerBucketEvent event, Key eventType, String operation) {
+    private void record(
+        PlayerBucketEvent event,
+        Key eventType,
+        String operation,
+        @Nullable Key targetType
+    ) {
         Objects.requireNonNull(event, "event");
 
         var changedBlock = event.getBlock();
@@ -71,7 +77,8 @@ public final class PaperBucketListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(changedBlock.getWorld().getKey()),
                 PaperBuiltInSupport.position(changedBlock),
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+                new PlayerActor(event.getPlayer().getUniqueId()),
+                targetType,
                 PaperAdditionalBuiltInPayloadCodec.encodeBucket(
                     operation,
                     event.getBucket(),

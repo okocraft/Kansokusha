@@ -68,6 +68,7 @@ public final class PaperWorldSpawnChangeListener implements Listener {
             after.worldKey(),
             after.blockPosition(),
             null,
+            null,
             PaperAdministrativePayloadCodec.encodeWorldSpawnChange(before, after)
         ));
     }
