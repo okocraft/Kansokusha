@@ -48,6 +48,7 @@ class PaperAdministrativeWorldListenerTest {
         var world = world("rules");
         GameRule<Boolean> rule = Mockito.mock(GameRule.class);
         Mockito.when(rule.getKey()).thenReturn(new NamespacedKey("minecraft", "keep_inventory"));
+        Mockito.when(rule.getType()).thenReturn(Boolean.class);
         Mockito.when(world.getGameRuleValue(rule)).thenReturn(false);
 
         var player = Mockito.mock(Player.class);
@@ -97,6 +98,7 @@ class PaperAdministrativeWorldListenerTest {
         var world = world("rules");
         GameRule<Integer> rule = Mockito.mock(GameRule.class);
         Mockito.when(rule.getKey()).thenReturn(new NamespacedKey("minecraft", "random_tick_speed"));
+        Mockito.when(rule.getType()).thenReturn(Integer.class);
         Mockito.when(world.getGameRuleValue(rule)).thenReturn(3);
 
         var cancelled = Mockito.mock(WorldGameRuleChangeEvent.class);
@@ -122,6 +124,45 @@ class PaperAdministrativeWorldListenerTest {
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertFalse(payload.getBooleanOr("source_present", true));
         Assertions.assertFalse(payload.contains("source"));
+        Assertions.assertEquals(0, listener.inFlightCount());
+    }
+
+
+    @Test
+    void testGameRuleCanonicalizesSemanticValuesBeforeComparingAndSaving() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperGameRuleChangeListener.register(
+            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
+        );
+        var world = world("rules");
+        GameRule<Integer> rule = Mockito.mock(GameRule.class);
+        Mockito.when(rule.getKey()).thenReturn(new NamespacedKey("minecraft", "random_tick_speed"));
+        Mockito.when(rule.getType()).thenReturn(Integer.class);
+        Mockito.when(world.getGameRuleValue(rule)).thenReturn(3);
+
+        var noOp = Mockito.mock(WorldGameRuleChangeEvent.class);
+        Mockito.when(noOp.getWorld()).thenReturn(world);
+        Mockito.doReturn(rule).when(noOp).getGameRule();
+        Mockito.when(noOp.getValue()).thenReturn("+03");
+        Mockito.when(noOp.isCancelled()).thenReturn(false);
+
+        listener.capture(noOp);
+        listener.finalizeEvent(noOp);
+        Assertions.assertTrue(api.submissions.isEmpty());
+
+        var changed = Mockito.mock(WorldGameRuleChangeEvent.class);
+        Mockito.when(changed.getWorld()).thenReturn(world);
+        Mockito.doReturn(rule).when(changed).getGameRule();
+        Mockito.when(changed.getValue()).thenReturn("+04");
+        Mockito.when(changed.isCancelled()).thenReturn(false);
+
+        listener.capture(changed);
+        listener.finalizeEvent(changed);
+
+        var submission = onlySubmission(api);
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("3", string(payload, "before"));
+        Assertions.assertEquals("4", string(payload, "after"));
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
@@ -252,6 +293,25 @@ class PaperAdministrativeWorldListenerTest {
         expectedBounds.putLong("transition_duration_ticks", 120L);
         expectedBounds.putString("source_event", "world_border_bounds_change");
         Assertions.assertEquals(expectedBounds, boundsPayload);
+
+        var zeroDurationEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
+        Mockito.when(zeroDurationEvent.getWorld()).thenReturn(world);
+        Mockito.when(zeroDurationEvent.getOldSize()).thenReturn(250.0);
+        Mockito.when(zeroDurationEvent.getNewSize()).thenReturn(125.0);
+        Mockito.when(zeroDurationEvent.getType())
+            .thenReturn(WorldBorderBoundsChangeEvent.Type.STARTED_MOVE);
+        Mockito.when(zeroDurationEvent.getDurationTicks()).thenReturn(0L);
+        Mockito.when(zeroDurationEvent.isCancelled()).thenReturn(false);
+        listener.captureBounds(zeroDurationEvent);
+        listener.finalizeBounds(zeroDurationEvent);
+
+        var zeroDurationPayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
+        Assertions.assertEquals("bounds", string(zeroDurationPayload, "action"));
+        Assertions.assertEquals("instant_move", string(zeroDurationPayload, "transition_type"));
+        Assertions.assertEquals(
+            0L,
+            zeroDurationPayload.getLongOr("transition_duration_ticks", Long.MIN_VALUE)
+        );
         Assertions.assertEquals(0, listener.inFlightCount());
     }
 
