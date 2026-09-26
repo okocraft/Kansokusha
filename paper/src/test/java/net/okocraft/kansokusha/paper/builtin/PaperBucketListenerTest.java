@@ -4,8 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import org.bukkit.Material;
@@ -191,19 +189,6 @@ class PaperBucketListenerTest {
     }
 
     @Test
-    void testRegistrationFailureIsReported() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> PaperBucketListener.register(api, SERVER_KEY)
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:bucket_empty"));
-    }
-
-    @Test
     void testConcurrentFoliaStyleBucketEventsDoNotCrossSnapshots() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
@@ -337,14 +322,13 @@ class PaperBucketListenerTest {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            return SubmissionOutcome.ACCEPTED;
+            return true;
         }
     }
 }

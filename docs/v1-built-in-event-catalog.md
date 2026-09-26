@@ -2,7 +2,7 @@
 
 - 日付: 2026-09-26
 - 関連 Issue: #10, #37, #101, #102, #103, #104, #105, #106
-- 前提: ADR-0001, ADR-0003, ADR-0004
+- 前提: `docs/design.md`
 
 ## 目的
 
@@ -35,7 +35,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:fluid_change` | `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | fertilization owns matching grow/spread/structure changes |
-| `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit`; qualified natural → `short` | actorless `NATURAL_FILL` / `EVAPORATE` use `kansokusha:natural` qualifier |
+| `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason` and `actor_kind` |
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
@@ -56,7 +56,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:paper_player_command` | `PlayerCommandPreprocessEvent` | `audit` | original raw command line only |
 | `kansokusha:paper_server_command` | `ServerCommandEvent` / `RemoteServerCommandEvent` | `audit` | source descriptor + original raw command only |
 | `kansokusha:entity_place` | `EntityPlaceEvent` / `HangingPlaceEvent` | `audit` | #156 hanging place is canonicalized into #155 |
-| `kansokusha:entity_break` | Paper 26.3+ `EntityBreakByEntityEvent` when available; otherwise `HangingBreakByEntityEvent` on the 26.2 baseline | `audit` | #157 hanging break is canonicalized into #164 without double registration |
+| `kansokusha:entity_break` | `HangingBreakByEntityEvent` | `audit` | #157 hanging break is canonicalized into #164; non-hanging entities are handled once the Paper baseline provides `EntityBreakByEntityEvent` |
 | `kansokusha:armor_stand_manipulate` | `PlayerArmorStandManipulateEvent` | `audit` | player armor-stand state change |
 | `kansokusha:entity_leash_change` | `PlayerLeashEntityEvent` / `PlayerUnleashEntityEvent` | `audit` | player leash/unleash |
 | `kansokusha:item_frame_change` | `PlayerItemFrameChangeEvent` | `audit` | existing frame content/rotation/fixed-state change |
@@ -86,7 +86,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 
 各 built-in event type は payload generation `1` を使用する。
 
-registration、submission outcome、asynchronous admission、acceptance / persistence の意味は ADR-0001 / ADR-0004 に従う。
+registration、submission、acceptance / persistence の意味は `docs/design.md` に従う。
 
 ### Timestamp / subject
 
@@ -98,7 +98,7 @@ player-driven event の subject は `PlayerSubject(player UUID)` とする。
 
 ### Payload encoding
 
-payload は ADR-0001 どおり provider-defined opaque bytes とし、platform 固有の built-in event を common codec へ抽象化しない。
+payload は provider-defined opaque bytes とし、platform 固有の built-in event を common codec へ抽象化しない。
 
 common fields（event type、generation、occurredAt、server、world、position、subject）は payload に重複保存しない。
 
@@ -122,7 +122,7 @@ Canonicalization and intentional coexistence are part of the event contract, not
 - grow/fertilize: natural `BlockGrowEvent` / `BlockSpreadEvent` / non-bonemeal `StructureGrowEvent` candidates are deferred so a matching `BlockFertilizeEvent` can own the same change as `block_fertilize`.
 - harvest/shear/break: `PlayerHarvestBlockEvent` and `PlayerShearBlockEvent` both map to `block_harvest`; normal `BlockBreakEvent` remains `block_break`, and the real Paper fixture verifies representative vanilla actions are not double-owned.
 - entity placement: generic `EntityPlaceEvent` skips `Hanging`; `HangingPlaceEvent` supplies the hanging path into the same `entity_place` type.
-- entity break: when generic `EntityBreakByEntityEvent` callbacks are available they own both generic/hanging paths; the fallback `HangingBreakByEntityEvent` handler is suppressed. On the Paper 26.2 baseline only the hanging API exists.
+- entity break: the Paper 26.2 baseline only exposes `HangingBreakByEntityEvent`, which is the sole source.
 - trade: only the `PlayerPurchaseEvent` handler is registered for purchase/trade dispatch; `PlayerTradeEvent` is identified as its subclass in payload metadata, and submit waits for the post-take trade statistic signal.
 - kick/quit: an accepted `paper_kick` and the subsequent `paper_quit` with kicked quit reason are intentionally both recorded because they represent the kick decision and completed session end.
 - world change/teleport: `player_world_change` and `player_teleport` intentionally coexist because they represent state transition and operation history respectively.
@@ -151,41 +151,17 @@ The final catalog intentionally has no built-in listener for the following revie
 
 ## Retention mapping
 
-current built-in catalog の operator-facing retention は次の4 policy とする。
+current built-in catalog の推奨保持期間は bundled `config.yml`（`common/src/main/resources/config.yml`）に定義し、初回起動時にそのままデータディレクトリへコピーする。
 
-| Policy key | Duration | 用途 |
+| Policy | Duration | 用途 |
 | --- | --- | --- |
-| `kansokusha:audit` | `P180D` | command/admin/player-driven audit と長期調査価値の高い state change |
-| `kansokusha:session` | `P30D` | proxy/backend/session transition |
-| `kansokusha:default` | `P30D` | chat と explicit fallback |
-| `kansokusha:short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
+| `audit` | `P180D` | command/admin/player-driven audit と長期調査価値の高い state change |
+| `short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
+| default | `P30D` | 上記以外（session transition、chat） |
 
-exact event-type mapping は以下とする。
-
-- `kansokusha:audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
-- `kansokusha:short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`.
-- `kansokusha:session`: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`.
-- `kansokusha:default`: `paper_chat`, `velocity_chat`.
-
-fallback policy は `kansokusha:default` とする。chat は fallback に依存させず `default` へ明示 mapping する。communication 専用 policy は追加しない。
-
-### Qualified retention mapping
-
-通常の exact mapping は従来どおり event type だけで解決する。payload producer が transient な retention qualifier を付与した場合だけ、`(event type, qualifier)` mapping を exact mapping より先に評価する。qualifier は opaque payload bytes の一部ではなく永続化もしない。また qualifier 自体は policy 名ではなく、operator configuration が最終 policy を決定する。
-
-`kansokusha:cauldron_level_change` は fail-safe として exact mapping を `kansokusha:audit` に置き、Paper payload codec が actor なしの `NATURAL_FILL` / `EVAPORATE` を `kansokusha:natural` qualifier として分類した場合だけ、次の qualified mapping で `kansokusha:short` を選択する。
-
-```yaml
-- event-type: kansokusha:cauldron_level_change
-  policy: kansokusha:audit
-- event-type: kansokusha:cauldron_level_change
-  qualifier: kansokusha:natural
-  policy: kansokusha:short
-```
-
-player/entity actor がある場合、および actor なしでも `UNKNOWN` 等の未知・分類不能 reason は qualifier を付けず `audit` に残す。これにより unknown cause を短期 expiry へ落とさない。
-
-full configuration example は `docs/examples/v1-built-in-retention.yml` を authoritative fixture とし、initial config skeleton へ built-in policy を自動投入しない。reload / expiry semantics は ADR-0003 に従う。
+- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`.
+- default: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`, `paper_chat`, `velocity_chat`.
 
 ## `kansokusha:block_break`
 
@@ -255,7 +231,7 @@ outer compound は `NbtIo.write` で payload bytes にする。block entity NBT 
 
 `BlockMultiPlaceEvent` は LOWEST で snapshot した N changed blocks について厳密に N submissions を生成・試行し、base `BlockPlaceEvent` 分の追加 submission は作らない。全 submission は同一 `occurredAt` を共有する。
 
-各 submission の admission は ADR-0004 に従って独立するため、partial acceptance は許容する。v1 は atomic multi-event admission を要求しない。
+各 submission は独立してキューへ入るため、partial acceptance は許容する。v1 は atomic multi-event admission を要求しない。
 
 ## `kansokusha:sign_change`
 
@@ -393,11 +369,11 @@ target backend name は common `server` field から復元可能なため payloa
 
 | Area | Current contract |
 | --- | --- |
-| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 adopted built-ins are registered through the platform lifecycle collections |
+| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 adopted built-ins are registered when the platform plugin starts |
 | closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
 | canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
-| retention | every adopted event type has an exact mapping; cauldron natural causes additionally use the qualified mapping |
-| lifecycle | disable unregisters listeners before runtime close; Paper clears all `PaperInFlightListener` state; registration failure rolls back partial wiring |
+| retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |
+| lifecycle | the platform unregisters listeners when the plugin stops; a startup failure disables the plugin |
 | ingestion | platform callbacks call the bounded `KansokushaApi.submit` boundary and do not wait for storage completion |
 | Folia | LOWEST→MONITOR snapshots use event-identity correlation with synchronized/shared-state guards; deferred multi-event correlation is explicitly synchronized/thread-scoped |
 | coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
@@ -405,6 +381,4 @@ target backend name は common `server` field から復元可能なため payloa
 ## 参照
 
 - `docs/initial-requirements.md`
-- `docs/adr/0001-v1-event-contract-and-api-boundaries.md`
-- `docs/adr/0003-retention-resolution-and-expiry-deletion-semantics.md`
-- `docs/adr/0004-bounded-ingestion-batching-and-failure-semantics.md`
+- `docs/design.md`

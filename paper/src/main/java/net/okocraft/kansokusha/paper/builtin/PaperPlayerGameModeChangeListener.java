@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.GameMode;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -19,7 +20,7 @@ import java.util.Objects;
 /** Records an accepted old-to-new game-mode state transition. */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperPlayerGameModeChangeListener implements PaperInFlightListener {
+public final class PaperPlayerGameModeChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "player_gamemode_change");
 
@@ -88,11 +89,6 @@ public final class PaperPlayerGameModeChangeListener implements PaperInFlightLis
                 snapshot.cause()
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

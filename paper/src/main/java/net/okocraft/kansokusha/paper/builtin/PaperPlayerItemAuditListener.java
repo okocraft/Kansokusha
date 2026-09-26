@@ -17,6 +17,7 @@ import org.bukkit.Statistic;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
@@ -37,7 +38,7 @@ import java.util.function.BiConsumer;
 
 @ApiStatus.Internal
 @NotNullByDefault
-final class PaperPlayerItemAuditListener implements PaperInFlightListener {
+final class PaperPlayerItemAuditListener implements Listener {
 
     static final Key ITEM_DROP_EVENT_TYPE = Key.key("kansokusha", "item_drop");
     static final Key ITEM_PICKUP_EVENT_TYPE = Key.key("kansokusha", "item_pickup");
@@ -335,19 +336,6 @@ final class PaperPlayerItemAuditListener implements PaperInFlightListener {
         var pending = removePendingPurchase(event.getPlayer().getUniqueId());
         if (pending != null) {
             submit(PLAYER_TRADE_EVENT_TYPE, pending.common(), pending.payload());
-        }
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.drops.clear();
-        this.pickups.clear();
-        this.bookEdits.clear();
-        this.lecternInserts.clear();
-        this.lecternTakes.clear();
-        this.purchases.clear();
-        synchronized (this.pendingPurchases) {
-            this.pendingPurchases.clear();
         }
     }
 

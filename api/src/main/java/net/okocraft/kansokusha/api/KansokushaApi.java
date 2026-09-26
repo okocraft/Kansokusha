@@ -21,7 +21,21 @@ public interface KansokushaApi {
      */
     Optional<Key> localServerKey();
 
-    RegistrationOutcome registerEventType(EventTypeDefinition definition);
+    /**
+     * Registers an event type. Registering the same definition again has no effect.
+     *
+     * @throws IllegalArgumentException if the key is already registered with another payload generation
+     */
+    void registerEventType(EventTypeDefinition definition);
 
-    SubmissionOutcome submit(EventSubmission submission);
+    /**
+     * Hands an event to the asynchronous writer without waiting for storage I/O.
+     *
+     * <p>{@code true} means that the event was queued; it does not guarantee that the event has
+     * already been persisted. {@code false} means that the event was dropped because the queue is
+     * full or Kansokusha has shut down.</p>
+     *
+     * @throws IllegalArgumentException if the event type is not registered with the submitted payload generation
+     */
+    boolean submit(EventSubmission submission);
 }

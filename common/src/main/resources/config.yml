@@ -1,0 +1,68 @@
+# Local server identity used by Paper/Folia (e.g. "okocraft:main").
+# When empty, "kansokusha:<server directory name>" is used. Velocity ignores this value.
+server-key: ''
+
+# Maximum number of events waiting to be written. Events submitted while the queue is full are dropped.
+queue-capacity: 10000
+
+# Interval (ISO-8601 duration) at which queued events are written to the database.
+flush-interval: PT1S
+
+# Interval (ISO-8601 duration) at which expired events are deleted.
+cleanup-interval: PT1H
+
+retention:
+  # Retention period for event types that are not listed in any policy below.
+  default: P30D
+  policies:
+    audit:
+      duration: P180D
+      event-types:
+        - kansokusha:block_break
+        - kansokusha:block_place
+        - kansokusha:sign_change
+        - kansokusha:bucket_empty
+        - kansokusha:bucket_fill
+        - kansokusha:block_harvest
+        - kansokusha:flower_pot_change
+        - kansokusha:block_ignite
+        - kansokusha:tnt_prime
+        - kansokusha:explosion_block_change
+        - kansokusha:piston_move
+        - kansokusha:entity_block_change
+        - kansokusha:sponge_absorb
+        - kansokusha:block_fertilize
+        - kansokusha:cauldron_level_change
+        - kansokusha:item_drop
+        - kansokusha:item_pickup
+        - kansokusha:book_edit
+        - kansokusha:lectern_change
+        - kansokusha:player_trade
+        - kansokusha:player_gamemode_change
+        - kansokusha:player_spawn_change
+        - kansokusha:player_death
+        - kansokusha:paper_player_command
+        - kansokusha:paper_server_command
+        - kansokusha:velocity_command
+        - kansokusha:entity_place
+        - kansokusha:armor_stand_manipulate
+        - kansokusha:entity_leash_change
+        - kansokusha:item_frame_change
+        - kansokusha:entity_tame
+        - kansokusha:entity_name_change
+        - kansokusha:entity_break
+        - kansokusha:gamerule_change
+        - kansokusha:world_difficulty_change
+        - kansokusha:world_border_change
+        - kansokusha:world_spawn_change
+        - kansokusha:whitelist_change
+        - kansokusha:backend_registry_change
+    short:
+      duration: P7D
+      event-types:
+        - kansokusha:block_burn
+        - kansokusha:natural_block_change
+        - kansokusha:fluid_change
+        - kansokusha:container_transfer
+        - kansokusha:container_pickup
+        - kansokusha:container_process

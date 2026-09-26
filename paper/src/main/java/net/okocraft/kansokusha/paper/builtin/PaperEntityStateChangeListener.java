@@ -16,6 +16,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityTameEvent;
 import org.bukkit.event.entity.PlayerLeashEntityEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
@@ -33,7 +34,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperEntityStateChangeListener implements PaperInFlightListener {
+public final class PaperEntityStateChangeListener implements Listener {
 
     static final Key ARMOR_STAND_MANIPULATE_EVENT_TYPE =
         Key.key("kansokusha", "armor_stand_manipulate");
@@ -324,16 +325,6 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
                 event.isPersistent()
             )
         );
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.armorStandInFlight.clear();
-        this.leashInFlight.clear();
-        this.unleashInFlight.clear();
-        this.itemFrameInFlight.clear();
-        this.tameInFlight.clear();
-        this.nameInFlight.clear();
     }
 
     int inFlightCount() {

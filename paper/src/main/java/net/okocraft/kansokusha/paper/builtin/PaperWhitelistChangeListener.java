@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +29,7 @@ import java.util.function.BooleanSupplier;
  */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperWhitelistChangeListener implements PaperInFlightListener {
+public final class PaperWhitelistChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "whitelist_change");
 
@@ -144,12 +145,6 @@ public final class PaperWhitelistChangeListener implements PaperInFlightListener
                 snapshot.profileName()
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.toggleInFlight.clear();
-        this.profileInFlight.clear();
     }
 
     int inFlightCount() {

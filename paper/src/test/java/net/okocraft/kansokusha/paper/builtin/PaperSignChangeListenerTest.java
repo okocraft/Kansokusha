@@ -4,8 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import org.bukkit.NamespacedKey;
@@ -96,19 +94,6 @@ class PaperSignChangeListenerTest {
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testRegistrationConflictFails() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> PaperSignChangeListener.register(api, SERVER_KEY)
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:sign_change"));
     }
 
     @Test
@@ -238,14 +223,13 @@ class PaperSignChangeListenerTest {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            return SubmissionOutcome.ACCEPTED;
+            return true;
         }
     }
 }

@@ -12,6 +12,7 @@ import org.bukkit.block.Block;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockCookEvent;
 import org.bukkit.event.block.CrafterCraftEvent;
 import org.bukkit.event.inventory.BrewEvent;
@@ -30,7 +31,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperContainerProcessListener implements PaperInFlightListener {
+public final class PaperContainerProcessListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "container_process");
 
@@ -180,11 +181,6 @@ public final class PaperContainerProcessListener implements PaperInFlightListene
             event.isCancelled(),
             PaperContainerPayloadCodec.snapshotItems(List.of(event.getResult()))
         );
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

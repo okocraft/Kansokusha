@@ -6,8 +6,6 @@ import com.velocitypowered.api.event.proxy.server.ServerUnregisteredEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -83,7 +81,7 @@ class VelocityBackendRegistryChangeListenerTest {
     void testRejectedAdmissionDoesNotBlockOrThrow() {
         var api = api();
         Mockito.when(api.submit(Mockito.any()))
-            .thenReturn(SubmissionOutcome.INGESTION_UNAVAILABLE);
+            .thenReturn(false);
         var listener = VelocityBackendRegistryChangeListener.register(
             api,
             Mockito.mock(Logger.class)
@@ -100,25 +98,6 @@ class VelocityBackendRegistryChangeListenerTest {
             )
         );
         Mockito.verify(api).submit(Mockito.any());
-    }
-
-    @Test
-    void testRegistrationConflictFails() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> VelocityBackendRegistryChangeListener.register(
-                api,
-                Mockito.mock(Logger.class)
-            )
-        );
-
-        Assertions.assertTrue(
-            failure.getMessage().contains("kansokusha:backend_registry_change")
-        );
     }
 
     @Test
@@ -162,9 +141,7 @@ class VelocityBackendRegistryChangeListenerTest {
 
     private static KansokushaApi api() {
         var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.REGISTERED);
-        Mockito.when(api.submit(Mockito.any())).thenReturn(SubmissionOutcome.ACCEPTED);
+        Mockito.when(api.submit(Mockito.any())).thenReturn(true);
         return api;
     }
 

@@ -6,135 +6,74 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.okocraft.kansokusha.common.api.CommonKansokushaApiProvider;
+import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
+import net.okocraft.kansokusha.velocity.builtin.VelocityBackendRegistryChangeListener;
+import net.okocraft.kansokusha.velocity.builtin.VelocityChatSubscriber;
+import net.okocraft.kansokusha.velocity.builtin.VelocityCommandSubscriber;
+import net.okocraft.kansokusha.velocity.builtin.VelocityPlayerSessionListener;
+import net.okocraft.kansokusha.velocity.builtin.VelocityServerConnectedListener;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
-import java.util.Objects;
+import java.util.List;
 
 public final class KansokushaVelocityPlugin {
 
     private final Logger logger;
     private final ProxyServer proxyServer;
     private final Path dataDirectory;
-    private final KansokushaConfig.Holder config;
 
-    private KansokushaRuntime runtime;
-    private VelocityBuiltInListeners builtInListeners;
+    private @Nullable KansokushaRuntime runtime;
 
     @Inject
-    public KansokushaVelocityPlugin(
-        Logger logger,
-        ProxyServer proxyServer,
-        @DataDirectory Path dataDirectory
-    ) {
-        this.logger = Objects.requireNonNull(logger, "logger");
-        this.proxyServer = Objects.requireNonNull(proxyServer, "proxyServer");
-        this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
-        this.config = new KansokushaConfig.Holder(dataDirectory);
+    public KansokushaVelocityPlugin(Logger logger, ProxyServer proxyServer, @DataDirectory Path dataDirectory) {
+        this.logger = logger;
+        this.proxyServer = proxyServer;
+        this.dataDirectory = dataDirectory;
     }
 
     @Subscribe(priority = Short.MAX_VALUE)
-    public synchronized void onProxyInitialize(ProxyInitializeEvent event) {
-        if (this.runtime != null) {
-            return;
-        }
-
-        try {
-            this.config.reload();
-        } catch (IOException e) {
-            this.logger.error("Failed to load config.yml", e);
-            return;
-        }
-
-        if (this.config.get().debug()) {
-            this.logger.info("Debug mode enabled");
-        }
-
+    public void onProxyInitialize(ProxyInitializeEvent event) {
         final KansokushaRuntime runtime;
         try {
             runtime = KansokushaRuntime.start(
                 this.dataDirectory,
+                KansokushaConfig.load(this.dataDirectory),
+                null,
                 (message, failure) -> this.logger.error(message, failure)
             );
         } catch (IOException | SQLException e) {
-            this.logger.error("Failed to start Kansokusha runtime.", e);
+            this.logger.error("Failed to start Kansokusha.", e);
             return;
         }
-
-        final VelocityBuiltInListeners builtInListeners;
-        try {
-            if (!CommonKansokushaApiProvider.publish(runtime.api())) {
-                throw new IllegalStateException("Kansokusha API is already published.");
-            }
-            builtInListeners = VelocityBuiltInListeners.register(
-                this.proxyServer.getEventManager(),
-                this,
-                runtime.api(),
-                this.logger
-            );
-        } catch (RuntimeException | Error failure) {
-            this.closeRuntime(runtime);
-            throw failure;
-        }
-
-        this.builtInListeners = builtInListeners;
         this.runtime = runtime;
-    }
 
-    public synchronized boolean reloadRetentionPolicies() {
-        var runtime = this.runtime;
-        if (runtime == null) {
-            return false;
+        var listeners = List.of(
+            VelocityServerConnectedListener.register(runtime, this.logger),
+            VelocityPlayerSessionListener.register(runtime, this.logger),
+            VelocityChatSubscriber.register(runtime),
+            VelocityCommandSubscriber.register(runtime),
+            VelocityBackendRegistryChangeListener.register(runtime, this.logger)
+        );
+        for (var listener : listeners) {
+            this.proxyServer.getEventManager().register(this, listener);
         }
 
-        try {
-            runtime.reloadRetentionPolicies();
-            this.logger.info("Reloaded retention policies.");
-            return true;
-        } catch (IOException | RuntimeException failure) {
-            this.logger.error(
-                "Failed to reload retention policies; the active policies were kept.",
-                failure
-            );
-            return false;
-        }
+        Kansokusha.setApi(runtime);
     }
 
     @Subscribe(priority = Short.MAX_VALUE)
-    public synchronized void onProxyShutdown(ProxyShutdownEvent event) {
-        var builtInListeners = this.builtInListeners;
-        this.builtInListeners = null;
-
+    public void onProxyShutdown(ProxyShutdownEvent event) {
         var runtime = this.runtime;
-        this.runtime = null;
-
-        if (builtInListeners != null) {
-            try {
-                builtInListeners.close();
-            } catch (RuntimeException | Error failure) {
-                this.logger.error(
-                    "Velocity built-in listeners failed to shut down cleanly.",
-                    failure
-                );
-            }
-        }
-
         if (runtime != null) {
-            this.closeRuntime(runtime);
-        }
-    }
-
-    private void closeRuntime(KansokushaRuntime runtime) {
-        CommonKansokushaApiProvider.unpublish(runtime.api());
-        try {
+            Kansokusha.setApi(null);
+            this.runtime = null;
             runtime.close();
-        } catch (SQLException | RuntimeException failure) {
-            this.logger.error("Kansokusha runtime failed to shut down cleanly.", failure);
         }
     }
 }

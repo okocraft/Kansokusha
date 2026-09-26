@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -19,7 +20,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBlockBreakListener implements PaperInFlightListener {
+public final class PaperBlockBreakListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_break");
 
@@ -93,11 +94,6 @@ public final class PaperBlockBreakListener implements PaperInFlightListener {
                 snapshot.payload()
             )
         );
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

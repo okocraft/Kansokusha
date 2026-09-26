@@ -5,9 +5,7 @@ import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
@@ -26,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class VelocityServerConnectedListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "server_connected");
-    private static final EventTypeDefinition DEFINITION =
-        new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST);
 
     private final KansokushaApi api;
     private final Logger logger;
@@ -45,16 +41,7 @@ public final class VelocityServerConnectedListener {
     }
 
     static VelocityServerConnectedListener register(KansokushaApi api, Logger logger, Clock clock) {
-        Objects.requireNonNull(api, "api");
-        var outcome = api.registerEventType(DEFINITION);
-        if (
-            outcome != RegistrationOutcome.REGISTERED
-                && outcome != RegistrationOutcome.ALREADY_REGISTERED
-        ) {
-            throw new IllegalStateException(
-                "Could not register built-in event type " + EVENT_TYPE + ": " + outcome
-            );
-        }
+        VelocityBuiltInSupport.register(api, EVENT_TYPE);
         return new VelocityServerConnectedListener(api, logger, clock);
     }
 

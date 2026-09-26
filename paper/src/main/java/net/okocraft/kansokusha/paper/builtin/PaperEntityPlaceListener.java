@@ -11,6 +11,7 @@ import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -25,7 +26,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperEntityPlaceListener implements PaperInFlightListener {
+public final class PaperEntityPlaceListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "entity_place");
     static final String GENERIC_SOURCE_EVENT = "org.bukkit.event.entity.EntityPlaceEvent";
@@ -119,12 +120,6 @@ public final class PaperEntityPlaceListener implements PaperInFlightListener {
     public void finalizeHanging(HangingPlaceEvent event) {
         Objects.requireNonNull(event, "event");
         this.finalizeEvent(event.isCancelled(), this.hangingInFlight.remove(event));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.genericInFlight.clear();
-        this.hangingInFlight.clear();
     }
 
     int inFlightCount() {

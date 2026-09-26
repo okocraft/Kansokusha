@@ -6,8 +6,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.state.BlockState;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -93,14 +91,13 @@ final class PaperBlockEventTestSupport {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            return SubmissionOutcome.ACCEPTED;
+            return true;
         }
     }
 }

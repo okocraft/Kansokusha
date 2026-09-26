@@ -11,6 +11,7 @@ import org.bukkit.block.Sign;
 import org.bukkit.block.sign.Side;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.SignChangeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -23,7 +24,7 @@ import java.util.Optional;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperSignChangeListener implements PaperInFlightListener {
+public final class PaperSignChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "sign_change");
 
@@ -98,11 +99,6 @@ public final class PaperSignChangeListener implements PaperInFlightListener {
                 payload
             )
         );
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

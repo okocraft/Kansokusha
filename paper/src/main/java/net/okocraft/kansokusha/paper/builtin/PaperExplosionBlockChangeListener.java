@@ -16,6 +16,7 @@ import org.bukkit.entity.EnderDragon;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.TNTPrimeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
@@ -36,7 +37,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperExplosionBlockChangeListener implements PaperInFlightListener {
+public final class PaperExplosionBlockChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "explosion_block_change");
 
@@ -156,14 +157,6 @@ public final class PaperExplosionBlockChangeListener implements PaperInFlightLis
     @SuppressWarnings({"deprecation", "removal"})
     public void finalizeTntPrime(com.destroystokyo.paper.event.block.TNTPrimeEvent event) {
         PaperExplosionTntCorrelation.finalizeLegacy(this.api, event);
-    }
-
-    @Override
-    public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-        }
-        PaperExplosionTntCorrelation.clear(this.api);
     }
 
     int inFlightCount() {

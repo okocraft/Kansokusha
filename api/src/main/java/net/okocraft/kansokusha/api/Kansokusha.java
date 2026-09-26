@@ -1,9 +1,8 @@
 package net.okocraft.kansokusha.api;
 
-import net.okocraft.kansokusha.api.spi.KansokushaApiProvider;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-
-import java.util.ServiceLoader;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Provides the Kansokusha API published by the running platform plugin.
@@ -11,21 +10,26 @@ import java.util.ServiceLoader;
 @NotNullByDefault
 public final class Kansokusha {
 
+    private static volatile @Nullable KansokushaApi api;
+
     private Kansokusha() {
     }
 
     /**
      * Returns the API published by the running Kansokusha instance.
      *
-     * @throws IllegalStateException if the API has not been published or has already shut down
+     * @throws IllegalStateException if Kansokusha is not running
      */
     public static KansokushaApi api() {
-        KansokushaApiProvider provider = ServiceLoader.load(
-            KansokushaApiProvider.class,
-            Kansokusha.class.getClassLoader()
-        ).findFirst().orElseThrow(
-            () -> new IllegalStateException("Kansokusha API provider is not available")
-        );
-        return provider.api();
+        var current = api;
+        if (current == null) {
+            throw new IllegalStateException("Kansokusha API is not available");
+        }
+        return current;
+    }
+
+    @ApiStatus.Internal
+    public static void setApi(@Nullable KansokushaApi api) {
+        Kansokusha.api = api;
     }
 }

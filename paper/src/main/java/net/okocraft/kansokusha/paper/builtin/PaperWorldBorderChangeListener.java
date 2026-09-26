@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -19,7 +20,7 @@ import java.util.Objects;
 /** Records accepted world-border center and requested bounds changes. */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperWorldBorderChangeListener implements PaperInFlightListener {
+public final class PaperWorldBorderChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "world_border_change");
 
@@ -139,12 +140,6 @@ public final class PaperWorldBorderChangeListener implements PaperInFlightListen
                 durationTicks
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.centerInFlight.clear();
-        this.boundsInFlight.clear();
     }
 
     int inFlightCount() {

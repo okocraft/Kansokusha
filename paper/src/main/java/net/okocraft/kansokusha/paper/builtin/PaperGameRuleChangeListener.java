@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.GameRule;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -20,7 +21,7 @@ import java.util.Objects;
 /** Records accepted Paper world gamerule state changes. */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperGameRuleChangeListener implements PaperInFlightListener {
+public final class PaperGameRuleChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "gamerule_change");
 
@@ -95,11 +96,6 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
                 snapshot.source()
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

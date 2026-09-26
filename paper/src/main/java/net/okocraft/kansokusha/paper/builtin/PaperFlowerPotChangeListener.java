@@ -13,6 +13,7 @@ import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerEditBookEvent;
@@ -27,7 +28,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperFlowerPotChangeListener implements PaperInFlightListener {
+public final class PaperFlowerPotChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "flower_pot_change");
 
@@ -169,12 +170,6 @@ public final class PaperFlowerPotChangeListener implements PaperInFlightListener
     @EventHandler(priority = EventPriority.MONITOR)
     public void confirmTrade(PlayerStatisticIncrementEvent event) {
         this.playerItemAuditListener.confirmTrade(event);
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
-        this.playerItemAuditListener.clearInFlightState();
     }
 
     int inFlightCount() {

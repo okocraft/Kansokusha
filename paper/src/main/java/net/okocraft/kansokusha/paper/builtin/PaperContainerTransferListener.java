@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.jetbrains.annotations.ApiStatus;
@@ -20,7 +21,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperContainerTransferListener implements PaperInFlightListener {
+public final class PaperContainerTransferListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "container_transfer");
 
@@ -110,11 +111,6 @@ public final class PaperContainerTransferListener implements PaperInFlightListen
                 )
             )
         );
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

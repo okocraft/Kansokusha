@@ -8,8 +8,6 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -104,31 +102,8 @@ class PaperBlockPlaceListenerTest {
     }
 
     @Test
-    void testClearInFlightStateDropsCapturedSnapshot() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixture = single(
-            Blocks.STONE.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState(),
-            1, 64, 1, false, true
-        );
-
-        listener.capture(fixture.event());
-        Assertions.assertEquals(1, listener.inFlightCount());
-
-        listener.clearInFlightState();
-        listener.finalizeEvent(fixture.event());
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
     void testMultiPlaceAttemptsEverySnapshotWithOneTimestamp() throws Exception {
-        var api = new RecordingApi(
-            SubmissionOutcome.ACCEPTED,
-            SubmissionOutcome.INGESTION_UNAVAILABLE,
-            SubmissionOutcome.ACCEPTED
-        );
+        var api = new RecordingApi(true, false, true);
         var clock = Mockito.mock(Clock.class);
         Mockito.when(clock.instant()).thenReturn(
             OCCURRED_AT,
@@ -152,14 +127,7 @@ class PaperBlockPlaceListenerTest {
         listener.finalizeEvent(event);
 
         Assertions.assertEquals(3, api.submissions.size());
-        Assertions.assertEquals(
-            List.of(
-                SubmissionOutcome.ACCEPTED,
-                SubmissionOutcome.INGESTION_UNAVAILABLE,
-                SubmissionOutcome.ACCEPTED
-            ),
-            api.returnedOutcomes
-        );
+        Assertions.assertEquals(List.of(true, false, true), api.returnedOutcomes);
         var byX = submissionsByX(api.submissions);
         for (int i = 0; i < 3; i++) {
             var submission = byX.get(100 + i);
@@ -338,12 +306,12 @@ class PaperBlockPlaceListenerTest {
 
         private final ConcurrentLinkedQueue<EventSubmission> submissions =
             new ConcurrentLinkedQueue<>();
-        private final ConcurrentLinkedQueue<SubmissionOutcome> outcomes =
+        private final ConcurrentLinkedQueue<Boolean> outcomes =
             new ConcurrentLinkedQueue<>();
-        private final List<SubmissionOutcome> returnedOutcomes =
+        private final List<Boolean> returnedOutcomes =
             java.util.Collections.synchronizedList(new ArrayList<>());
 
-        private RecordingApi(SubmissionOutcome... outcomes) {
+        private RecordingApi(Boolean... outcomes) {
             this.outcomes.addAll(List.of(outcomes));
         }
 
@@ -353,15 +321,13 @@ class PaperBlockPlaceListenerTest {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            var outcome = Optional.ofNullable(this.outcomes.poll())
-                .orElse(SubmissionOutcome.ACCEPTED);
+            var outcome = Optional.ofNullable(this.outcomes.poll()).orElse(true);
             this.returnedOutcomes.add(outcome);
             return outcome;
         }

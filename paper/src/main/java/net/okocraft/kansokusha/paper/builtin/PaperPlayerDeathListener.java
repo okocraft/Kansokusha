@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -21,7 +22,7 @@ import java.util.Objects;
  */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperPlayerDeathListener implements PaperInFlightListener {
+public final class PaperPlayerDeathListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "player_death");
 
@@ -91,11 +92,6 @@ public final class PaperPlayerDeathListener implements PaperInFlightListener {
                 event.getKeepLevel()
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {
