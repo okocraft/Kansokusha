@@ -45,7 +45,7 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertEquals("global_toggle", string(togglePayload, "action"));
         Assertions.assertFalse(togglePayload.getBooleanOr("before_enabled", true));
         Assertions.assertTrue(togglePayload.getBooleanOr("after_enabled", false));
-        Assertions.assertEquals("whitelist_toggle", string(togglePayload, "source_event"));
+        Assertions.assertFalse(togglePayload.contains("source_event"));
         enabled.set(true);
 
         var disable = Mockito.mock(WhitelistToggleEvent.class);
@@ -83,10 +83,7 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertTrue(profilePayload.getBooleanOr("after_whitelisted", false));
         Assertions.assertEquals(PROFILE_ID.toString(), string(profilePayload, "profile_uuid"));
         Assertions.assertEquals("Alice", string(profilePayload, "profile_name"));
-        Assertions.assertEquals(
-            "whitelist_state_update",
-            string(profilePayload, "source_event")
-        );
+        Assertions.assertFalse(profilePayload.contains("source_event"));
 
         var remove = profileEvent(
             true,
