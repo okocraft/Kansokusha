@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Sign;
 import org.bukkit.event.EventHandler;
@@ -63,7 +63,8 @@ public final class PaperSignChangeListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(block.getWorld().getKey()),
                 PaperBuiltInSupport.position(block),
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+                new PlayerActor(event.getPlayer().getUniqueId()),
+                PaperBuiltInSupport.blockType(block.getBlockData()),
                 PaperAdditionalBuiltInPayloadCodec.encodeSignChange(
                     side,
                     PaperAdditionalBuiltInPayloadCodec.snapshotLines(sign.getSide(side).lines()),

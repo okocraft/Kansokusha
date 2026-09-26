@@ -52,7 +52,8 @@ public final class PaperTntPrimeListener implements Listener {
             return;
         }
 
-        var actor = PaperEntityAttribution.capture(event.getPrimingEntity());
+        var primingEntity = event.getPrimingEntity();
+        var actor = PaperEntityAttribution.capture(primingEntity);
         var primingBlock = event.getPrimingBlock();
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
@@ -61,7 +62,10 @@ public final class PaperTntPrimeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(tnt.getWorld().getKey()),
             position(tnt),
-            actor.subject(),
+            primingEntity != null
+                ? PaperBuiltInSupport.actor(primingEntity)
+                : primingBlock == null ? null : PaperBuiltInSupport.actor(primingBlock.getBlockData()),
+            PaperBuiltInSupport.blockType(tnt.getBlockData()),
             PaperWorldMutationPayloadCodec.encodeTntPrime(
                 event.getCause().name(),
                 actor,

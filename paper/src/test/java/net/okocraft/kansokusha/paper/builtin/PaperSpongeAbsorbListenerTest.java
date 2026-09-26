@@ -1,9 +1,11 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
 import org.bukkit.event.block.SpongeAbsorbEvent;
@@ -85,8 +87,10 @@ class PaperSpongeAbsorbListenerTest {
         Assertions.assertEquals(PaperSpongeAbsorbListener.EVENT_TYPE, first.eventType());
         Assertions.assertEquals(OCCURRED_AT, first.occurredAt());
         Assertions.assertEquals(OCCURRED_AT, second.occurredAt());
-        Assertions.assertNull(first.subject());
-        Assertions.assertNull(second.subject());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "sponge")), first.actor());
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", "sponge")), second.actor());
+        Assertions.assertEquals(Key.key("minecraft", "water"), first.targetType());
+        Assertions.assertEquals(Key.key("minecraft", "oak_slab"), second.targetType());
         Assertions.assertEquals(
             spongePayload(
                 Blocks.WATER.defaultBlockState(),

@@ -2,6 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
@@ -77,6 +79,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
 
         this.submitIfChanged(
             block,
+            null,
             preState,
             event.getNewState().getBlockData(),
             "block_fade",
@@ -95,6 +98,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         var block = event.getBlock();
         this.submitIfChanged(
             block,
+            null,
             block.getBlockData(),
             event.getNewState().getBlockData(),
             "block_form",
@@ -113,6 +117,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         var block = event.getBlock();
         this.submitIfChanged(
             block,
+            null,
             block.getBlockData(),
             event.getNewState().getBlockData(),
             "block_grow",
@@ -129,6 +134,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         var source = event.getSource();
         this.submitIfChanged(
             block,
+            new BlockActor(PaperBuiltInSupport.type(source.getType())),
             block.getBlockData(),
             event.getNewState().getBlockData(),
             "block_spread",
@@ -146,6 +152,8 @@ public final class PaperNaturalBlockChangeListener implements Listener {
             this.clock.instant(),
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
+            null,
+            PaperBuiltInSupport.blockType(block.getBlockData()),
             PaperBlockEventPayloadCodec.encodeLeavesDecay(block.getBlockData())
         );
     }
@@ -157,6 +165,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         var block = event.getBlock();
         this.submitIfChanged(
             block,
+            null,
             block.getBlockData(),
             event.getNewState().getBlockData(),
             "moisture_change",
@@ -195,6 +204,8 @@ public final class PaperNaturalBlockChangeListener implements Listener {
                 occurredAt,
                 key.worldKey(),
                 key.position(),
+                null,
+                PaperBuiltInSupport.changedBlockType(preState, postState),
                 PaperBlockEventPayloadCodec.encodeNaturalChange(
                     preState,
                     postState,
@@ -208,6 +219,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
 
     private void submitIfChanged(
         Block block,
+        @Nullable EventActor actor,
         BlockData preState,
         BlockData postState,
         String sourceEvent,
@@ -221,6 +233,8 @@ public final class PaperNaturalBlockChangeListener implements Listener {
             this.clock.instant(),
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
+            actor,
+            PaperBuiltInSupport.changedBlockType(preState, postState),
             PaperBlockEventPayloadCodec.encodeNaturalChange(
                 preState,
                 postState,
@@ -231,7 +245,14 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         );
     }
 
-    private void submit(Instant occurredAt, Key worldKey, BlockPosition position, EventPayload payload) {
+    private void submit(
+        Instant occurredAt,
+        Key worldKey,
+        BlockPosition position,
+        @Nullable EventActor actor,
+        Key targetType,
+        EventPayload payload
+    ) {
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -239,7 +260,8 @@ public final class PaperNaturalBlockChangeListener implements Listener {
             this.serverKey,
             worldKey,
             position,
-            null,
+            actor,
+            targetType,
             payload
         ));
     }

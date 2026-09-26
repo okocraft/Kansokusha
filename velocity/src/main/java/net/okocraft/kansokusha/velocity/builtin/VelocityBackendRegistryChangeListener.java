@@ -102,6 +102,7 @@ public final class VelocityBackendRegistryChangeListener {
                 null,
                 null,
                 null,
+                null,
                 VelocityBackendRegistryChangePayloadCodec.encode(
                     action,
                     serverKey.orElseThrow(),

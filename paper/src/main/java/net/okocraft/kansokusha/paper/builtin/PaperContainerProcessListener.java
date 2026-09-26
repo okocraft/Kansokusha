@@ -68,6 +68,7 @@ public final class PaperContainerProcessListener implements Listener {
 
         this.submit(
             block,
+            PaperBuiltInSupport.itemType(event.getResult()),
             "furnace_smelt",
             "org.bukkit.event.inventory.FurnaceSmeltEvent",
             PaperContainerPayloadCodec.snapshotItems(List.of(event.getSource())),
@@ -85,6 +86,7 @@ public final class PaperContainerProcessListener implements Listener {
         var contents = event.getContents();
         this.submit(
             event.getBlock(),
+            PaperBuiltInSupport.itemType(contents.getIngredient()),
             "brew",
             "org.bukkit.event.inventory.BrewEvent",
             PaperContainerPayloadCodec.snapshotItems(
@@ -106,6 +108,7 @@ public final class PaperContainerProcessListener implements Listener {
 
         this.submit(
             event.getBlock(),
+            PaperBuiltInSupport.itemType(event.getResult()),
             "campfire_cook",
             "org.bukkit.event.block.BlockCookEvent",
             PaperContainerPayloadCodec.snapshotItems(List.of(event.getSource())),
@@ -126,6 +129,7 @@ public final class PaperContainerProcessListener implements Listener {
             : inventory.getContents();
         this.submit(
             event.getBlock(),
+            PaperBuiltInSupport.itemType(event.getResult()),
             "crafter_craft",
             "org.bukkit.event.block.CrafterCraftEvent",
             PaperContainerPayloadCodec.snapshotItems(inputs),
@@ -138,6 +142,7 @@ public final class PaperContainerProcessListener implements Listener {
 
     private void submit(
         Block block,
+        @Nullable Key targetType,
         String processKind,
         String sourceEvent,
         ListTag inputItems,
@@ -146,6 +151,7 @@ public final class PaperContainerProcessListener implements Listener {
         ListTag results,
         @Nullable Inventory inventory
     ) {
+        var container = PaperContainerPayloadCodec.snapshotBlockContainer(block, inventory);
         this.api.submit(
             new EventSubmission(
                 EVENT_TYPE,
@@ -154,11 +160,12 @@ public final class PaperContainerProcessListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(block.getWorld().getKey()),
                 PaperBuiltInSupport.position(block),
-                null,
+                container.holder(),
+                targetType,
                 PaperContainerPayloadCodec.encodeProcess(
                     processKind,
                     sourceEvent,
-                    PaperContainerPayloadCodec.snapshotBlockContainer(block, inventory),
+                    container,
                     inputItems,
                     ingredient,
                     fuel,

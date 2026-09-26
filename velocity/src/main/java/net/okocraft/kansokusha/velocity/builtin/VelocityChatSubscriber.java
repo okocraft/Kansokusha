@@ -4,9 +4,9 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.player.PlayerChatEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -56,7 +56,8 @@ public final class VelocityChatSubscriber {
                 null,
                 null,
                 null,
-                new PlayerSubject(playerId),
+                new PlayerActor(playerId),
+                null,
                 VelocityCommunicationPayloadCodec.encodeChat(originalMessage)
             )
         );

@@ -69,12 +69,14 @@ public final class PaperPistonMoveListener implements Listener {
         var occurredAt = this.clock.instant();
         var pistonWorldKey = PaperKansokusha.key(piston.getWorld().getKey());
         var pistonOrigin = position(piston);
+        var pistonActor = PaperBuiltInSupport.actor(piston.getBlockData());
 
         for (var block : movedBlocks) {
             if (block.getPistonMoveReaction() == PistonMoveReaction.BREAK) {
                 continue;
             }
 
+            var blockData = block.getBlockData();
             var from = position(block);
             var to = new BlockPosition(
                 from.x() + direction.getModX(),
@@ -88,11 +90,12 @@ public final class PaperPistonMoveListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(block.getWorld().getKey()),
                 to,
-                null,
+                pistonActor,
+                PaperBuiltInSupport.blockType(blockData),
                 PaperWorldMutationPayloadCodec.encodePistonMove(
                     from,
                     to,
-                    block.getBlockData(),
+                    blockData,
                     pistonWorldKey,
                     pistonOrigin,
                     direction.name(),

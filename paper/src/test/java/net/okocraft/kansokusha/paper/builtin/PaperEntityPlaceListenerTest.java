@@ -4,7 +4,7 @@ import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -53,7 +53,8 @@ class PaperEntityPlaceListenerTest {
 
         var submission = onlySubmission(api);
         assertCommon(submission, PaperEntityPlaceListener.EVENT_TYPE, new BlockPosition(12, 64, -7));
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "armor_stand"), submission.targetType());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         assertEntity(payload.getCompoundOrEmpty("entity"), ENTITY_ID, "minecraft:armor_stand", 12.75, 64, -6.25);

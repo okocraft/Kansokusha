@@ -1,14 +1,28 @@
 package net.okocraft.kansokusha.api.event;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.EventSubject;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Objects;
 
+/**
+ * An event to record.
+ *
+ * @param eventType         the registered event type
+ * @param payloadGeneration the payload generation registered for the event type
+ * @param occurredAt        when the event occurred
+ * @param serverKey         the server the event occurred on
+ * @param worldKey          the world the event occurred in; requires {@code serverKey}
+ * @param position          the block position the event occurred at; requires {@code worldKey}
+ * @param actor             who or what directly performed the event
+ * @param targetType        the type of what the event acted on, such as {@code minecraft:stone}
+ *                          for a broken block or {@code minecraft:diamond} for a dropped item
+ * @param payload           the provider-defined payload
+ */
 @NotNullByDefault
 public record EventSubmission(
     Key eventType,
@@ -17,7 +31,8 @@ public record EventSubmission(
     @Nullable Key serverKey,
     @Nullable Key worldKey,
     @Nullable BlockPosition position,
-    @Nullable EventSubject subject,
+    @Nullable EventActor actor,
+    @Nullable Key targetType,
     EventPayload payload
 ) {
 

@@ -4,7 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -62,9 +61,6 @@ public final class PaperCauldronLevelChangeListener implements Listener {
         var block = event.getBlock();
         var entity = event.getEntity();
         var entityId = entity == null ? null : entity.getUniqueId();
-        var subject = entity instanceof Player
-            ? new PlayerSubject(Objects.requireNonNull(entityId))
-            : null;
         var actorKind = entity == null
             ? "none"
             : entity instanceof Player ? "player" : "entity";
@@ -76,7 +72,8 @@ public final class PaperCauldronLevelChangeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(block.getWorld().getKey()),
             position(block),
-            subject,
+            PaperBuiltInSupport.nullableActor(entity),
+            PaperBuiltInSupport.blockType(block.getBlockData()),
             PaperBlockEventPayloadCodec.encodeCauldronLevelChange(
                 block.getBlockData(),
                 event.getNewState().getBlockData(),

@@ -4,12 +4,15 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.block.sign.Side;
 import org.bukkit.block.sign.SignSide;
 import org.bukkit.entity.Player;
@@ -58,6 +61,8 @@ class PaperSignChangeListenerTest {
         Assertions.assertEquals(PaperSignChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(12, submission.position().x());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "oak_sign"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("front", string(payload, "side"));
         Assertions.assertEquals(
@@ -107,6 +112,9 @@ class PaperSignChangeListenerTest {
         Mockito.when(block.getX()).thenReturn(x);
         Mockito.when(block.getY()).thenReturn(64);
         Mockito.when(block.getZ()).thenReturn(-x);
+        var blockData = Mockito.mock(BlockData.class);
+        Mockito.when(blockData.getMaterial()).thenReturn(Material.OAK_SIGN);
+        Mockito.when(block.getBlockData()).thenReturn(blockData);
 
         var sign = Mockito.mock(Sign.class);
         var signSide = Mockito.mock(SignSide.class);

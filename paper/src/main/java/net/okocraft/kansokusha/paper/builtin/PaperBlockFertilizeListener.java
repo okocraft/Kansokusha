@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
@@ -64,7 +64,7 @@ public final class PaperBlockFertilizeListener implements Listener {
 
         var occurredAt = this.clock.instant();
         var player = event.getPlayer();
-        var subject = player == null ? null : new PlayerSubject(player.getUniqueId());
+        var actor = player == null ? null : new PlayerActor(player.getUniqueId());
         var sourcePosition = position(event.getBlock());
 
         var changedStates = new LinkedHashMap<BlockKey, BlockState>();
@@ -88,7 +88,8 @@ public final class PaperBlockFertilizeListener implements Listener {
                 this.serverKey,
                 key.worldKey(),
                 key.position(),
-                subject,
+                actor,
+                PaperBuiltInSupport.changedBlockType(preState, postState),
                 PaperBlockEventPayloadCodec.encodeFertilize(
                     preState,
                     postState,

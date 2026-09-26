@@ -1,7 +1,10 @@
 package net.okocraft.kansokusha.common.storage.duckdb;
 
 import net.kyori.adventure.key.Key;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EntityActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import org.duckdb.DuckDBAppender;
@@ -15,7 +18,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,14 +42,39 @@ public final class DuckDbStorageImpl implements Storage {
             x INTEGER,
             y INTEGER,
             z INTEGER,
-            player UUID,
+            actor_kind VARCHAR,
+            actor_uuid UUID,
+            actor_type VARCHAR,
+            target_type VARCHAR,
             expires_at TIMESTAMP_MS NOT NULL,
             payload BLOB NOT NULL
         )
         """;
 
+    private static final List<String> EVENTS_COLUMNS = List.of(
+        "event_type",
+        "payload_generation",
+        "occurred_at",
+        "server",
+        "world",
+        "x",
+        "y",
+        "z",
+        "actor_kind",
+        "actor_uuid",
+        "actor_type",
+        "target_type",
+        "expires_at",
+        "payload"
+    );
+
+    private static final byte[] PLAYER_ACTOR_KIND = "player".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] ENTITY_ACTOR_KIND = "entity".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] BLOCK_ACTOR_KIND = "block".getBytes(StandardCharsets.UTF_8);
+
     // Bounds the cache in case a platform creates worlds with unique keys indefinitely.
-    private static final int MAX_CACHED_KEYS = 1024;
+    // Large enough to hold every block, item and entity type key used as actor or target types.
+    private static final int MAX_CACHED_KEYS = 4096;
 
     private final DuckDBConnection connection;
     // Key#asString() concatenates on every call, and the appender encodes strings to UTF-8 on every call.
@@ -65,6 +95,7 @@ public final class DuckDbStorageImpl implements Storage {
         );
         try (var statement = connection.createStatement()) {
             statement.execute(CREATE_EVENTS_TABLE);
+            verifyEventsColumns(statement);
         } catch (SQLException e) {
             connection.close();
             throw e;
@@ -93,11 +124,8 @@ public final class DuckDbStorageImpl implements Storage {
                     appender.append(position.x()).append(position.y()).append(position.z());
                 }
 
-                if (event.subject() instanceof PlayerSubject player) {
-                    appender.append(player.uniqueId());
-                } else {
-                    appender.appendNull();
-                }
+                this.appendActor(appender, event.actor());
+                this.appendNullable(appender, event.targetType());
 
                 appender.appendEpochMillis(queued.expiresAtMillis())
                     .append(event.payload().unsafeBytes())
@@ -134,6 +162,40 @@ public final class DuckDbStorageImpl implements Storage {
             this.appender = appender;
         }
         return appender;
+    }
+
+    private static void verifyEventsColumns(Statement statement) throws SQLException {
+        var columns = new ArrayList<String>();
+        try (var rows = statement.executeQuery(
+            "SELECT column_name FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND table_name = 'events' "
+                + "ORDER BY ordinal_position"
+        )) {
+            while (rows.next()) {
+                columns.add(rows.getString(1));
+            }
+        }
+        if (!columns.equals(EVENTS_COLUMNS)) {
+            throw new SQLException(
+                "The events table has unsupported columns " + columns + " (expected " + EVENTS_COLUMNS
+                    + "). The database was created by an incompatible version of Kansokusha."
+            );
+        }
+    }
+
+    private void appendActor(DuckDBAppender appender, @Nullable EventActor actor) throws SQLException {
+        switch (actor) {
+            case null -> appender.appendNull().appendNull().appendNull();
+            case PlayerActor player -> appender.append(PLAYER_ACTOR_KIND)
+                .append(player.uniqueId())
+                .appendNull();
+            case EntityActor entity -> appender.append(ENTITY_ACTOR_KIND)
+                .append(entity.uniqueId())
+                .append(this.encode(entity.entityType()));
+            case BlockActor block -> appender.append(BLOCK_ACTOR_KIND)
+                .appendNull()
+                .append(this.encode(block.blockType()));
+        }
     }
 
     private void appendNullable(DuckDBAppender appender, @Nullable Key key) throws SQLException {

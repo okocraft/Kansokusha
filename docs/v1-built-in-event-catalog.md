@@ -88,19 +88,65 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 
 registration、submission、acceptance / persistence の意味は `docs/design.md` に従う。
 
-### Timestamp / subject
+### Timestamp
 
 `occurredAt` は Kansokusha が対象 platform event を処理した時点の current instant とする。
 
 同一 platform event から複数の `EventSubmission` を生成する場合（`BlockMultiPlaceEvent`、爆発、sponge、fertilize、structure grow、piston 等）、処理時に1回だけ取得した同一 `occurredAt` を共有する。
 
-player-driven event の subject は `PlayerSubject(player UUID)` とする。
+### Actor / target
+
+actor（誰が）はイベントを直接起こした主体、target type（何を）はイベントが作用した対象の種類 key とする。間接的な主体（projectile を撃った entity、primed TNT を着火した entity、攻撃した tameable の owner 等）は actor にせず、既存の payload field に残す。
+
+- `PlayerActor(player UUID)`: player
+- `EntityActor(entity UUID, entity type key)`: player 以外の entity
+- `BlockActor(block type key)`: block。block の位置が必要な場合は payload の既存 field を参照する
+
+block の変化で変化前と変化後の両方がある event の target は、変化前の block type とし、変化前が空気の場合は変化後の block type とする（以下「変化した block」）。
+
+| Event type | Actor | Target type |
+| --- | --- | --- |
+| `block_break` | player | 破壊された block |
+| `block_place` | player | 設置された block |
+| `sign_change` | player | sign の block |
+| `bucket_empty` | player | 使用した bucket item（例: `minecraft:lava_bucket`） |
+| `bucket_fill` | player | 結果の bucket item（例: `minecraft:water_bucket`）。結果 item がなければなし |
+| `block_harvest` | player | 収穫・剪定された block |
+| `flower_pot_change` | player | 出し入れされた item。なければなし |
+| `block_ignite` | 着火した entity、なければ着火元の block（溶岩・火等）、どちらもなければなし | 着火された block。空気への着火は `minecraft:fire` |
+| `block_burn` | 着火元の block。なければなし | 焼失した block |
+| `tnt_prime` | 着火した entity、なければ着火元の block、どちらもなければなし | TNT の block |
+| `explosion_block_change` | 爆発した entity（`BlockExplodeEvent` では爆発した block） | 破壊された block |
+| `piston_move` | piston の block | 移動した block |
+| `entity_block_change` | block を変化させた entity | 変化した block |
+| `natural_block_change` | `BlockSpreadEvent` では広がり元の block。それ以外はなし | 変化した block（`LeavesDecayEvent` では葉の block） |
+| `fluid_change` | 流れた液体の block（`minecraft:water` / `minecraft:lava`） | 流入先の block。流入先が空気なら液体の block |
+| `sponge_absorb` | sponge の block | 吸収された block |
+| `block_fertilize` | player。なければなし | 変化した block |
+| `cauldron_level_change` | 変化させた entity。なければなし | 変化前の cauldron の block |
+| `container_transfer` | 移動を起こした inventory の holder（hopper の block、hopper minecart の entity）。holder が block / entity でなければなし | 移動した item |
+| `container_pickup` | 拾った inventory の holder。holder が block / entity でなければなし | 拾われた item |
+| `container_process` | 処理した block | furnace / campfire / crafter は結果の item、brewing は ingredient の item |
+| `item_drop` / `item_pickup` | player | item |
+| `book_edit` | player | 署名時 `minecraft:written_book`、それ以外 `minecraft:writable_book` |
+| `lectern_change` | player | 出し入れされた book の item |
+| `player_trade` | player | 取引の結果 item |
+| `entity_place` | player。なければなし | 設置された entity |
+| `entity_break` | 取り除いた entity | 壊された entity |
+| `armor_stand_manipulate` / `entity_leash_change` / `item_frame_change` / `entity_name_change` | player | 対象の entity |
+| `entity_tame` | 新しい owner（entity の場合）。それ以外はなし | 手懐けられた entity |
+| `gamerule_change` | 変更した command sender（player / entity / command block）。それ以外はなし | gamerule の key |
+| `world_difficulty_change` | 変更した command sender（player / entity / command block）。それ以外はなし | なし |
+| `paper_server_command` | command block または command minecart。console / rcon はなし | なし |
+| `world_border_change` / `world_spawn_change` / `whitelist_change` | なし | なし |
+| 上記以外の Paper event（session、chat、player command、player state） | player | なし |
+| Velocity event | player（`velocity_command` は player が送った場合のみ）。`backend_registry_change` はなし | なし |
 
 ### Payload encoding
 
 payload は provider-defined opaque bytes とし、platform 固有の built-in event を common codec へ抽象化しない。
 
-common fields（event type、generation、occurredAt、server、world、position、subject）は payload に重複保存しない。
+common fields（event type、generation、occurredAt、server、world、position）は payload に重複保存しない。actor と target type は検索用の列であり、payload generation 1 の既存 field（`actor_entity_uuid`、block state 等）と内容が重なっても payload から除かない。
 
 ### Paper / Folia capture semantics
 
@@ -180,7 +226,8 @@ common fields:
 - server: Paper runtime の local server key
 - world: Bukkit world key を Adventure `Key` へ lossless conversion
 - position: broken block の integer block coordinates
-- subject: breaking player UUID
+- actor: breaking player
+- target type: broken block type
 
 payload generation 1 は Paper module で paperweight-userdev を利用して生成する binary NBT とする。
 
@@ -205,7 +252,8 @@ common fields:
 - server: Paper runtime の local server key
 - world: changed block の Bukkit world key を Adventure `Key` へ lossless conversion
 - position: changed block の integer block coordinates
-- subject: placing player UUID
+- actor: placing player
+- target type: placed block type
 
 payload generation 1 は Paper module で生成する binary NBT compound とし、次の2 child compounds を持つ。
 
@@ -282,9 +330,9 @@ insert は `before = empty`、`after = placed item x1`、remove は `before = re
 
 player と world item entity の間の明示的な transfer を記録する。player inventory 内の generic slot mutation は source にしない。
 
-`item_drop` は non-cancelled `PlayerDropItemEvent` を対象とし、item entity UUID、ItemStack、entity の world position、player subject を記録する。
+`item_drop` は non-cancelled `PlayerDropItemEvent` を対象とし、item entity UUID、ItemStack、entity の world position、player actor を記録する。
 
-`item_pickup` は `EntityPickupItemEvent` の actor が Player の場合だけ対象とし、item entity UUID、ItemStack、pickup position、remaining count、player subject を記録する。non-player pickup は保存しない。
+`item_pickup` は `EntityPickupItemEvent` の actor が Player の場合だけ対象とし、item entity UUID、ItemStack、pickup position、remaining count、player actor を記録する。non-player pickup は保存しない。
 
 generation 1 payload は共通して `item_entity_uuid`、`stack`、exact entity `position` を持ち、pickup は追加で `remaining` を持つ。ItemStack は `PaperItemStackPayloadCodec` の byte serialization を再利用し、live reference を保持しない。
 
@@ -328,7 +376,7 @@ common fields:
 - server: target backend server key
 - world: なし
 - position: なし
-- subject: connected player UUID
+- actor: connected player
 
 listener は storage completion を待たず、通常の bounded submission のみを行う。
 

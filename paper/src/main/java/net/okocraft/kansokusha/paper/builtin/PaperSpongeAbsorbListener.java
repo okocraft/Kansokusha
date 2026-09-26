@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
@@ -61,7 +62,9 @@ public final class PaperSpongeAbsorbListener implements Listener {
         Objects.requireNonNull(event, "event");
 
         var occurredAt = this.clock.instant();
-        var spongeOrigin = position(event.getBlock());
+        var sponge = event.getBlock();
+        var spongeOrigin = position(sponge);
+        var spongeActor = new BlockActor(PaperBuiltInSupport.type(sponge.getType()));
         var absorbedBlocks = new LinkedHashMap<BlockKey, BlockData>();
         for (var state : event.getBlocks()) {
             absorbedBlocks.putIfAbsent(blockKey(state), state.getBlock().getBlockData());
@@ -76,7 +79,8 @@ public final class PaperSpongeAbsorbListener implements Listener {
                 this.serverKey,
                 key.worldKey(),
                 key.position(),
-                null,
+                spongeActor,
+                PaperBuiltInSupport.blockType(entry.getValue()),
                 PaperBlockEventPayloadCodec.encodeSpongeAbsorb(entry.getValue(), spongeOrigin)
             ));
         }

@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -57,7 +57,8 @@ public final class PaperPlayerDeathListener implements Listener {
             this.serverKey,
             location.worldKey(),
             location.blockPosition(),
-            new PlayerSubject(player.getUniqueId()),
+            new PlayerActor(player.getUniqueId()),
+            null,
             PaperPlayerStatePayloadCodec.encodeDeath(
                 event.deathMessage(),
                 PaperPlayerStatePayloadCodec.snapshotKiller(

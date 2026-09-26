@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -77,7 +78,8 @@ public final class PaperExplosionBlockChangeListener implements Listener {
                 worldKey,
                 position(source),
                 source.getBlockData(),
-                PaperEntityAttribution.capture(null)
+                PaperEntityAttribution.capture(null),
+                PaperBuiltInSupport.actor(source.getBlockData())
             )
         );
     }
@@ -101,7 +103,8 @@ public final class PaperExplosionBlockChangeListener implements Listener {
                 null,
                 null,
                 null,
-                PaperEntityAttribution.capture(event.getEntity())
+                PaperEntityAttribution.capture(event.getEntity()),
+                PaperBuiltInSupport.actor(event.getEntity())
             )
         );
     }
@@ -142,7 +145,8 @@ public final class PaperExplosionBlockChangeListener implements Listener {
                 this.serverKey,
                 worldKey,
                 blockPosition,
-                source.actor().subject(),
+                source.eventActor(),
+                PaperBuiltInSupport.type(type),
                 PaperWorldMutationPayloadCodec.encodeExplosionBlockChange(
                     block.getBlockData(),
                     source.kind(),
@@ -166,7 +170,8 @@ public final class PaperExplosionBlockChangeListener implements Listener {
         @Nullable Key blockWorldKey,
         @Nullable BlockPosition blockPosition,
         @Nullable BlockData blockState,
-        PaperEntityAttribution actor
+        PaperEntityAttribution actor,
+        EventActor eventActor
     ) {
     }
 }

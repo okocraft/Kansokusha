@@ -5,9 +5,9 @@ import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -71,7 +71,8 @@ public final class VelocityServerConnectedListener {
                 targetServerKey,
                 null,
                 null,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+                new PlayerActor(event.getPlayer().getUniqueId()),
+                null,
                 VelocityServerConnectedPayloadCodec.encode(previousServerKey)
             )
         );

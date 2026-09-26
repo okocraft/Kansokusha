@@ -2,10 +2,10 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -62,6 +62,7 @@ public final class PaperEntityPlaceListener implements Listener {
         var hand = event.getHand();
         this.submit(
             PaperEntityEventPayloadCodec.snapshotEntity(entity),
+            PaperBuiltInSupport.entityType(entity),
             player,
             hand,
             heldItem(player, hand),
@@ -82,8 +83,10 @@ public final class PaperEntityPlaceListener implements Listener {
             item = heldItem(player, hand);
         }
 
+        var entity = event.getEntity();
         this.submit(
-            PaperEntityEventPayloadCodec.snapshotEntity(event.getEntity()),
+            PaperEntityEventPayloadCodec.snapshotEntity(entity),
+            PaperBuiltInSupport.entityType(entity),
             player,
             hand,
             item,
@@ -99,6 +102,7 @@ public final class PaperEntityPlaceListener implements Listener {
 
     private void submit(
         PaperEntityEventPayloadCodec.EntitySnapshot entity,
+        Key entityType,
         @Nullable Player player,
         @Nullable EquipmentSlot hand,
         @Nullable ItemStack item,
@@ -106,10 +110,10 @@ public final class PaperEntityPlaceListener implements Listener {
         @Nullable PaperEntityEventPayloadCodec.HangingPlacementSnapshot hanging
     ) {
         PaperEntityEventPayloadCodec.EntitySnapshot actor = null;
-        PlayerSubject subject = null;
+        PlayerActor playerActor = null;
         if (player != null) {
             actor = PaperEntityEventPayloadCodec.snapshotEntity(player);
-            subject = new PlayerSubject(player.getUniqueId());
+            playerActor = new PlayerActor(player.getUniqueId());
         }
 
         this.api.submit(
@@ -124,7 +128,8 @@ public final class PaperEntityPlaceListener implements Listener {
                     (int) Math.floor(entity.y()),
                     (int) Math.floor(entity.z())
                 ),
-                subject,
+                playerActor,
+                entityType,
                 PaperEntityEventPayloadCodec.encodePlacement(
                     entity,
                     actor,

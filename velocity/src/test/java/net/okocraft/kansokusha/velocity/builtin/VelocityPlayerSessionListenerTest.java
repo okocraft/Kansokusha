@@ -11,7 +11,7 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -439,8 +439,8 @@ class VelocityPlayerSessionListenerTest {
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(
-            new PlayerSubject(PLAYER_ID),
-            submission.subject()
+            new PlayerActor(PLAYER_ID),
+            submission.actor()
         );
     }
 
@@ -460,8 +460,8 @@ class VelocityPlayerSessionListenerTest {
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(
-            new PlayerSubject(PLAYER_ID),
-            submission.subject()
+            new PlayerActor(PLAYER_ID),
+            submission.actor()
         );
     }
 }

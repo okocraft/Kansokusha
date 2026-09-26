@@ -3,9 +3,9 @@ package net.okocraft.kansokusha.paper.builtin;
 import com.destroystokyo.paper.event.player.PlayerSetSpawnEvent;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -67,7 +67,8 @@ public final class PaperPlayerSpawnChangeListener implements Listener {
             this.serverKey,
             common == null ? null : common.worldKey(),
             common == null ? null : common.blockPosition(),
-            new PlayerSubject(player.getUniqueId()),
+            new PlayerActor(player.getUniqueId()),
+            null,
             PaperPlayerStatePayloadCodec.encodeSpawnChange(
                 before,
                 after,

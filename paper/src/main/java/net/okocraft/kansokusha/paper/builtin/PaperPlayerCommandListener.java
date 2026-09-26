@@ -2,10 +2,10 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -64,7 +64,8 @@ public final class PaperPlayerCommandListener implements Listener {
                 this.serverKey,
                 PaperKansokusha.key(world.getKey()),
                 new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ()),
-                new PlayerSubject(playerId),
+                new PlayerActor(playerId),
+                null,
                 PaperCommunicationPayloadCodec.encodePlayerCommand(originalCommand)
             )
         );

@@ -3,14 +3,19 @@ package net.okocraft.kansokusha.paper.builtin;
 import io.papermc.paper.chat.ChatRenderer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.chat.SignedMessage;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -100,7 +105,8 @@ class PaperCommunicationListenerTest {
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertNull(submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(
             original,
@@ -131,9 +137,10 @@ class PaperCommunicationListenerTest {
         var submission = onlySubmission(api);
         Assertions.assertEquals(PaperPlayerCommandListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertNull(submission.targetType());
         Assertions.assertEquals(
-            net.kyori.adventure.key.Key.key("example", "world"),
+            Key.key("example", "world"),
             submission.worldKey()
         );
         Assertions.assertEquals(new BlockPosition(12, 64, -9), submission.position());
@@ -166,6 +173,7 @@ class PaperCommunicationListenerTest {
             "CONSOLE",
             "say original",
             null,
+            null,
             null
         );
 
@@ -184,6 +192,7 @@ class PaperCommunicationListenerTest {
             "custom-source",
             "custom command",
             null,
+            null,
             null
         );
     }
@@ -197,6 +206,9 @@ class PaperCommunicationListenerTest {
         var sender = Mockito.mock(BlockCommandSender.class);
         Mockito.when(sender.getName()).thenReturn("command-block");
         Mockito.when(sender.getBlock()).thenReturn(block);
+        var blockData = Mockito.mock(BlockData.class);
+        Mockito.when(blockData.getMaterial()).thenReturn(Material.COMMAND_BLOCK);
+        Mockito.when(block.getBlockData()).thenReturn(blockData);
 
         var event = Mockito.mock(ServerCommandEvent.class);
         Mockito.when(event.getSender()).thenReturn(sender);
@@ -208,8 +220,9 @@ class PaperCommunicationListenerTest {
             "command_block",
             "command-block",
             "setblock ~ ~ ~ stone",
-            net.kyori.adventure.key.Key.key("example", "world"),
-            new BlockPosition(21, 70, -4)
+            Key.key("example", "world"),
+            new BlockPosition(21, 70, -4),
+            new BlockActor(Key.key("minecraft", "command_block"))
         );
     }
 
@@ -234,6 +247,7 @@ class PaperCommunicationListenerTest {
             "rcon",
             "Rcon",
             "list",
+            null,
             null,
             null
         );
@@ -290,15 +304,17 @@ class PaperCommunicationListenerTest {
         String sourceKind,
         String sourceName,
         String command,
-        net.kyori.adventure.key.Key worldKey,
-        BlockPosition position
+        Key worldKey,
+        BlockPosition position,
+        EventActor actor
     ) throws Exception {
         Assertions.assertEquals(PaperServerCommandListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(worldKey, submission.worldKey());
         Assertions.assertEquals(position, submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertEquals(actor, submission.actor());
+        Assertions.assertNull(submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals(sourceKind, string(payload, "source_kind"));
         Assertions.assertEquals(sourceName, string(payload, "source_name"));

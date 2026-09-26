@@ -9,8 +9,8 @@ import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.EventSubject;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -70,7 +70,7 @@ class PaperAdministrativeWorldListenerTest {
             submission,
             PaperGameRuleChangeListener.EVENT_TYPE,
             "rules",
-            new PlayerSubject(PLAYER_ID)
+            new PlayerActor(PLAYER_ID)
         );
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("minecraft:keep_inventory", string(payload, "game_rule"));
@@ -115,7 +115,7 @@ class PaperAdministrativeWorldListenerTest {
         PaperListenerTestSupport.fire(listener, accepted);
 
         var submission = onlySubmission(api);
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertFalse(payload.getBooleanOr("source_present", true));
         Assertions.assertFalse(payload.contains("source"));
@@ -336,7 +336,7 @@ class PaperAdministrativeWorldListenerTest {
         Assertions.assertNotEquals(PaperPlayerSpawnChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(Key.key("example", "spawn"), submission.worldKey());
         Assertions.assertEquals(new BlockPosition(-5, 80, 9), submission.position());
-        Assertions.assertNull(submission.subject());
+        Assertions.assertNull(submission.actor());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("world", string(payload, "scope"));
@@ -370,14 +370,14 @@ class PaperAdministrativeWorldListenerTest {
         EventSubmission submission,
         Key eventType,
         String world,
-        EventSubject subject
+        EventActor actor
     ) {
         Assertions.assertEquals(eventType, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(Key.key("example", world), submission.worldKey());
         Assertions.assertNull(submission.position());
-        Assertions.assertEquals(subject, submission.subject());
+        Assertions.assertEquals(actor, submission.actor());
     }
 
     private static String string(CompoundTag payload, String key) {

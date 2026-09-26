@@ -7,7 +7,7 @@ import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -442,7 +442,8 @@ class PaperPlayerStateListenerTest {
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(worldKey, submission.worldKey());
         Assertions.assertEquals(position, submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertNull(submission.targetType());
     }
 
     private static CompoundTag locationTag(

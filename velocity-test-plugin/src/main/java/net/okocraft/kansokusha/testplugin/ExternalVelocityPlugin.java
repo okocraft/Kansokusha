@@ -58,6 +58,7 @@ public final class ExternalVelocityPlugin {
                 null,
                 null,
                 null,
+                null,
                 EventPayload.copyOf(new byte[]{1, 2, 3})
             );
             check(this.api.submit(this.submission), "External event submission was not accepted.");

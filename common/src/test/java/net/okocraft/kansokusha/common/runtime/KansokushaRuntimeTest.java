@@ -223,7 +223,7 @@ class KansokushaRuntimeTest {
 
     private static EventSubmission event(Instant occurredAt) {
         return new EventSubmission(
-            EVENT_TYPE, PayloadGeneration.FIRST, occurredAt, SERVER_KEY, null, null, null,
+            EVENT_TYPE, PayloadGeneration.FIRST, occurredAt, SERVER_KEY, null, null, null, null,
             EventPayload.copyOf(new byte[]{1})
         );
     }

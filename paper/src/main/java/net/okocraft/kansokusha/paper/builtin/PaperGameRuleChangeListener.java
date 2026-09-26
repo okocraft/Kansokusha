@@ -58,7 +58,9 @@ public final class PaperGameRuleChangeListener implements Listener {
             return;
         }
 
-        var source = PaperAdministrativeSource.snapshot(event.getCommandSender());
+        var sender = event.getCommandSender();
+        var source = PaperAdministrativeSource.snapshot(sender);
+        var gameRuleKey = PaperKansokusha.key(gameRule.getKey());
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -66,9 +68,10 @@ public final class PaperGameRuleChangeListener implements Listener {
             this.serverKey,
             PaperKansokusha.key(world.getKey()),
             null,
-            PaperAdministrativeSource.subject(source),
+            PaperAdministrativeSource.actor(sender),
+            gameRuleKey,
             PaperAdministrativePayloadCodec.encodeGameRuleChange(
-                PaperKansokusha.key(gameRule.getKey()).asString(),
+                gameRuleKey.asString(),
                 before,
                 after,
                 source

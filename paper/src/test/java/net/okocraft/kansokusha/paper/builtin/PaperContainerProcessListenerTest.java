@@ -1,6 +1,8 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
+import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -141,6 +143,10 @@ class PaperContainerProcessListenerTest {
 
         assertProcess(byX.get(30), "campfire_cook", Material.COD, 1, Material.COOKED_COD);
         assertProcess(byX.get(40), "crafter_craft", Material.IRON_INGOT, 3, Material.IRON_BLOCK);
+        assertActorAndTarget(byX.get(10), "furnace", "iron_ingot");
+        assertActorAndTarget(byX.get(20), "brewing_stand", "nether_wart");
+        assertActorAndTarget(byX.get(30), "campfire", "cooked_cod");
+        assertActorAndTarget(byX.get(40), "crafter", "iron_block");
     }
 
     @Test
@@ -286,6 +292,11 @@ class PaperContainerProcessListenerTest {
         Mockito.when(block.getState()).thenReturn(state);
     }
 
+    private static void assertActorAndTarget(EventSubmission submission, String blockType, String targetType) {
+        Assertions.assertEquals(new BlockActor(Key.key("minecraft", blockType)), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", targetType), submission.targetType());
+    }
+
     private static HashMap<Integer, EventSubmission> submissionsByX(
         PaperBlockEventTestSupport.RecordingApi api
     ) {
@@ -294,7 +305,7 @@ class PaperContainerProcessListenerTest {
             Assertions.assertNull(result.put(submission.position().x(), submission));
             Assertions.assertEquals(PaperContainerProcessListener.EVENT_TYPE, submission.eventType());
             Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-            Assertions.assertNull(submission.subject());
+            Assertions.assertInstanceOf(BlockActor.class, submission.actor());
         }
         return result;
     }

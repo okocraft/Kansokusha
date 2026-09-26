@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -63,12 +63,13 @@ public final class PaperBlockPlaceListener implements Listener {
         }
 
         var occurredAt = this.clock.instant();
-        var subject = new PlayerSubject(event.getPlayer().getUniqueId());
+        var actor = new PlayerActor(event.getPlayer().getUniqueId());
         var replacedStates = event instanceof BlockMultiPlaceEvent multiPlaceEvent
             ? multiPlaceEvent.getReplacedBlockStates()
             : List.of(event.getBlockReplacedState());
 
         for (var replacedState : replacedStates) {
+            var placedState = replacedState.getBlock().getBlockData();
             this.api.submit(
                 new EventSubmission(
                     EVENT_TYPE,
@@ -77,10 +78,11 @@ public final class PaperBlockPlaceListener implements Listener {
                     this.serverKey,
                     PaperKansokusha.key(replacedState.getWorld().getKey()),
                     PaperBuiltInSupport.position(replacedState),
-                    subject,
+                    actor,
+                    PaperBuiltInSupport.blockType(placedState),
                     PaperBlockStatePayloadCodec.encodeBlockPlace(
                         replacedState.getBlockData(),
-                        replacedState.getBlock().getBlockData()
+                        placedState
                     )
                 )
             );

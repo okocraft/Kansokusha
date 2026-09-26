@@ -1,11 +1,12 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CocoaBlock;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockFertilizeEvent;
@@ -65,7 +66,8 @@ class PaperBlockFertilizeListenerTest {
         Assertions.assertEquals(PaperBlockFertilizeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(new BlockPosition(11, 64, 10), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "cocoa"), submission.targetType());
         Assertions.assertEquals(
             fertilizePayload(
                 Blocks.COCOA.defaultBlockState(),

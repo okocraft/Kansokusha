@@ -8,7 +8,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -63,7 +63,8 @@ class PaperBlockBreakListenerTest {
         Assertions.assertEquals(SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
         Assertions.assertEquals(new BlockPosition(12, 64, -7), submission.position());
-        Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
+        Assertions.assertEquals(new PlayerActor(PLAYER_ID), submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "diamond_ore"), submission.targetType());
         Assertions.assertEquals(
             NbtUtils.writeBlockState(state),
             PaperPayloadNbtCodec.decode(submission.payload())
