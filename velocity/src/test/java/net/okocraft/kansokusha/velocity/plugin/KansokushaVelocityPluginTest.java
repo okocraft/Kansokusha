@@ -1,5 +1,8 @@
 package net.okocraft.kansokusha.velocity.plugin;
 
+import com.velocitypowered.api.command.BrigadierCommand;
+import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -35,7 +38,8 @@ class KansokushaVelocityPluginTest {
         throws Exception {
         var logger = Mockito.mock(Logger.class);
         var eventManager = Mockito.mock(EventManager.class);
-        var proxyServer = proxyServer(eventManager);
+        var commandManager = commandManager();
+        var proxyServer = proxyServer(eventManager, commandManager);
         var plugin = new KansokushaVelocityPlugin(logger, proxyServer, dir);
 
         plugin.onProxyInitialize(null);
@@ -43,6 +47,10 @@ class KansokushaVelocityPluginTest {
         var listenerCaptor = ArgumentCaptor.forClass(Object.class);
         Mockito.verify(eventManager, Mockito.times(5))
             .register(Mockito.eq(plugin), listenerCaptor.capture());
+        Mockito.verify(commandManager).register(
+            Mockito.any(CommandMeta.class),
+            Mockito.any(BrigadierCommand.class)
+        );
 
         var listeners = listenerCaptor.getAllValues();
         Assertions.assertEquals(
@@ -103,10 +111,20 @@ class KansokushaVelocityPluginTest {
         }
     }
 
-    private static ProxyServer proxyServer(EventManager eventManager) {
+    private static ProxyServer proxyServer(EventManager eventManager, CommandManager commandManager) {
         var proxyServer = Mockito.mock(ProxyServer.class);
         Mockito.when(proxyServer.getEventManager()).thenReturn(eventManager);
+        Mockito.when(proxyServer.getCommandManager()).thenReturn(commandManager);
         return proxyServer;
+    }
+
+    private static CommandManager commandManager() {
+        var manager = Mockito.mock(CommandManager.class);
+        var builder = Mockito.mock(CommandMeta.Builder.class);
+        Mockito.when(manager.metaBuilder(Mockito.any(BrigadierCommand.class))).thenReturn(builder);
+        Mockito.when(builder.plugin(Mockito.any())).thenReturn(builder);
+        Mockito.when(builder.build()).thenReturn(Mockito.mock(CommandMeta.class));
+        return manager;
     }
 
     private static ServerConnectedEvent serverConnectedEvent(
