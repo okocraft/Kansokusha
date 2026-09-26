@@ -20,21 +20,21 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | --- | --- | --- | --- |
 | `kansokusha:block_break` | `BlockBreakEvent` | `audit` | non-cancelled break attempt; later vanilla destruction success is not asserted |
 | `kansokusha:block_place` | `BlockPlaceEvent` / `BlockMultiPlaceEvent` | `audit` | non-cancelled + buildable placement attempt; final post-processing state is not asserted |
-| `kansokusha:sign_change` | `SignChangeEvent` | `audit` | before snapshot + final event lines |
+| `kansokusha:sign_change` | `SignChangeEvent` | `audit` | current sign lines + final event lines |
 | `kansokusha:bucket_empty` | `PlayerBucketEmptyEvent` | `audit` | block-changing bucket operation |
 | `kansokusha:bucket_fill` | `PlayerBucketFillEvent` | `audit` | block-changing fill only; non-block `BlockFace.SELF` paths are excluded |
 | `kansokusha:block_harvest` | `PlayerHarvestBlockEvent` / `PlayerShearBlockEvent` | `audit` | #110 shear is canonicalized into #109 harvest |
 | `kansokusha:flower_pot_change` | `PlayerFlowerPotManipulateEvent` | `audit` | insert/remove |
 | `kansokusha:block_ignite` | `BlockIgniteEvent` | `audit` | ignition origin/cause; `SPREAD` is excluded and owned by `natural_block_change` |
-| `kansokusha:block_burn` | `BlockBurnEvent` | `short` | fire-caused destruction; TNT fire-prime correlation prevents duplicate ownership |
-| `kansokusha:tnt_prime` | `TNTPrimeEvent` | `audit` | accepted TNT prime |
-| `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block |
+| `kansokusha:block_burn` | `BlockBurnEvent` | `short` | fire-caused destruction; burning TNT is owned by `tnt_prime` while `tntExplodes` is true |
+| `kansokusha:tnt_prime` | `TNTPrimeEvent` | `audit` | accepted TNT prime while `tntExplodes` is true |
+| `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block; exploded TNT is owned by `tnt_prime` while `tntExplodes` is true, except for the Ender Dragon |
 | `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement |
 | `kansokusha:entity_block_change` | `EntityChangeBlockEvent` | `audit` | entity-caused block mutation |
 | `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent` | `short` | natural/environmental change; `EntityBlockFormEvent` is excluded |
 | `kansokusha:fluid_change` | `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
-| `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | fertilization owns matching grow/spread/structure changes |
+| `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
 | `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason` and `actor_kind` |
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
@@ -43,7 +43,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
 | `kansokusha:book_edit` | `PlayerEditBookEvent` | `audit` | previous/final book state |
 | `kansokusha:lectern_change` | `PlayerInsertLecternBookEvent` / `PlayerTakeLecternBookEvent` | `audit` | insert/take only; page navigation is excluded |
-| `kansokusha:player_trade` | `PlayerPurchaseEvent` (including `PlayerTradeEvent` subclass) + `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` success confirmation | `audit` | submit only after trade success confirmation |
+| `kansokusha:player_trade` | `PlayerPurchaseEvent` (including `PlayerTradeEvent` subclass) | `audit` | non-cancelled purchase attempt; trade success is not confirmed |
 | `kansokusha:paper_join` | `PlayerJoinEvent` | `session` | successful backend join |
 | `kansokusha:paper_quit` | `PlayerQuitEvent` | `session` | completed backend session end |
 | `kansokusha:paper_kick` | `PlayerKickEvent` | `session` | accepted kick decision; a subsequent quit is intentionally separate |
@@ -59,7 +59,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:entity_break` | `HangingBreakByEntityEvent` | `audit` | #157 hanging break is canonicalized into #164; non-hanging entities are handled once the Paper baseline provides `EntityBreakByEntityEvent` |
 | `kansokusha:armor_stand_manipulate` | `PlayerArmorStandManipulateEvent` | `audit` | player armor-stand state change |
 | `kansokusha:entity_leash_change` | `PlayerLeashEntityEvent` / `PlayerUnleashEntityEvent` | `audit` | player leash/unleash |
-| `kansokusha:item_frame_change` | `PlayerItemFrameChangeEvent` | `audit` | existing frame content/rotation/fixed-state change |
+| `kansokusha:item_frame_change` | `PlayerItemFrameChangeEvent` | `audit` | existing frame content/rotation change; the payload records the fixed state |
 | `kansokusha:entity_tame` | `EntityTameEvent` | `audit` | tame owner transition |
 | `kansokusha:entity_name_change` | `PlayerNameEntityEvent` | `audit` | player-driven entity rename |
 | `kansokusha:gamerule_change` | `WorldGameRuleChangeEvent` | `audit` | effective gamerule state change |
@@ -90,9 +90,9 @@ registration、submission、acceptance / persistence の意味は `docs/design.m
 
 ### Timestamp / subject
 
-`occurredAt` は Kansokusha が対象 platform event を最初に capture した時点の current instant とする。
+`occurredAt` は Kansokusha が対象 platform event を処理した時点の current instant とする。
 
-同一 platform event から複数の `EventSubmission` を生成する場合、最初の capture 時に1回だけ取得した同一 `occurredAt` を共有する。
+同一 platform event から複数の `EventSubmission` を生成する場合（`BlockMultiPlaceEvent`、爆発、sponge、fertilize、structure grow、piston 等）、処理時に1回だけ取得した同一 `occurredAt` を共有する。
 
 player-driven event の subject は `PlayerSubject(player UUID)` とする。
 
@@ -104,26 +104,28 @@ common fields（event type、generation、occurredAt、server、world、position
 
 ### Paper / Folia capture semantics
 
-Paper / Folia の block event は二段階で扱う。
+Paper / Folia の組み込み listener は `@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)` の1 handler で記録する。cancel された event は Bukkit が handler を呼ばないため記録しない。
 
-1. `EventPriority.LOWEST` で必要な common fields と block state を immutable value として snapshot する。
-2. `EventPriority.MONITOR` で cancellation 等の event-specific condition を finalization し、条件を満たす場合だけ LOWEST snapshot から submission を作る。
-3. MONITOR は cancelled event でも cleanup できるよう受信する。
+payload の pre-state（変更前の block state、item frame の中身、player の game mode 等）は MONITOR 時点で読む。Bukkit / Paper の多くの event は変更の適用前に発火するため、MONITOR 時点でも変更前の state を読める。LOWEST〜MONITOR の間に他 plugin が world state を変更した場合への対応は行わない。
 
-LOWEST snapshot は「Kansokusha が取得できた earliest-available state」であり、同じ `LOWEST` priority で Kansokusha より先に実行された listener より前の state は保証しない。
+listener は event 間で共有する状態を持たない。1つの platform event は1つの handler 呼び出しの中で完結するため、Folia の region thread から並行に呼ばれても同期は不要である。
 
-また MONITOR 後の Paper / vanilla processing が実際に完了・成功したことまでは原則保証しない。例外として `kansokusha:player_trade` は、Paper 26.2 が `MerchantOffer#take` 成功後に発火する `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` と pending purchase を相関し、実取引成立後にのみ submission する。
+MONITOR 後の Paper / vanilla processing が実際に完了・成功したことは保証しない。
+
+例外として、chat と command（`paper_chat`、`paper_player_command`、`paper_server_command`）は plugin による書き換えや cancel の前の original raw input を記録するため、`EventPriority.LOWEST` で cancel 状態に関係なく記録する。
 
 ## Canonical integration / duplicate semantics
 
 Canonicalization and intentional coexistence are part of the event contract, not generic repeated-log suppression.
 
 - fire: `block_ignite` does not accept `BlockIgniteEvent.IgniteCause.SPREAD`; propagation is `natural_block_change` via `BlockSpreadEvent`; destruction is `block_burn`.
-- grow/fertilize: natural `BlockGrowEvent` / `BlockSpreadEvent` / non-bonemeal `StructureGrowEvent` candidates are deferred so a matching `BlockFertilizeEvent` can own the same change as `block_fertilize`.
+- grow/fertilize: bone meal `StructureGrowEvent` is left to `block_fertilize`. Other `BlockGrowEvent` / `BlockSpreadEvent` fired inside bone meal processing (e.g. cocoa, crops, rooted dirt) are recorded as `natural_block_change` in addition to `block_fertilize`; no cross-event correlation is performed.
+- TNT: while the `tntExplodes` game rule is true, TNT lit by fire or hit by a non-dragon explosion is recorded only as `tnt_prime`; `block_burn` and `explosion_block_change` skip TNT blocks. When the rule is false, TNT is destroyed instead of primed, so `block_burn` / `explosion_block_change` record it and `tnt_prime` does not. The Ender Dragon does not fire `TNTPrimeEvent`, so TNT it destroys is recorded as `explosion_block_change`.
+- scaffolding: `BlockFadeEvent` for scaffolding at the maximum distance is not recorded because the block falls and `entity_block_change` records the falling block.
 - harvest/shear/break: `PlayerHarvestBlockEvent` and `PlayerShearBlockEvent` both map to `block_harvest`; normal `BlockBreakEvent` remains `block_break`, and the real Paper fixture verifies representative vanilla actions are not double-owned.
 - entity placement: generic `EntityPlaceEvent` skips `Hanging`; `HangingPlaceEvent` supplies the hanging path into the same `entity_place` type.
 - entity break: the Paper 26.2 baseline only exposes `HangingBreakByEntityEvent`, which is the sole source.
-- trade: only the `PlayerPurchaseEvent` handler is registered for purchase/trade dispatch; `PlayerTradeEvent` is identified as its subclass in payload metadata, and submit waits for the post-take trade statistic signal.
+- trade: only the `PlayerPurchaseEvent` handler is registered for purchase/trade dispatch; `PlayerTradeEvent` is identified as its subclass in payload metadata.
 - kick/quit: an accepted `paper_kick` and the subsequent `paper_quit` with kicked quit reason are intentionally both recorded because they represent the kick decision and completed session end.
 - world change/teleport: `player_world_change` and `player_teleport` intentionally coexist because they represent state transition and operation history respectively.
 
@@ -133,7 +135,7 @@ Generic coalescing, rate-based repeated-log suppression, or automatic-machine ag
 
 Chat and command event types persist only the original raw activity observed at their platform pre-execution/pre-routing boundary. They do not persist rewritten/final content, cancellation/allow/deny decisions, command result objects, or execution success/failure.
 
-Most cancellable Paper events are submitted after MONITOR confirms the event is not cancelled, but that does not generally prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, and `container_transfer` are event/attempt observations within the documented boundary. `player_trade` is an explicit exception: it is submitted only after Paper reaches the successful trade-take statistic boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
+Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, and `player_trade` are event/attempt observations within the documented boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
 
 ## Explicit exclusions
 
@@ -167,15 +169,9 @@ current built-in catalog の推奨保持期間は bundled `config.yml`（`common
 
 ### Capture
 
-LOWEST で次を snapshot する。
+cancel されていない `BlockBreakEvent` ごとに1つの `EventSubmission` を生成・試行する。target block の state は MONITOR 時点（破壊の適用前）に読む。
 
-- target block の Paper/Minecraft block state payload
-- server / world / position / subject
-- `occurredAt`
-
-MONITOR で `event.isCancelled() == false` の場合だけ1つの `EventSubmission` を生成・試行する。
-
-この event は「LOWEST で pre-state を取得し、MONITOR で non-cancelled と確認した player break event」を表す。後続の vanilla block destruction 成功そのものは表さない。
+この event は non-cancelled の player break event を表す。後続の vanilla block destruction 成功そのものは表さない。
 
 ### Fields / payload
 
@@ -188,7 +184,7 @@ common fields:
 
 payload generation 1 は Paper module で paperweight-userdev を利用して生成する binary NBT とする。
 
-LOWEST で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を `NbtIo.write` で payload bytes にする。
+MONITOR 時点で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を `NbtIo.write` で payload bytes にする。
 
 これにより block identity と全 block-state properties を Minecraft の block-state serialization で保持する。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
 
@@ -196,18 +192,11 @@ LOWEST で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Mi
 
 ### Capture
 
-LOWEST で各 changed block の次を immutable value として snapshot する。
+`event.isCancelled() == false && event.canBuild() == true` の場合だけ、各 changed block について submission を生成・試行する。
 
-- replaced state
-- tentative placed state
-- server / world / position / subject
-- event 全体で共通の `occurredAt`
+Bukkit は `BlockPlaceEvent` の発火前に block を仮設置し、cancel 時に戻す。このため MONITOR 時点の world の block を placed state、event の replaced state（`getBlockReplacedState()` / `getReplacedBlockStates()`）を replaced state とする。
 
-mutable な `BlockState` / live `Block` reference を MONITOR 時の payload source として使用しない。
-
-MONITOR で `event.isCancelled() == false && event.canBuild() == true` の場合だけ submission を生成・試行する。
-
-この event は LOWEST 時点の earliest-available replaced state と tentative placed state を表す。event handler 後の block entity installation、`onPlace`、physics 等を反映した final world state は表さない。
+この event は MONITOR 時点の replaced state と仮設置された placed state を表す。event handler 後の block entity installation、`onPlace`、physics 等を反映した final world state は表さない。
 
 ### Fields / payload
 
@@ -220,8 +209,8 @@ common fields:
 
 payload generation 1 は Paper module で生成する binary NBT compound とし、次の2 child compounds を持つ。
 
-1. `replaced`: LOWEST で取得した earliest-available replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
-2. `placed`: LOWEST で取得した earliest-available tentative placed Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
+1. `replaced`: event の replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
+2. `placed`: MONITOR 時点で world に仮設置されている Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
 
 outer compound は `NbtIo.write` で payload bytes にする。block entity NBT は generation 1 payload に含めない。
 
@@ -229,34 +218,33 @@ outer compound は `NbtIo.write` で payload bytes にする。block entity NBT 
 
 通常の `BlockPlaceEvent` は1 changed blockにつき1 submission を生成・試行する。
 
-`BlockMultiPlaceEvent` は LOWEST で snapshot した N changed blocks について厳密に N submissions を生成・試行し、base `BlockPlaceEvent` 分の追加 submission は作らない。全 submission は同一 `occurredAt` を共有する。
+`BlockMultiPlaceEvent` は N changed blocks について厳密に N submissions を生成・試行し、base `BlockPlaceEvent` 分の追加 submission は作らない。全 submission は同一 `occurredAt` を共有する。
 
 各 submission は独立してキューへ入るため、partial acceptance は許容する。v1 は atomic multi-event admission を要求しない。
 
 ## `kansokusha:sign_change`
 
-LOWEST で edited side の既存 sign lines を Adventure Component JSON の immutable snapshot にする。MONITOR で cancelled でない場合のみ、event の final lines を Component JSON へ直ちに snapshot して submission を生成する。
+cancel されていない `SignChangeEvent` について、edited side の現在の sign lines と event の final lines を Adventure Component JSON にして submission を生成する。sign の block entity は event の後に更新されるため、MONITOR 時点の sign lines は変更前の値である。
 
 generation 1 payload は次を持つ。
 
 - `side`: edited sign side
-- `before`: LOWEST で取得した line components
-- `after`: MONITOR 時点の final event line components
+- `before`: MONITOR 時点の sign の line components（変更前）
+- `after`: MONITOR 時点の event の line components
 
 ## `kansokusha:bucket_empty` / `kansokusha:bucket_fill`
 
 block-changing bucket operation のみを対象とする。牛・ヤギの搾乳等、Paper が `BlockFace.SELF` で発火する non-block `PlayerBucketFillEvent` は記録しない。
 
-LOWEST で changed block の pre-state と operation metadata を immutable snapshot にする。
+cancel されていない event について、changed block の pre-state（MONITOR 時点、bucket 処理の適用前）と operation metadata を記録する。
 
 generation 1 payload は次を持つ。
 
 - `operation`: `empty` / `fill`
 - `bucket`, `hand`, `face`
 - `clicked_x`, `clicked_y`, `clicked_z`
-- `pre_state`: LOWEST の changed block state
-- `initial_result_item`: LOWEST の event result item
-- `final_result_item`: MONITOR の final event result item
+- `pre_state`: changed block state
+- `result_item`: MONITOR 時点の event result item
 
 bucket operation 後の block state は記録しない。vanilla の bucket 処理（waterlogged、cauldron、`WATER_EVAPORATES` 等）を Kansokusha 側で再現せず、`pre_state` と `bucket` から解釈する。
 
@@ -264,7 +252,7 @@ bucket operation 後の block state は記録しない。vanilla の bucket 処�
 
 `PlayerHarvestBlockEvent` と `PlayerShearBlockEvent` を canonical `kansokusha:block_harvest` に正規化する。通常の `BlockBreakEvent` はこの listener の source にしない。
 
-LOWEST で pre-state と source-specific mutable values を detached snapshot にし、MONITOR では cancellation を確認して LOWEST payload を submission する。
+cancel されていない event について、MONITOR 時点の pre-state と source-specific values を記録する。
 
 generation 1 payload は次を持つ。
 
@@ -294,9 +282,9 @@ insert は `before = empty`、`after = placed item x1`、remove は `before = re
 
 player と world item entity の間の明示的な transfer を記録する。player inventory 内の generic slot mutation は source にしない。
 
-`item_drop` は non-cancelled `PlayerDropItemEvent` を対象とし、LOWEST で item entity UUID、ItemStack、entity の world position、player subject を detached snapshot にする。
+`item_drop` は non-cancelled `PlayerDropItemEvent` を対象とし、item entity UUID、ItemStack、entity の world position、player subject を記録する。
 
-`item_pickup` は `EntityPickupItemEvent` の actor が Player の場合だけ対象とし、LOWEST で item entity UUID、ItemStack、pickup position、remaining count、player subject を detached snapshot にする。non-player pickup は保存しない。
+`item_pickup` は `EntityPickupItemEvent` の actor が Player の場合だけ対象とし、item entity UUID、ItemStack、pickup position、remaining count、player subject を記録する。non-player pickup は保存しない。
 
 generation 1 payload は共通して `item_entity_uuid`、`stack`、exact entity `position` を持ち、pickup は追加で `remaining` を持つ。ItemStack は `PaperItemStackPayloadCodec` の byte serialization を再利用し、live reference を保持しない。
 
@@ -304,7 +292,7 @@ generation 1 payload は共通して `item_entity_uuid`、`stack`、exact entity
 
 non-cancelled `PlayerEditBookEvent` を記録する。
 
-LOWEST で previous BookMeta と slot を snapshot し、MONITOR で final new BookMeta と signing flag を snapshot する。BookMeta は writable/written book ItemStack に適用して既存 `PaperItemStackPayloadCodec` で serialization するため、本文、title、author、generation、components 等を復元でき、live BookMeta reference を保持しない。本文への独自 redaction は行わない。
+event の previous BookMeta、slot、final new BookMeta、signing flag を記録する。previous BookMeta は plugin が変更できない値のため、MONITOR 時点で読んでも LOWEST 時点と同じである。BookMeta は writable/written book ItemStack に適用して既存 `PaperItemStackPayloadCodec` で serialization するため、本文、title、author、generation、components 等を復元でき、live BookMeta reference を保持しない。本文への独自 redaction は行わない。
 
 generation 1 payload:
 
@@ -323,9 +311,9 @@ common position は lectern block position とし、generation 1 payload は `ac
 
 `PlayerPurchaseEvent` を canonical handler とし、その subclass である `PlayerTradeEvent` 用の別 handler は登録しない。このため同一 transaction を二重保存しない。payload の `source_event` で villager/trader の `PlayerTradeEvent` と standalone merchant の `PlayerPurchaseEvent` を区別する。
 
-MONITOR で non-cancelled purchase の final merchant、recipe、reward/increase-use flags を detached payload にして pending に保持するが、この時点では submit しない。Paper 26.2 の `MerchantResultSlot#onTake` は event dispatch 後に final recipe で `MerchantOffer#take` を実行し、成功した branch だけで `Stats.TRADED_WITH_VILLAGER` を award する。この award に伴って同期発火する `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` を同一 player の pending purchase と相関できた場合だけ `kansokusha:player_trade` を submit する。
+cancel されていない purchase の final merchant、recipe、reward/increase-use flags を、MONITOR の時点で submit する。
 
-これにより、plugin が `PlayerPurchaseEvent#setTrade(...)` で現在の input が満たせない recipe に変更した場合、event が non-cancelled でも `MerchantOffer#take` が失敗するため保存しない。statistic increment event 自体が cancel されても、event の発火位置は既に `MerchantOffer#take` 成功後なので transaction 成立確認として扱う。success signal が発生しない pending は次 tick に破棄する。
+これは取引の試行であり、成立は確認しない。Paper 26.2 の `MerchantResultSlot#onTake` は event dispatch 後に final recipe で `MerchantOffer#take` を実行するため、plugin が `PlayerPurchaseEvent#setTrade(...)` で現在の input が満たせない recipe に変更した場合などは、event が non-cancelled でも取引は成立しない。この場合も `player_trade` は記録される。
 
 merchant が Entity の場合は UUID/type を保存し、standalone merchant は `kind = standalone` とする。trade payload は result、ingredients、adjusted first ingredient、uses/max uses、experience、price/demand/special-price 等の event API が提供する確定値を detached ItemStack/value として保存する。
 
@@ -375,7 +363,7 @@ target backend name は common `server` field から復元可能なため payloa
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |
 | lifecycle | the platform unregisters listeners when the plugin stops; a startup failure disables the plugin |
 | ingestion | platform callbacks call the bounded `KansokushaApi.submit` boundary and do not wait for storage completion |
-| Folia | LOWEST→MONITOR snapshots use event-identity correlation with synchronized/shared-state guards; deferred multi-event correlation is explicitly synchronized/thread-scoped |
+| Folia | listeners keep no state shared between events; each platform event is recorded within one MONITOR handler call |
 | coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
 
 ## 参照

@@ -86,6 +86,15 @@ CREATE TABLE events (
 | `retention.default` | 一覧にない event type の保持期間 |
 | `retention.policies.<name>` | `duration` と、それを適用する `event-types` の一覧 |
 
+## Paper 組み込みイベント
+
+- 組み込みリスナーは `@EventHandler(priority = MONITOR, ignoreCancelled = true)` の 1 ハンドラで記録する。cancel されたイベントは記録しない。
+- 変更前の状態は MONITOR 時点で読む。多くの Bukkit / Paper イベントは変更の適用前に発火するため、MONITOR でも変更前の状態を読める。
+- chat とコマンドだけは、書き換えや cancel の前の入力を残すため LOWEST で記録する。
+- リスナーはイベント間で共有する状態を持たず、各 platform event を独立に記録する。Folia の region thread から並行に呼ばれても同期は不要である。
+- 1 つの platform event から複数件を記録する場合（複数ブロックの設置、爆発など）は、発生時刻を 1 回だけ取得して共有する。
+- イベントの詳細は `docs/v1-built-in-event-catalog.md` に記載する。
+
 ## 意図的に持たない仕組み
 
 要件上必須ではなく、実装・運用の複雑さに見合わないため、次の仕組みは持たない。必要になった時点で追加する。
@@ -99,5 +108,9 @@ CREATE TABLE events (
 | 辞書テーブルと整数 ID | DuckDB の列圧縮で代替できる |
 | migration 履歴とチェックサム検証 | スキーマ変更がまだ存在しない |
 | 登録・送信結果の詳細な enum | 組み込みリスナーは結果を使っておらず、未登録・世代不一致はプログラムの誤りである |
-| 無効化時のリスナー登録解除と in-flight 状態の破棄 | Bukkit / Velocity がプラグイン停止時に行う |
+| 無効化時のリスナー登録解除 | Bukkit / Velocity がプラグイン停止時に行う |
 | 未リリースの Paper API へのリフレクションによる対応 | 対象バージョンを上げた時点で直接実装する |
+| LOWEST でスナップショットを取り MONITOR で確定する 2 段階キャプチャ | 多くのイベントは変更の適用前に発火するため、MONITOR でも変更前の状態を読める。LOWEST〜MONITOR の間に他プラグインが状態を変えた場合への対応は要件外である。イベント単位の共有状態と同期も不要になる |
+| イベント間の因果関係の追跡（TNT の着火と爆発・延焼、施肥と成長、取引成立の statistic による確認、火打石の着火と設置の突き合わせ） | 要件 §4 で非対象としている。各 platform event を独立に記録し、重複はイベントの種類による単純な除外で扱う（例: `tntExplodes` が有効な間の TNT は `tnt_prime` のみで記録する） |
+| 次 tick まで記録を遅らせる仕組み | 上記の因果関係の追跡のためだけに存在した |
+| 非推奨の `com.destroystokyo.paper.event.block.TNTPrimeEvent` の購読 | 削除予定の API であり、現行の `org.bukkit.event.block.TNTPrimeEvent` で着火を記録できる |
