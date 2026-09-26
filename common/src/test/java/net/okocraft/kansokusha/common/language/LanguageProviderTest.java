@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.StreamSupport;
 
 class LanguageProviderTest {
 
@@ -32,10 +33,7 @@ class LanguageProviderTest {
 
         Assertions.assertTrue(Files.isRegularFile(directory.resolve("en.properties")));
         Assertions.assertTrue(Files.isRegularFile(directory.resolve("ja.properties")));
-        Assertions.assertTrue(
-            GlobalTranslator.translator().sources().stream()
-                .anyMatch(source -> source.name().equals(LANGUAGE_KEY))
-        );
+        Assertions.assertTrue(hasLanguageSource());
     }
 
     @Test
@@ -48,9 +46,13 @@ class LanguageProviderTest {
 
         LanguageProvider.unload();
 
-        Assertions.assertFalse(
-            GlobalTranslator.translator().sources().stream()
-                .anyMatch(source -> source.name().equals(LANGUAGE_KEY))
-        );
+        Assertions.assertFalse(hasLanguageSource());
+    }
+
+    private static boolean hasLanguageSource() {
+        return StreamSupport.stream(
+            GlobalTranslator.translator().sources().spliterator(),
+            false
+        ).anyMatch(source -> source.name().equals(LANGUAGE_KEY));
     }
 }
