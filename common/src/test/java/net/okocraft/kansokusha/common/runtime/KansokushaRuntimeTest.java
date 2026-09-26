@@ -74,6 +74,21 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testInternalSearchBackendPersistsAndFindsDerivedText(@TempDir Path dir) throws Exception {
+        try (var runtime = start(dir, 10)) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+
+            var now = Instant.now();
+            Assertions.assertTrue(runtime.submitSearchable(event(now), "Mixed BAN%_* text"));
+            Assertions.assertTrue(runtime.submit(event(now)));
+
+            Assertions.assertEquals(1, runtime.findEventIdsContaining("bAn").join().size());
+            Assertions.assertEquals(1, runtime.findEventIdsContaining("%_*").join().size());
+            Assertions.assertTrue(runtime.findEventIdsContaining("missing").join().isEmpty());
+        }
+    }
+
+    @Test
     void testExpiredEventsAreDeletedOnClose(@TempDir Path dir) throws Exception {
         try (var runtime = start(dir, 10)) {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));

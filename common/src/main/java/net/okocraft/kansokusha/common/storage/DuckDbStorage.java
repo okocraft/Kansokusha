@@ -365,6 +365,11 @@ public final class DuckDbStorage {
         }
 
         @Override
+        public List<UUID> findEventIdsContaining(String literal) throws SQLException {
+            return this.delegate.findEventIdsContaining(literal);
+        }
+
+        @Override
         public int deleteExpired(Instant now) throws SQLException {
             return this.delegate.deleteExpired(now);
         }

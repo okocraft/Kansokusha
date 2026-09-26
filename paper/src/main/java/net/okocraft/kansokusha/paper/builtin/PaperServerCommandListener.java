@@ -5,6 +5,7 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -30,12 +31,12 @@ public final class PaperServerCommandListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "paper_server_command");
 
-    private final KansokushaApi api;
+    private final EventSearchBackend searchBackend;
     private final Key serverKey;
     private final Clock clock;
 
     private PaperServerCommandListener(KansokushaApi api, Key serverKey, Clock clock) {
-        this.api = Objects.requireNonNull(api, "api");
+        this.searchBackend = EventSearchBackend.require(api);
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -69,7 +70,7 @@ public final class PaperServerCommandListener implements Listener {
         var originalCommand = event.getCommand();
         var source = snapshotSource(event, remoteEvent);
 
-        this.api.submit(
+        this.searchBackend.submitSearchable(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
@@ -84,7 +85,8 @@ public final class PaperServerCommandListener implements Listener {
                     source.name(),
                     originalCommand
                 )
-            )
+            ),
+            originalCommand
         );
     }
 

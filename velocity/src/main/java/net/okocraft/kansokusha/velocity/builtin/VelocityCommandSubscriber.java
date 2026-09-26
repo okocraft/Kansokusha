@@ -11,6 +11,7 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -27,11 +28,11 @@ public final class VelocityCommandSubscriber {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "velocity_command");
 
-    private final KansokushaApi api;
+    private final EventSearchBackend searchBackend;
     private final Clock clock;
 
     private VelocityCommandSubscriber(KansokushaApi api, Clock clock) {
-        this.api = Objects.requireNonNull(api, "api");
+        this.searchBackend = EventSearchBackend.require(api);
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -52,7 +53,7 @@ public final class VelocityCommandSubscriber {
         var originalCommand = event.getCommand();
         var source = snapshotSource(event);
 
-        this.api.submit(
+        this.searchBackend.submitSearchable(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
@@ -67,7 +68,8 @@ public final class VelocityCommandSubscriber {
                     source.name(),
                     originalCommand
                 )
-            )
+            ),
+            originalCommand
         );
     }
 

@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -85,10 +86,11 @@ final class PaperBlockEventTestSupport {
         return result;
     }
 
-    static final class RecordingApi implements KansokushaApi, PlayerNameDirectory {
+    static final class RecordingApi implements KansokushaApi, PlayerNameDirectory, EventSearchBackend {
 
         final ConcurrentLinkedQueue<EventSubmission> submissions = new ConcurrentLinkedQueue<>();
         final ConcurrentLinkedQueue<String> playerLoginNames = new ConcurrentLinkedQueue<>();
+        final ConcurrentLinkedQueue<String> searchTexts = new ConcurrentLinkedQueue<>();
 
         @Override
         public Optional<Key> localServerKey() {
@@ -103,6 +105,17 @@ final class PaperBlockEventTestSupport {
         public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
             return true;
+        }
+
+        @Override
+        public boolean submitSearchable(EventSubmission submission, String searchText) {
+            this.searchTexts.add(searchText);
+            return this.submit(submission);
+        }
+
+        @Override
+        public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
+            return CompletableFuture.completedFuture(List.of());
         }
 
         @Override

@@ -5,6 +5,7 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.chat.SignedMessage;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
@@ -85,7 +86,8 @@ class PaperCommunicationListenerTest {
         );
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
-        var original = Component.text("original message");
+        var original = Component.text("original ")
+            .append(Component.text("message", NamedTextColor.RED));
         var event = new AsyncChatEvent(
             true,
             player,
@@ -115,6 +117,7 @@ class PaperCommunicationListenerTest {
         Assertions.assertFalse(payload.contains("cancelled"));
         Assertions.assertFalse(payload.contains("viewers"));
         Assertions.assertFalse(payload.contains("renderer"));
+        Assertions.assertEquals("original message", onlySearchText(api));
         Mockito.verify(player, Mockito.never()).getLocation();
     }
 
@@ -149,6 +152,7 @@ class PaperCommunicationListenerTest {
         Assertions.assertFalse(payload.contains("cancelled"));
         Assertions.assertFalse(payload.contains("success"));
         Assertions.assertFalse(payload.contains("result"));
+        Assertions.assertEquals("/original value", onlySearchText(api));
     }
 
     @Test
@@ -176,6 +180,7 @@ class PaperCommunicationListenerTest {
             null,
             null
         );
+        Assertions.assertEquals("say original", onlySearchText(consoleApi));
 
         var otherApi = new PaperBlockEventTestSupport.RecordingApi();
         listener = serverListener(otherApi);
@@ -195,6 +200,7 @@ class PaperCommunicationListenerTest {
             null,
             null
         );
+        Assertions.assertEquals("custom command", onlySearchText(otherApi));
     }
 
     @Test
@@ -224,6 +230,7 @@ class PaperCommunicationListenerTest {
             new BlockPosition(21, 70, -4),
             new BlockActor(Key.key("minecraft", "command_block"))
         );
+        Assertions.assertEquals("setblock ~ ~ ~ stone", onlySearchText(api));
     }
 
     @Test
@@ -251,6 +258,7 @@ class PaperCommunicationListenerTest {
             null,
             null
         );
+        Assertions.assertEquals("list", onlySearchText(api));
     }
 
     private static void assertRawHandler(
@@ -297,6 +305,11 @@ class PaperCommunicationListenerTest {
     private static EventSubmission onlySubmission(PaperBlockEventTestSupport.RecordingApi api) {
         Assertions.assertEquals(1, api.submissions.size());
         return api.submissions.remove();
+    }
+
+    private static String onlySearchText(PaperBlockEventTestSupport.RecordingApi api) {
+        Assertions.assertEquals(1, api.searchTexts.size());
+        return api.searchTexts.remove();
     }
 
     private static void assertServerSubmission(

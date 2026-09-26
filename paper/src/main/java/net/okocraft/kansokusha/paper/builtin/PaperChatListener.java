@@ -2,10 +2,12 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -24,12 +26,12 @@ public final class PaperChatListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "paper_chat");
 
-    private final KansokushaApi api;
+    private final EventSearchBackend searchBackend;
     private final Key serverKey;
     private final Clock clock;
 
     private PaperChatListener(KansokushaApi api, Key serverKey, Clock clock) {
-        this.api = Objects.requireNonNull(api, "api");
+        this.searchBackend = EventSearchBackend.require(api);
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -50,9 +52,11 @@ public final class PaperChatListener implements Listener {
         var occurredAt = this.clock.instant();
         var player = event.getPlayer();
         var actor = new PlayerActor(player.getUniqueId());
-        var payload = PaperCommunicationPayloadCodec.encodeChat(event.originalMessage());
+        var originalMessage = event.originalMessage();
+        var payload = PaperCommunicationPayloadCodec.encodeChat(originalMessage);
+        var searchText = PlainTextComponentSerializer.plainText().serialize(originalMessage);
 
-        this.api.submit(
+        this.searchBackend.submitSearchable(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
@@ -63,7 +67,8 @@ public final class PaperChatListener implements Listener {
                 actor,
                 null,
                 payload
-            )
+            ),
+            searchText
         );
     }
 }

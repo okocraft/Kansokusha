@@ -10,6 +10,7 @@ import net.kyori.adventure.identity.Identity;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -65,6 +66,7 @@ class VelocityCommunicationSubscriberTest {
             "original message",
             VelocityCommunicationPayloadCodec.decodeChat(submission.payload())
         );
+        Mockito.verify(api).submitSearchable(Mockito.any(), Mockito.eq("original message"));
         Mockito.verify(event, Mockito.never()).getResult();
     }
 
@@ -92,6 +94,7 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertEquals("player", payload.sourceKind());
         Assertions.assertEquals("TestPlayer", payload.sourceName());
         Assertions.assertEquals("  velocity info", payload.command());
+        Mockito.verify(api).submitSearchable(Mockito.any(), Mockito.eq("  velocity info"));
         Mockito.verify(event, Mockito.never()).getResult();
     }
 
@@ -111,6 +114,7 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertEquals("console", payload.sourceKind());
         Assertions.assertEquals("CONSOLE", payload.sourceName());
         Assertions.assertEquals("plugins", payload.command());
+        Mockito.verify(api).submitSearchable(Mockito.any(), Mockito.eq("plugins"));
     }
 
     @Test
@@ -130,6 +134,7 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertEquals("api", payload.sourceKind());
         Assertions.assertEquals("automation", payload.sourceName());
         Assertions.assertEquals("custom original", payload.command());
+        Mockito.verify(api).submitSearchable(Mockito.any(), Mockito.eq("custom original"));
     }
 
     private static CommandExecuteEvent commandEvent(
@@ -149,16 +154,19 @@ class VelocityCommunicationSubscriberTest {
         return event;
     }
 
-    private static KansokushaApi api() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.submit(Mockito.any())).thenReturn(true);
+    private static SearchableApi api() {
+        var api = Mockito.mock(SearchableApi.class);
+        Mockito.when(api.submitSearchable(Mockito.any(), Mockito.anyString())).thenReturn(true);
         return api;
     }
 
-    private static EventSubmission submission(KansokushaApi api) {
+    private static EventSubmission submission(SearchableApi api) {
         var captor = ArgumentCaptor.forClass(EventSubmission.class);
-        Mockito.verify(api).submit(captor.capture());
+        Mockito.verify(api).submitSearchable(captor.capture(), Mockito.anyString());
         return captor.getValue();
+    }
+
+    private interface SearchableApi extends KansokushaApi, EventSearchBackend {
     }
 
     private static Clock fixedClock() {
