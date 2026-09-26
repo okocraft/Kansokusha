@@ -1,7 +1,5 @@
 package net.okocraft.kansokusha.testplugin;
 
-import io.papermc.paper.event.block.PlayerShearBlockEvent;
-import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -11,16 +9,15 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.SignChangeEvent;
-import org.bukkit.event.player.PlayerBucketEmptyEvent;
-import org.bukkit.event.player.PlayerBucketFillEvent;
-import org.bukkit.event.player.PlayerHarvestBlockEvent;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -39,8 +36,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
 
@@ -52,18 +50,62 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
     private static final Component FINAL_KICK_REASON =
         Component.text("kansokusha final session fixture");
 
+    private static final Set<String> EXPECTED_BUILT_IN_LISTENERS = Set.of(
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockPlaceListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperSignChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBucketListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockHarvestListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperFlowerPotChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockIgniteListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockBurnListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperTntPrimeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperExplosionBlockChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPistonMoveListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperEntityBlockChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperNaturalBlockChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperFluidChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperSpongeAbsorbListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperBlockFertilizeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperCauldronLevelChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperContainerTransferListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperContainerPickupListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperContainerProcessListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerJoinListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerQuitListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerKickListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerWorldChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerTeleportListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerGameModeChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerSpawnChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerDeathListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperChatListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerCommandListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperServerCommandListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperEntityPlaceListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperEntityBreakListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperEntityStateChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperGameRuleChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperWorldDifficultyChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperWorldBorderChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperWorldSpawnChangeListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperWhitelistChangeListener"
+    );
+
     private final List<String> sessionEvents = new ArrayList<>();
     private volatile boolean sessionSemanticsVerified;
     private volatile Throwable failure;
+    private volatile Result result;
+    private PaperBlockBreakListener pendingBlockBreakListener;
     private Path resultFile;
 
     @Override
     public void onEnable() {
         this.resultFile = Path.of(System.getProperty("kansokusha.external-api-fixture.result"));
 
-        final Result result;
         try {
-            result = registerAndSubmit();
+            var result = registerAndSubmit();
+            this.result = result;
             verifyBuiltInListenerWiring();
             Bukkit.getPluginManager().registerEvents(this, this);
             Runtime.getRuntime().addShutdownHook(
@@ -151,8 +193,9 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
             }
             assertEventOrder(List.of("join", "kick"), "quit");
             this.sessionEvents.add("quit");
+            capturePendingBlockBreak(event.getPlayer());
             this.sessionSemanticsVerified = true;
-            Bukkit.getScheduler().runTask(this, Bukkit::shutdown);
+            Bukkit.getScheduler().runTask(this, this::verifyDisableLifecycleAndShutdown);
         } catch (Throwable failure) {
             failAndShutdown(failure);
         }
@@ -187,30 +230,75 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
     }
 
     private void verifyBuiltInListenerWiring() {
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperSignChangeListener",
-            SignChangeEvent.getHandlerList()
-        );
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperBucketListener",
-            PlayerBucketEmptyEvent.getHandlerList()
-        );
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperBucketListener",
-            PlayerBucketFillEvent.getHandlerList()
-        );
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperBlockHarvestListener",
-            PlayerHarvestBlockEvent.getHandlerList()
-        );
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperBlockHarvestListener",
-            PlayerShearBlockEvent.getHandlerList()
-        );
-        assertRegisteredListener(
-            "net.okocraft.kansokusha.paper.builtin.PaperFlowerPotChangeListener",
-            PlayerFlowerPotManipulateEvent.getHandlerList()
-        );
+        var registered = registeredKansokushaListenerClasses();
+        if (!registered.equals(EXPECTED_BUILT_IN_LISTENERS)) {
+            throw new AssertionError(
+                "Unexpected Kansokusha built-in listener set. expected="
+                    + EXPECTED_BUILT_IN_LISTENERS + ", actual=" + registered
+            );
+        }
+        if (
+            registered.contains(
+                "net.okocraft.kansokusha.paper.builtin.PaperPlayerItemAuditListener"
+            )
+        ) {
+            throw new AssertionError(
+                "Delegated PaperPlayerItemAuditListener must not be registered directly."
+            );
+        }
+    }
+
+    private void capturePendingBlockBreak(Player player) {
+        var listener = findRegisteredBlockBreakListener();
+        if (inFlightCount(listener) != 0) {
+            throw new AssertionError("Block-break listener already had in-flight state.");
+        }
+
+        listener.capture(new BlockBreakEvent(player.getLocation().getBlock(), player));
+        if (inFlightCount(listener) != 1) {
+            throw new AssertionError("Could not stage a block-break snapshot before disable.");
+        }
+        this.pendingBlockBreakListener = listener;
+    }
+
+    private void verifyDisableLifecycleAndShutdown() {
+        try {
+            var result = this.result;
+            if (result == null) {
+                throw new AssertionError("External API fixture result was not initialized.");
+            }
+            var listener = this.pendingBlockBreakListener;
+            if (listener == null) {
+                throw new AssertionError("Pending block-break listener was not captured.");
+            }
+
+            var kansokusha = Bukkit.getPluginManager().getPlugin("Kansokusha");
+            if (kansokusha == null || !kansokusha.isEnabled()) {
+                throw new AssertionError("Kansokusha was not enabled before lifecycle verification.");
+            }
+
+            Bukkit.getPluginManager().disablePlugin(kansokusha);
+
+            if (kansokusha.isEnabled()) {
+                throw new AssertionError("Kansokusha remained enabled after disablePlugin.");
+            }
+            var remainingListeners = registeredKansokushaListenerClasses();
+            if (!remainingListeners.isEmpty()) {
+                throw new AssertionError(
+                    "Kansokusha listeners remained registered after disable: " + remainingListeners
+                );
+            }
+            if (inFlightCount(listener) != 0) {
+                throw new AssertionError(
+                    "Kansokusha did not clear LOWEST-to-MONITOR state before runtime shutdown."
+                );
+            }
+            assertApiClosed(result, "disable");
+
+            Bukkit.shutdown();
+        } catch (Throwable failure) {
+            failAndShutdown(failure);
+        }
     }
 
     private void startSessionSemanticsClient() {
@@ -245,14 +333,37 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
         return SESSION_PLAYER_NAME.equals(playerName);
     }
 
-    private static void assertRegisteredListener(String listenerClass, HandlerList handlers) {
-        var registered = Arrays.stream(handlers.getRegisteredListeners())
-            .anyMatch(listener ->
-                listener.getPlugin().getName().equals("Kansokusha")
-                    && listener.getListener().getClass().getName().equals(listenerClass)
-            );
-        if (!registered) {
-            throw new AssertionError("Kansokusha listener was not registered: " + listenerClass);
+    private static Set<String> registeredKansokushaListenerClasses() {
+        var result = new HashSet<String>();
+        for (var handlers : HandlerList.getHandlerLists()) {
+            for (var registered : handlers.getRegisteredListeners()) {
+                if (registered.getPlugin().getName().equals("Kansokusha")) {
+                    result.add(registered.getListener().getClass().getName());
+                }
+            }
+        }
+        return Set.copyOf(result);
+    }
+
+    private static PaperBlockBreakListener findRegisteredBlockBreakListener() {
+        for (var registered : BlockBreakEvent.getHandlerList().getRegisteredListeners()) {
+            if (
+                registered.getPlugin().getName().equals("Kansokusha")
+                    && registered.getListener() instanceof PaperBlockBreakListener listener
+            ) {
+                return listener;
+            }
+        }
+        throw new AssertionError("PaperBlockBreakListener was not registered.");
+    }
+
+    private static int inFlightCount(PaperBlockBreakListener listener) {
+        try {
+            var method = PaperBlockBreakListener.class.getDeclaredMethod("inFlightCount");
+            method.setAccessible(true);
+            return (int) method.invoke(listener);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Could not inspect block-break in-flight state.", failure);
         }
     }
 
@@ -273,22 +384,29 @@ public final class ExternalPaperPlugin extends JavaPlugin implements Listener {
                 );
             }
 
-            try {
-                Kansokusha.api();
-                throw new AssertionError("Kansokusha.api() remained available after shutdown.");
-            } catch (IllegalStateException expected) {
-            }
-
-            if (result.api().submit(result.submission()) != SubmissionOutcome.CLOSED) {
-                throw new AssertionError("Previously acquired API did not return CLOSED after shutdown.");
-            }
-            if (result.api().registerEventType(result.definition()) != RegistrationOutcome.CLOSED) {
-                throw new AssertionError("Previously acquired API registration did not return CLOSED after shutdown.");
-            }
-
+            assertApiClosed(result, "shutdown");
             Files.writeString(this.resultFile, "success");
         } catch (Throwable failure) {
             writeFailure(failure);
+        }
+    }
+
+    private static void assertApiClosed(Result result, String phase) {
+        try {
+            Kansokusha.api();
+            throw new AssertionError("Kansokusha.api() remained available after " + phase + ".");
+        } catch (IllegalStateException expected) {
+        }
+
+        if (result.api().submit(result.submission()) != SubmissionOutcome.CLOSED) {
+            throw new AssertionError(
+                "Previously acquired API did not return CLOSED after " + phase + "."
+            );
+        }
+        if (result.api().registerEventType(result.definition()) != RegistrationOutcome.CLOSED) {
+            throw new AssertionError(
+                "Previously acquired API registration did not return CLOSED after " + phase + "."
+            );
         }
     }
 
