@@ -57,7 +57,7 @@ public final class VelocityCommandSubscriber {
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 occurredAt,
-                VelocityBuiltInSupport.PROXY_SERVER_KEY,
+                null,
                 null,
                 null,
                 source.subject(),

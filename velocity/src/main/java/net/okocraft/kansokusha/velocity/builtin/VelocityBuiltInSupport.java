@@ -15,8 +15,6 @@ import java.util.Objects;
 @NotNullByDefault
 final class VelocityBuiltInSupport {
 
-    static final Key PROXY_SERVER_KEY = Key.key("kansokusha", "velocity-proxy");
-
     private VelocityBuiltInSupport() {
     }
 

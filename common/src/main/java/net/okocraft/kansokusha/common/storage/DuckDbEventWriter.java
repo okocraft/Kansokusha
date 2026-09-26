@@ -64,18 +64,24 @@ public final class DuckDbEventWriter implements EventBatchWriter {
                 definition,
                 () -> resolvePayloadGeneration(connection, definition)
             );
-            var serverId = cached(
-                serverIds,
-                submission.serverKey(),
-                () -> resolveKey(connection, "servers", "server_key", submission.serverKey())
-            );
-            var worldId = submission.worldKey() == null
+            var serverKey = submission.serverKey();
+            Integer serverId = serverKey == null
                 ? null
                 : cached(
-                    worldIds,
-                    new WorldIdentity(serverId, submission.worldKey()),
-                    () -> resolveWorld(connection, serverId, submission.worldKey())
+                    serverIds,
+                    serverKey,
+                    () -> resolveKey(connection, "servers", "server_key", serverKey)
                 );
+            Integer worldId = null;
+            var worldKey = submission.worldKey();
+            if (worldKey != null) {
+                var resolvedServerId = Objects.requireNonNull(serverId, "serverId");
+                worldId = cached(
+                    worldIds,
+                    new WorldIdentity(resolvedServerId, worldKey),
+                    () -> resolveWorld(connection, resolvedServerId, worldKey)
+                );
+            }
             var retentionId = cached(
                 retentionIds,
                 event.retentionPolicyKey(),
@@ -259,7 +265,7 @@ public final class DuckDbEventWriter implements EventBatchWriter {
     private record ResolvedEvent(
         AcceptedEvent event,
         int payloadGenerationId,
-        int serverId,
+        @Nullable Integer serverId,
         @Nullable Integer worldId,
         int retentionPolicyId
     ) {

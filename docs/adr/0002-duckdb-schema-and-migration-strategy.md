@@ -1,7 +1,8 @@
 # ADR-0002: DuckDB core storage schema と migration strategy
 
 - 日付: 2026-09-20
-- 関連 Issue: #6, #16
+- 更新: 2026-09-26 — ADR-0001 の optional server context を storage schema に反映
+- 関連 Issue: #6, #16, #152, #153
 - 前提 ADR: ADR-0001
 
 ## コンテキスト
@@ -92,7 +93,7 @@ persistent metadata の mutation と event batch write は storage-owned write p
 CREATE TABLE events (
     payload_generation_id INTEGER NOT NULL,
     occurred_at TIMESTAMP_MS NOT NULL,
-    server_id INTEGER NOT NULL,
+    server_id INTEGER,
     world_id INTEGER,
     block_x INTEGER,
     block_y INTEGER,
@@ -114,7 +115,11 @@ CREATE TABLE events (
 
 DuckDB は PK / UNIQUE / FK に ART を暗黙作成する。append-heavy な `events` では write / memory cost を抑えるため、v1 core schema に PK / UNIQUE / FK と manual ART index を置かない。
 
-`payload_generation_id`、server / world、retention policy の整合性は、storage writer が同一 transaction 内で metadata を解決してから event を insert する invariant で保証する。world は event の `server_id` と同じ server に属する row だけを解決する。
+`server_id` は ADR-0001 の optional server context を表す。server context がない event は NULL を保存し、そのためだけに synthetic server metadata を作成しない。world は server-scoped なので、`world_id` がある event では `server_id` も必須という invariant を public API / storage writer が維持する。
+
+`payload_generation_id`、存在する server / world、retention policy の整合性は、storage writer が同一 transaction 内で metadata を解決してから event を insert する invariant で保証する。world は event の `server_id` と同じ server に属する row だけを解決する。
+
+initial migration の checksum compatibility を維持するため version 1 は変更せず、version 2 `optional_event_server` で `events.server_id` の NOT NULL constraint を drop する。
 
 将来 FK が必要になっても in-place `ADD CONSTRAINT` を前提にしない。DuckDB の制約に応じ、validation と table replacement を含む migration を設計する。
 

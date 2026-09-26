@@ -13,12 +13,13 @@ import java.util.Map;
 class DuckDbMigrationsTest {
 
     @Test
-    void testInitialSchemaMatchesV1Contract(@TempDir Path dir) throws Exception {
+    void testCurrentSchemaMatchesV1Contract(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("schema.duckdb"))) {
             var connection = database.connection();
             DuckDbMigrations.migrate(database);
 
             Assertions.assertEquals("initial_v1_schema", migrationName(connection, 1));
+            Assertions.assertEquals("optional_event_server", migrationName(connection, 2));
 
             assertColumn(connection, "event_types", "id", "INTEGER", false);
             assertColumn(connection, "event_types", "event_type_key", "VARCHAR", false);
@@ -31,7 +32,7 @@ class DuckDbMigrationsTest {
             Assertions.assertEquals(11, eventColumns.size());
             assertColumn(eventColumns, "payload_generation_id", "INTEGER", false);
             assertColumn(eventColumns, "occurred_at", "TIMESTAMP_MS", false);
-            assertColumn(eventColumns, "server_id", "INTEGER", false);
+            assertColumn(eventColumns, "server_id", "INTEGER", true);
             assertColumn(eventColumns, "world_id", "INTEGER", true);
             assertColumn(eventColumns, "block_x", "INTEGER", true);
             assertColumn(eventColumns, "block_y", "INTEGER", true);

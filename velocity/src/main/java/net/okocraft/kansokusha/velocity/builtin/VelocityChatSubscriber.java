@@ -53,7 +53,7 @@ public final class VelocityChatSubscriber {
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 occurredAt,
-                VelocityBuiltInSupport.PROXY_SERVER_KEY,
+                null,
                 null,
                 null,
                 new PlayerSubject(playerId),

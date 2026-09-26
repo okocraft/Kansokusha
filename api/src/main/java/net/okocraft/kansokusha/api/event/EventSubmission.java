@@ -14,7 +14,7 @@ public record EventSubmission(
     Key eventType,
     PayloadGeneration payloadGeneration,
     Instant occurredAt,
-    Key serverKey,
+    @Nullable Key serverKey,
     @Nullable Key worldKey,
     @Nullable BlockPosition position,
     @Nullable EventSubject subject,
@@ -25,9 +25,11 @@ public record EventSubmission(
         Objects.requireNonNull(eventType, "eventType");
         Objects.requireNonNull(payloadGeneration, "payloadGeneration");
         Objects.requireNonNull(occurredAt, "occurredAt");
-        Objects.requireNonNull(serverKey, "serverKey");
         Objects.requireNonNull(payload, "payload");
 
+        if (worldKey != null && serverKey == null) {
+            throw new IllegalArgumentException("serverKey is required when worldKey is present");
+        }
         if (position != null && worldKey == null) {
             throw new IllegalArgumentException("worldKey is required when position is present");
         }

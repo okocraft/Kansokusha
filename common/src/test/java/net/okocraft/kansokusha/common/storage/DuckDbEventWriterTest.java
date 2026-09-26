@@ -103,6 +103,27 @@ class DuckDbEventWriterTest {
     }
 
     @Test
+    void testServerlessEventPersistsWithoutServerMetadata(@TempDir Path dir) throws Exception {
+        try (var database = open(dir.resolve("serverless.duckdb"))) {
+            var event = event(
+                EVENT_A, 1, "2026-01-02T03:04:05Z", null,
+                null, null, new PlayerSubject(PLAYER), SHORT, "2026-01-02T04:04:05Z", 3
+            );
+
+            Assertions.assertEquals(1, new DuckDbEventWriter(database).append(List.of(event)));
+            Assertions.assertEquals(1, count(database.connection(), "events"));
+            Assertions.assertEquals(0, count(database.connection(), "servers"));
+
+            try (var statement = database.connection().createStatement();
+                 var rows = statement.executeQuery("SELECT server_id FROM events")) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertNull(rows.getObject("server_id"));
+                Assertions.assertFalse(rows.next());
+            }
+        }
+    }
+
+    @Test
     void testTimestampMsFiniteBoundariesPersistWithoutMicrosecondConversion(@TempDir Path dir)
         throws Exception {
         try (var database = open(dir.resolve("timestamp-boundaries.duckdb"))) {
@@ -252,10 +273,10 @@ class DuckDbEventWriterTest {
         Key eventType,
         int generation,
         String occurredAt,
-        Key server,
-        Key world,
-        BlockPosition position,
-        PlayerSubject subject,
+        @org.jetbrains.annotations.Nullable Key server,
+        @org.jetbrains.annotations.Nullable Key world,
+        @org.jetbrains.annotations.Nullable BlockPosition position,
+        @org.jetbrains.annotations.Nullable PlayerSubject subject,
         Key retention,
         String expiresAt,
         int payload

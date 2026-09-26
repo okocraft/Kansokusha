@@ -58,10 +58,7 @@ class VelocityCommunicationSubscriberTest {
         var submission = submission(api);
         Assertions.assertEquals(VelocityChatSubscriber.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(
-            VelocityBuiltInSupport.PROXY_SERVER_KEY,
-            submission.serverKey()
-        );
+        Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
@@ -88,10 +85,7 @@ class VelocityCommunicationSubscriberTest {
         var submission = submission(api);
         Assertions.assertEquals(VelocityCommandSubscriber.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(
-            VelocityBuiltInSupport.PROXY_SERVER_KEY,
-            submission.serverKey()
-        );
+        Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
@@ -112,6 +106,7 @@ class VelocityCommunicationSubscriberTest {
         subscriber.record(event);
 
         var submission = submission(api);
+        Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.subject());
         var payload = VelocityCommunicationPayloadCodec.decodeCommand(submission.payload());
         Assertions.assertEquals("console", payload.sourceKind());
@@ -130,6 +125,7 @@ class VelocityCommunicationSubscriberTest {
         subscriber.record(event);
 
         var submission = submission(api);
+        Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.subject());
         var payload = VelocityCommunicationPayloadCodec.decodeCommand(submission.payload());
         Assertions.assertEquals("api", payload.sourceKind());

@@ -71,6 +71,11 @@ public final class DuckDbMigrations {
                     )
                 )
                 """
+        ),
+        DuckDbMigration.of(
+            2,
+            "optional_event_server",
+            "ALTER TABLE events ALTER COLUMN server_id DROP NOT NULL"
         )
     );
 
