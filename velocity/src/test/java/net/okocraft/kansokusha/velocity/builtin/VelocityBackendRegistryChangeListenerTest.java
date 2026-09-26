@@ -123,16 +123,17 @@ class VelocityBackendRegistryChangeListenerTest {
 
     @Test
     void testRegistryHandlersAreVelocitySubscriberMethods() throws Exception {
-        Assertions.assertNotNull(
-            VelocityBackendRegistryChangeListener.class
-                .getMethod("onServerRegistered", ServerRegisteredEvent.class)
-                .getAnnotation(Subscribe.class)
-        );
-        Assertions.assertNotNull(
-            VelocityBackendRegistryChangeListener.class
-                .getMethod("onServerUnregistered", ServerUnregisteredEvent.class)
-                .getAnnotation(Subscribe.class)
-        );
+        var registered = VelocityBackendRegistryChangeListener.class
+            .getMethod("onServerRegistered", ServerRegisteredEvent.class)
+            .getAnnotation(Subscribe.class);
+        var unregistered = VelocityBackendRegistryChangeListener.class
+            .getMethod("onServerUnregistered", ServerUnregisteredEvent.class)
+            .getAnnotation(Subscribe.class);
+
+        Assertions.assertNotNull(registered);
+        Assertions.assertFalse(registered.async());
+        Assertions.assertNotNull(unregistered);
+        Assertions.assertFalse(unregistered.async());
     }
 
     private static void assertSubmission(
