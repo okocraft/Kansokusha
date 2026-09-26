@@ -266,7 +266,7 @@ class VelocityPlayerSessionListenerTest {
             notifySubmission.payload()
         );
         Assertions.assertNull(notifyPayload.originalReason());
-        Assertions.assertFalse(notifyPayload.duringServerConnect());
+        Assertions.assertTrue(notifyPayload.duringServerConnect());
         Assertions.assertEquals(
             VelocityPlayerSessionPayloadCodec.ProxyAction.NOTIFY,
             notifyPayload.action()
