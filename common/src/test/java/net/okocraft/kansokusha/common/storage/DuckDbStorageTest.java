@@ -235,6 +235,77 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testStalePlayerNameObservationDoesNotRewindOrCreateReverseChange(
+        @TempDir Path dir
+    ) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174105");
+        var currentAt = NOW.plusSeconds(2);
+        var renamedAt = NOW.plusSeconds(3);
+
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(List.of(queuedLogin(player, "CurrentName", currentAt)));
+            storage.append(List.of(queuedLogin(player, "CurrentName", NOW.plusSeconds(1))));
+            storage.append(List.of(queuedLogin(player, "StaleName", NOW)));
+            storage.append(List.of(queuedLogin(player, "RenamedName", renamedAt)));
+        }
+
+        try (var connection = new DuckDBDriver().connect(
+            "jdbc:duckdb:" + file,
+            new Properties()
+        )) {
+            try (var statement = connection.prepareStatement("""
+                SELECT name, epoch_ms(first_seen), epoch_ms(last_seen)
+                FROM player_name_history
+                WHERE player_uuid = ?
+                ORDER BY last_seen DESC, last_event_id DESC
+                """)) {
+                statement.setObject(1, player);
+                try (var rows = statement.executeQuery()) {
+                    Assertions.assertTrue(rows.next());
+                    Assertions.assertEquals("RenamedName", rows.getString(1));
+                    Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(3));
+
+                    Assertions.assertTrue(rows.next());
+                    Assertions.assertEquals("CurrentName", rows.getString(1));
+                    Assertions.assertEquals(
+                        NOW.plusSeconds(1).toEpochMilli(),
+                        rows.getLong(2)
+                    );
+                    Assertions.assertEquals(currentAt.toEpochMilli(), rows.getLong(3));
+
+                    Assertions.assertTrue(rows.next());
+                    Assertions.assertEquals("StaleName", rows.getString(1));
+                    Assertions.assertEquals(NOW.toEpochMilli(), rows.getLong(3));
+                    Assertions.assertFalse(rows.next());
+                }
+            }
+
+            try (var statement = connection.prepareStatement("""
+                SELECT epoch_ms(occurred_at), payload
+                FROM events
+                WHERE event_type = ?
+                ORDER BY occurred_at, event_id
+                """)) {
+                statement.setString(
+                    1,
+                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString()
+                );
+                try (var rows = statement.executeQuery()) {
+                    Assertions.assertTrue(rows.next());
+                    Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(1));
+                    var payload = PlayerNameChangePayloadCodec.decode(
+                        EventPayload.copyOf(rows.getBytes(2))
+                    );
+                    Assertions.assertEquals("CurrentName", payload.previousName());
+                    Assertions.assertEquals("RenamedName", payload.newName());
+                    Assertions.assertFalse(rows.next());
+                }
+            }
+        }
+    }
+
+    @Test
     void testResolvePlayerNameUsesNewestHistoricalOwnerCaseInsensitively(
         @TempDir Path dir
     ) throws Exception {
