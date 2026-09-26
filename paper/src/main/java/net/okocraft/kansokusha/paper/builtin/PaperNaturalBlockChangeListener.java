@@ -245,6 +245,6 @@ public final class PaperNaturalBlockChangeListener implements Listener {
     }
 
     private static boolean sameBlockData(BlockData first, BlockData second) {
-        return first.getAsString().equals(second.getAsString());
+        return first.equals(second);
     }
 }

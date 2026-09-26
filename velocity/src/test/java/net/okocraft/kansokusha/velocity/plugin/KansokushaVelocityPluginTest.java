@@ -20,9 +20,12 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.DriverManager;
+import java.sql.Driver;
 import java.util.List;
+import java.util.Properties;
 import java.util.UUID;
 
 class KansokushaVelocityPluginTest {
@@ -64,19 +67,39 @@ class KansokushaVelocityPluginTest {
             .error(Mockito.anyString(), Mockito.any(Throwable.class));
 
         var databasePath = dir.resolve("kansokusha.duckdb");
-        try (
-            var connection = DriverManager.getConnection("jdbc:duckdb:" + databasePath);
-            var statement = connection.createStatement();
-            var rows = statement.executeQuery("SELECT event_type, server, hex(payload) FROM events")
-        ) {
-            Assertions.assertTrue(rows.next());
-            Assertions.assertEquals("kansokusha:server_connected", rows.getString(1));
-            Assertions.assertEquals("kansokusha:velocity-server/game", rows.getString(2));
-            Assertions.assertEquals(
-                "000000206B616E736F6B757368613A76656C6F636974792D7365727665722F6C6F626279",
-                rows.getString(3)
-            );
-            Assertions.assertFalse(rows.next());
+        var libraryDirectory = dir.resolve("libs");
+        final Path duckDbJar;
+        try (var files = Files.list(libraryDirectory)) {
+            duckDbJar = files
+                .filter(path -> path.getFileName().toString().startsWith("duckdb_jdbc-"))
+                .filter(path -> path.getFileName().toString().endsWith(".jar"))
+                .findFirst()
+                .orElseThrow();
+        }
+
+        try (var loader = new URLClassLoader(
+            new java.net.URL[]{duckDbJar.toUri().toURL()},
+            ClassLoader.getPlatformClassLoader()
+        )) {
+            var driver = (Driver) loader
+                .loadClass("org.duckdb.DuckDBDriver")
+                .getDeclaredConstructor()
+                .newInstance();
+
+            try (
+                var connection = driver.connect("jdbc:duckdb:" + databasePath, new Properties());
+                var statement = connection.createStatement();
+                var rows = statement.executeQuery("SELECT event_type, server, hex(payload) FROM events")
+            ) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals("kansokusha:server_connected", rows.getString(1));
+                Assertions.assertEquals("kansokusha:velocity-server/game", rows.getString(2));
+                Assertions.assertEquals(
+                    "000000206B616E736F6B757368613A76656C6F636974792D7365727665722F6C6F626279",
+                    rows.getString(3)
+                );
+                Assertions.assertFalse(rows.next());
+            }
         }
     }
 
