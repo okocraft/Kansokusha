@@ -1,6 +1,6 @@
 # Kansokusha v1 built-in event catalog
 
-- 日付: 2026-09-26
+- 日付: 2026-09-27
 - 関連 Issue: #10, #37, #101, #102, #103, #104, #105, #106
 - 前提: `docs/design.md`
 
@@ -12,7 +12,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 
 ## Current catalog
 
-以下は current runtime で register / wire される全56 event type と platform API source の対応である。source event は同一 Kansokusha event type へ canonicalize される場合がある。表にない close 済み対象外 event を built-in listener source として追加しない。
+以下は current runtime の全57 event type と source の対応である。うち56件は platform listener が register / wire し、`player_name_change` は accepted login の名前観測から common storage が派生生成する。source event は同一 Kansokusha event type へ canonicalize される場合がある。表にない close 済み対象外 event を built-in listener source として追加しない。
 
 ### Paper / Folia
 
@@ -79,6 +79,12 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:velocity_chat` | `PlayerChatEvent` | `default` | original raw message only |
 | `kansokusha:velocity_command` | `CommandExecuteEvent` | `audit` | source descriptor + original raw command only |
 | `kansokusha:backend_registry_change` | `ServerRegisteredEvent` / `ServerUnregisteredEvent` | `audit` | runtime/reload-induced backend map changes after plugin initialization |
+
+### Common-derived
+
+| Kansokusha event type | Source | Retention | Boundary |
+| --- | --- | --- | --- |
+| `kansokusha:player_name_change` | accepted `paper_join` / `velocity_post_login` name observation | `audit` | same UUID was previously observed with a different username; first observation and same-name re-login do not emit it |
 
 ## 共通 rules
 
@@ -211,7 +217,7 @@ current built-in catalog の推奨保持期間は bundled `config.yml`（`common
 | `short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
 | default | `P30D` | 上記以外（session transition、chat） |
 
-- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `player_name_change`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
 - `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`.
 - default: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`, `paper_chat`, `velocity_chat`.
 
@@ -368,6 +374,25 @@ cancel されていない purchase の final merchant、recipe、reward/increase
 
 merchant が Entity の場合は UUID/type を保存し、standalone merchant は `kind = standalone` とする。trade payload は result、ingredients、adjusted first ingredient、uses/max uses、experience、price/demand/special-price 等の event API が提供する確定値を detached ItemStack/value として保存する。
 
+## Player login name observation / `kansokusha:player_name_change`
+
+Paper `kansokusha:paper_join` と Velocity `kansokusha:velocity_post_login` は、login 時点の player username を payload に保持する。Paper generation 1 payload は NBT field `username` を持つ。Velocity generation 1 payload は既存の先頭 `username` field を維持する。
+
+accepted login は common の internal `PlayerNameDirectory` boundary に username とともに渡される。public `KansokushaApi` には名前解決 API を追加しない。storage writer は login event と同一 transaction で derived `player_name_history` projection を更新し、同じ UUID の直前観測名と exact string が異なる場合だけ `kansokusha:player_name_change` を1件追加する。初回観測と同一名での再 login では生成しない。Paper / Velocity の source による意味の差は持たない。
+
+`player_name_change` common fields:
+
+- actor: `PlayerActor(uuid)`
+- occurred_at: 名前変更を観測した login と同じ時刻
+- server / world / position / target type: なし
+
+generation 1 payload は signed 32-bit big-endian UTF-8 length + bytes を2つ順に持つ。
+
+- `previous_name`
+- `new_name`
+
+名前解決用 projection は監査情報の source of truth ではない。case-insensitive な `normalized_name` と first/last seen を保持し、同じ名前を複数 UUID が使った場合は `last_seen` が最も新しい UUID を選ぶ。同時刻は login event の UUIDv7 `event_id` を tie-break にする。offline completion 用の候補名もこの projection から case-insensitive に重複排除して取得する。
+
 ## `kansokusha:server_connected`
 
 ### Capture / fields
@@ -408,12 +433,12 @@ target backend name は common `server` field から復元可能なため payloa
 
 | Area | Current contract |
 | --- | --- |
-| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 adopted built-ins are registered when the platform plugin starts |
+| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 platform-sourced built-ins are registered at startup; common additionally derives `player_name_change` from accepted login observations |
 | closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
 | canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |
 | lifecycle | the platform unregisters listeners when the plugin stops; a startup failure disables the plugin |
-| ingestion | platform callbacks call the bounded `KansokushaApi.submit` boundary and do not wait for storage completion |
+| ingestion | ordinary callbacks use bounded `KansokushaApi.submit`; Paper join / Velocity post-login use the common internal bounded `PlayerNameDirectory.submitPlayerLogin` path so login, name-change derivation, and projection persistence stay coordinated |
 | Folia | listeners keep no state shared between events; each platform event is recorded within one MONITOR handler call |
 | coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
 
