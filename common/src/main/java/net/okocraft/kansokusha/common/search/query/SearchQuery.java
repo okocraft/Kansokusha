@@ -35,28 +35,48 @@ public record SearchQuery(
             throw new IllegalArgumentException("limit must be greater than zero");
         }
 
-        rejectOverlap("user", conditions.users(), exclusions.users());
-        rejectOverlap("action", conditions.actions(), exclusions.actions());
-        rejectOverlap("time", conditions.timeRanges(), exclusions.timeRanges());
-        rejectOverlap("radius", conditions.radii(), exclusions.radii());
-        rejectOverlap("target", conditions.targets(), exclusions.targets());
-        rejectOverlap("filter", conditions.filters(), exclusions.filters());
-        rejectOverlap("actor-uuid", conditions.actorUuids(), exclusions.actorUuids());
-        rejectOverlap("actor-kind", conditions.actorKinds(), exclusions.actorKinds());
-        rejectOverlap("actor-type", conditions.actorTypes(), exclusions.actorTypes());
-        rejectOverlap("world", conditions.worlds(), exclusions.worlds());
-        rejectOverlap("position", conditions.positions(), exclusions.positions());
-        rejectOverlap("around", conditions.around(), exclusions.around());
+        if (isContradiction(conditions, exclusions)) {
+            throw new IllegalArgumentException(
+                "query inclusion predicate is fully excluded by the exclusion predicate"
+            );
+        }
     }
 
-    private static <T> void rejectOverlap(String field, Set<T> included, Set<T> excluded) {
-        for (var value : included) {
-            if (excluded.contains(value)) {
-                throw new IllegalArgumentException(
-                    "query includes and excludes the same " + field + " condition: " + value
-                );
-            }
+    private static boolean isContradiction(Conditions included, Conditions excluded) {
+        if (!hasConditions(excluded)) {
+            return false;
         }
+        return implies(included.users(), excluded.users())
+            && implies(included.actions(), excluded.actions())
+            && implies(included.timeRanges(), excluded.timeRanges())
+            && implies(included.radii(), excluded.radii())
+            && implies(included.targets(), excluded.targets())
+            && implies(included.filters(), excluded.filters())
+            && implies(included.actorUuids(), excluded.actorUuids())
+            && implies(included.actorKinds(), excluded.actorKinds())
+            && implies(included.actorTypes(), excluded.actorTypes())
+            && implies(included.worlds(), excluded.worlds())
+            && implies(included.positions(), excluded.positions())
+            && implies(included.around(), excluded.around());
+    }
+
+    private static boolean hasConditions(Conditions conditions) {
+        return !conditions.users().isEmpty()
+            || !conditions.actions().isEmpty()
+            || !conditions.timeRanges().isEmpty()
+            || !conditions.radii().isEmpty()
+            || !conditions.targets().isEmpty()
+            || !conditions.filters().isEmpty()
+            || !conditions.actorUuids().isEmpty()
+            || !conditions.actorKinds().isEmpty()
+            || !conditions.actorTypes().isEmpty()
+            || !conditions.worlds().isEmpty()
+            || !conditions.positions().isEmpty()
+            || !conditions.around().isEmpty();
+    }
+
+    private static <T> boolean implies(Set<T> included, Set<T> excluded) {
+        return excluded.isEmpty() || (!included.isEmpty() && excluded.containsAll(included));
     }
 
     public enum Order {
