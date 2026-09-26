@@ -13,6 +13,7 @@ public record QueuedEvent(
     EventSubmission submission,
     long occurredAtMillis,
     long expiresAtMillis,
-    @Nullable PlayerNameObservation playerNameObservation
+    @Nullable PlayerNameObservation playerNameObservation,
+    @Nullable String searchText
 ) {
 }
