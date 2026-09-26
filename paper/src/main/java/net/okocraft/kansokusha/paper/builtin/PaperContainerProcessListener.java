@@ -70,7 +70,6 @@ public final class PaperContainerProcessListener implements Listener {
             block,
             PaperBuiltInSupport.itemType(event.getResult()),
             "furnace_smelt",
-            "org.bukkit.event.inventory.FurnaceSmeltEvent",
             PaperContainerPayloadCodec.snapshotItems(List.of(event.getSource())),
             PaperContainerPayloadCodec.snapshotItem(null),
             PaperContainerPayloadCodec.snapshotItem(fuel),
@@ -88,7 +87,6 @@ public final class PaperContainerProcessListener implements Listener {
             event.getBlock(),
             PaperBuiltInSupport.itemType(contents.getIngredient()),
             "brew",
-            "org.bukkit.event.inventory.BrewEvent",
             PaperContainerPayloadCodec.snapshotItems(
                 new ItemStack[]{contents.getItem(0), contents.getItem(1), contents.getItem(2)}
             ),
@@ -110,7 +108,6 @@ public final class PaperContainerProcessListener implements Listener {
             event.getBlock(),
             PaperBuiltInSupport.itemType(event.getResult()),
             "campfire_cook",
-            "org.bukkit.event.block.BlockCookEvent",
             PaperContainerPayloadCodec.snapshotItems(List.of(event.getSource())),
             PaperContainerPayloadCodec.snapshotItem(null),
             PaperContainerPayloadCodec.snapshotItem(null),
@@ -131,7 +128,6 @@ public final class PaperContainerProcessListener implements Listener {
             event.getBlock(),
             PaperBuiltInSupport.itemType(event.getResult()),
             "crafter_craft",
-            "org.bukkit.event.block.CrafterCraftEvent",
             PaperContainerPayloadCodec.snapshotItems(inputs),
             PaperContainerPayloadCodec.snapshotItem(null),
             PaperContainerPayloadCodec.snapshotItem(null),
@@ -144,7 +140,6 @@ public final class PaperContainerProcessListener implements Listener {
         Block block,
         @Nullable Key targetType,
         String processKind,
-        String sourceEvent,
         ListTag inputItems,
         CompoundTag ingredient,
         CompoundTag fuel,
@@ -164,7 +159,6 @@ public final class PaperContainerProcessListener implements Listener {
                 targetType,
                 PaperContainerPayloadCodec.encodeProcess(
                     processKind,
-                    sourceEvent,
                     container,
                     inputItems,
                     ingredient,

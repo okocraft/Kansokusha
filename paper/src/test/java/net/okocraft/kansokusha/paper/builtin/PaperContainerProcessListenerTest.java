@@ -173,10 +173,6 @@ class PaperContainerProcessListenerTest {
 
         Assertions.assertEquals(1, api.submissions.size());
         var payload = PaperPayloadNbtCodec.decode(api.submissions.remove().payload());
-        Assertions.assertEquals(
-            "non_cancelled_container_process_event",
-            string(payload, "semantics")
-        );
         Assertions.assertEquals("furnace_smelt", string(payload, "process_kind"));
         var results = payload.getListOrEmpty("event_result_items");
         var result = PaperItemStackPayloadCodec.decode((CompoundTag) results.get(0));
@@ -319,10 +315,6 @@ class PaperContainerProcessListenerTest {
     ) throws Exception {
         Assertions.assertNotNull(submission);
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(
-            "non_cancelled_container_process_event",
-            string(payload, "semantics")
-        );
         Assertions.assertEquals(kind, string(payload, "process_kind"));
         var inputs = payload.getListOrEmpty("input_items");
         var input = PaperItemStackPayloadCodec.decode((CompoundTag) inputs.get(0));

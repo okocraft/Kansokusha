@@ -72,11 +72,11 @@ class PaperAdministrativeWorldListenerTest {
             "rules",
             new PlayerActor(PLAYER_ID)
         );
+        Assertions.assertEquals(Key.key("minecraft", "keep_inventory"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals("minecraft:keep_inventory", string(payload, "game_rule"));
+        Assertions.assertFalse(payload.contains("game_rule"));
         Assertions.assertEquals("false", string(payload, "before"));
         Assertions.assertEquals("true", string(payload, "after"));
-        Assertions.assertEquals("world_gamerule_change", string(payload, "source_event"));
         Assertions.assertTrue(payload.getBooleanOr("source_present", false));
 
         var source = payload.getCompoundOrEmpty("source");
@@ -192,7 +192,6 @@ class PaperAdministrativeWorldListenerTest {
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("normal", string(payload, "before"));
         Assertions.assertEquals("hard", string(payload, "after"));
-        Assertions.assertEquals("world_difficulty_change", string(payload, "source_event"));
         var sourceTag = payload.getCompoundOrEmpty("source");
         Assertions.assertEquals("console", string(sourceTag, "sender_kind"));
         Assertions.assertEquals("CONSOLE", string(sourceTag, "sender_name"));
@@ -246,10 +245,6 @@ class PaperAdministrativeWorldListenerTest {
         Assertions.assertEquals("center", string(centerPayload, "action"));
         Assertions.assertEquals(centerTag(1.25, -2.5), centerPayload.getCompoundOrEmpty("before"));
         Assertions.assertEquals(centerTag(30.5, 40.75), centerPayload.getCompoundOrEmpty("after"));
-        Assertions.assertEquals(
-            "world_border_center_change",
-            string(centerPayload, "source_event")
-        );
 
         var boundsEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
         Mockito.when(boundsEvent.getWorld()).thenReturn(world);
@@ -269,7 +264,6 @@ class PaperAdministrativeWorldListenerTest {
         expectedBounds.putDouble("after_size", 250.0);
         expectedBounds.putString("transition_type", "started_move");
         expectedBounds.putLong("transition_duration_ticks", 120L);
-        expectedBounds.putString("source_event", "world_border_bounds_change");
         Assertions.assertEquals(expectedBounds, boundsPayload);
 
         var zeroDurationEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
@@ -339,14 +333,12 @@ class PaperAdministrativeWorldListenerTest {
         Assertions.assertNull(submission.actor());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals("world", string(payload, "scope"));
-        Assertions.assertEquals("spawn_change", string(payload, "source_event"));
         Assertions.assertEquals(
-            locationTag("example:spawn", 10.5, 64, 20.25, 30, 5),
+            locationTag(null, 10.5, 64, 20.25, 30, 5),
             payload.getCompoundOrEmpty("before")
         );
         Assertions.assertEquals(
-            locationTag("example:spawn", -4.75, 80.5, 9.125, 90, 0),
+            locationTag(null, -4.75, 80.5, 9.125, 90, 0),
             payload.getCompoundOrEmpty("after")
         );
     }
@@ -400,7 +392,9 @@ class PaperAdministrativeWorldListenerTest {
         float pitch
     ) {
         var result = new CompoundTag();
-        result.putString("world", world);
+        if (world != null) {
+            result.putString("world", world);
+        }
         result.putDouble("x", x);
         result.putDouble("y", y);
         result.putDouble("z", z);

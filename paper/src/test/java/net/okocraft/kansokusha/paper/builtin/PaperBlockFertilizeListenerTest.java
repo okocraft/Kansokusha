@@ -184,7 +184,6 @@ class PaperBlockFertilizeListenerTest {
         var payload = new CompoundTag();
         payload.put("pre_state", NbtUtils.writeBlockState(preState));
         payload.put("post_state", NbtUtils.writeBlockState(postState));
-        payload.putString("source_event", PaperBlockFertilizeListener.SOURCE_EVENT);
         payload.put("source", PaperBlockEventTestSupport.position(sourcePosition));
         return payload;
     }

@@ -213,7 +213,7 @@ class PaperBlockPlaceListenerTest {
     private static CompoundTag placePayload(BlockState replaced, BlockState placed) {
         var payload = new CompoundTag();
         payload.put("replaced", NbtUtils.writeBlockState(replaced));
-        payload.put("placed", NbtUtils.writeBlockState(placed));
+        payload.put("placed", PaperBlockStatePayloadCodec.blockProperties(placed.asBlockData()));
         return payload;
     }
 

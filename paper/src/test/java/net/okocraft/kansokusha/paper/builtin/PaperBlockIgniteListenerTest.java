@@ -77,8 +77,6 @@ class PaperBlockIgniteListenerTest {
             "source_state",
             PaperBlockStatePayloadCodec.blockState(Blocks.NETHERRACK.defaultBlockState().asBlockData())
         );
-        expected.putString("actor_entity_uuid", PLAYER_ID.toString());
-        expected.putString("actor_entity_type", "PLAYER");
         Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
     }
 

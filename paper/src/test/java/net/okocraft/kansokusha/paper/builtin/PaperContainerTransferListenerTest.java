@@ -56,12 +56,8 @@ class PaperContainerTransferListenerTest {
         Assertions.assertNull(submission.actor());
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(
-            "non_cancelled_automated_transfer_attempt",
-            string(payload, "semantics")
-        );
         Assertions.assertEquals("source", string(payload, "initiator_role"));
-        Assertions.assertEquals("push", string(payload, "transfer_direction"));
+        Assertions.assertFalse(payload.contains("initiator_inventory"));
         Assertions.assertEquals(
             "hopper",
             string(payload.getCompoundOrEmpty("source_inventory"), "type")

@@ -29,7 +29,7 @@ class PaperBlockStatePayloadCodecTest {
         var payload = PaperBlockStatePayloadCodec.encodeBlockBreak(state.asBlockData());
 
         Assertions.assertEquals(
-            NbtUtils.writeBlockState(state),
+            PaperBlockStatePayloadCodec.blockProperties(state.asBlockData()),
             PaperPayloadNbtCodec.decode(payload)
         );
     }
@@ -42,7 +42,7 @@ class PaperBlockStatePayloadCodecTest {
 
         var expected = new CompoundTag();
         expected.put("replaced", NbtUtils.writeBlockState(replaced));
-        expected.put("placed", NbtUtils.writeBlockState(placed));
+        expected.put("placed", PaperBlockStatePayloadCodec.blockProperties(placed.asBlockData()));
 
         var payload = PaperBlockStatePayloadCodec.encodeBlockPlace(
             replaced.asBlockData(),

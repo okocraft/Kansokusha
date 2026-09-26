@@ -73,9 +73,7 @@ public final class PaperBlockIgniteListener implements Listener {
                 block.getBlockData(),
                 cause.name(),
                 source == null ? null : position(source),
-                source == null ? null : source.getBlockData(),
-                entity == null ? null : entity.getUniqueId(),
-                entity == null ? null : entity.getType().name()
+                source == null ? null : source.getBlockData()
             )
         ));
     }

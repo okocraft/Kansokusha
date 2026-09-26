@@ -42,9 +42,8 @@ final class PaperPlayerStatePayloadCodec {
 
     static EventPayload encodeWorldChange(Key fromWorld, LocationSnapshot to) {
         var payload = new CompoundTag();
-        payload.putString("semantics", "gameplay_world_state_transition");
         payload.putString("from_world", Objects.requireNonNull(fromWorld, "fromWorld").asString());
-        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to")));
+        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to"), false));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -56,9 +55,8 @@ final class PaperPlayerStatePayloadCodec {
     ) {
         Objects.requireNonNull(relativeFlags, "relativeFlags");
         var payload = new CompoundTag();
-        payload.putString("semantics", "successful_teleport_operation");
-        payload.put("from", encodeLocation(Objects.requireNonNull(from, "from")));
-        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to")));
+        payload.put("from", encodeLocation(Objects.requireNonNull(from, "from"), true));
+        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to"), false));
         payload.putString("cause", Objects.requireNonNull(cause, "cause"));
 
         var flags = new CompoundTag();
@@ -71,7 +69,6 @@ final class PaperPlayerStatePayloadCodec {
 
     static EventPayload encodeGameModeChange(String oldMode, String newMode, String cause) {
         var payload = new CompoundTag();
-        payload.putString("semantics", "established_gamemode_state_transition");
         payload.putString("old_gamemode", Objects.requireNonNull(oldMode, "oldMode"));
         payload.putString("new_gamemode", Objects.requireNonNull(newMode, "newMode"));
         payload.putString("cause", Objects.requireNonNull(cause, "cause"));
@@ -82,15 +79,13 @@ final class PaperPlayerStatePayloadCodec {
         @Nullable LocationSnapshot before,
         @Nullable LocationSnapshot after,
         boolean forced,
-        String cause,
-        String sourceEvent
+        String cause
     ) {
         var payload = new CompoundTag();
         payload.put("before", encodeOptionalLocation(before));
         payload.put("after", encodeOptionalLocation(after));
         payload.putBoolean("forced", forced);
         payload.putString("cause", Objects.requireNonNull(cause, "cause"));
-        payload.putString("source_event", Objects.requireNonNull(sourceEvent, "sourceEvent"));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -147,14 +142,16 @@ final class PaperPlayerStatePayloadCodec {
         var payload = new CompoundTag();
         payload.putBoolean("present", location != null);
         if (location != null) {
-            payload.put("location", encodeLocation(location));
+            payload.put("location", encodeLocation(location, true));
         }
         return payload;
     }
 
-    private static CompoundTag encodeLocation(LocationSnapshot location) {
+    private static CompoundTag encodeLocation(LocationSnapshot location, boolean includeWorld) {
         var payload = new CompoundTag();
-        payload.putString("world", location.worldKey().asString());
+        if (includeWorld) {
+            payload.putString("world", location.worldKey().asString());
+        }
         payload.putDouble("x", location.x());
         payload.putDouble("y", location.y());
         payload.putDouble("z", location.z());

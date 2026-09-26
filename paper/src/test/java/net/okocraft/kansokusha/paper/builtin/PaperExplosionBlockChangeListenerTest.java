@@ -199,10 +199,7 @@ class PaperExplosionBlockChangeListenerTest {
         Assertions.assertEquals(new EntityActor(projectileId, Key.key("minecraft", "arrow")), submission.actor());
         Assertions.assertEquals(Key.key("minecraft", "oak_planks"), submission.targetType());
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        Assertions.assertEquals(
-            projectileId.toString(),
-            payload.getString("actor_entity_uuid").orElseThrow()
-        );
+        Assertions.assertFalse(payload.contains("actor_entity_uuid"));
         Assertions.assertEquals(
             shooterId.toString(),
             payload.getString("shooter_entity_uuid").orElseThrow()

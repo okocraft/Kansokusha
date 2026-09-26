@@ -77,10 +77,7 @@ class PaperCauldronLevelChangeListenerTest {
             cauldronPayload(
                 oldState,
                 newState,
-                CauldronLevelChangeEvent.ChangeReason.BOTTLE_FILL,
-                "player",
-                PLAYER_ID,
-                EntityType.PLAYER.name()
+                CauldronLevelChangeEvent.ChangeReason.BOTTLE_FILL
             ),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
@@ -123,10 +120,7 @@ class PaperCauldronLevelChangeListenerTest {
             cauldronPayload(
                 oldState,
                 newState,
-                CauldronLevelChangeEvent.ChangeReason.EXTINGUISH,
-                "entity",
-                ENTITY_ID,
-                EntityType.ZOMBIE.name()
+                CauldronLevelChangeEvent.ChangeReason.EXTINGUISH
             ),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
@@ -164,10 +158,7 @@ class PaperCauldronLevelChangeListenerTest {
             cauldronPayload(
                 oldState,
                 newState,
-                CauldronLevelChangeEvent.ChangeReason.NATURAL_FILL,
-                "none",
-                null,
-                null
+                CauldronLevelChangeEvent.ChangeReason.NATURAL_FILL
             ),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
@@ -211,22 +202,12 @@ class PaperCauldronLevelChangeListenerTest {
     private static CompoundTag cauldronPayload(
         net.minecraft.world.level.block.state.BlockState oldState,
         net.minecraft.world.level.block.state.BlockState newState,
-        CauldronLevelChangeEvent.ChangeReason reason,
-        String actorKind,
-        UUID entityId,
-        String entityType
+        CauldronLevelChangeEvent.ChangeReason reason
     ) {
         var payload = new CompoundTag();
         payload.put("old_state", NbtUtils.writeBlockState(oldState));
         payload.put("new_state", NbtUtils.writeBlockState(newState));
         payload.putString("reason", reason.name());
-        payload.putString("actor_kind", actorKind);
-        if (entityId != null) {
-            payload.putString("actor_entity_uuid", entityId.toString());
-        }
-        if (entityType != null) {
-            payload.putString("actor_entity_type", entityType);
-        }
         return payload;
     }
 }

@@ -5,7 +5,6 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -60,11 +59,6 @@ public final class PaperCauldronLevelChangeListener implements Listener {
 
         var block = event.getBlock();
         var entity = event.getEntity();
-        var entityId = entity == null ? null : entity.getUniqueId();
-        var actorKind = entity == null
-            ? "none"
-            : entity instanceof Player ? "player" : "entity";
-
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -77,10 +71,7 @@ public final class PaperCauldronLevelChangeListener implements Listener {
             PaperBlockEventPayloadCodec.encodeCauldronLevelChange(
                 block.getBlockData(),
                 event.getNewState().getBlockData(),
-                event.getReason().name(),
-                actorKind,
-                entityId,
-                entity == null ? null : entity.getType().name()
+                event.getReason().name()
             )
         ));
     }

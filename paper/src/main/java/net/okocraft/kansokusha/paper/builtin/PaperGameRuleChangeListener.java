@@ -71,7 +71,6 @@ public final class PaperGameRuleChangeListener implements Listener {
             PaperAdministrativeSource.actor(sender),
             gameRuleKey,
             PaperAdministrativePayloadCodec.encodeGameRuleChange(
-                gameRuleKey.asString(),
                 before,
                 after,
                 source

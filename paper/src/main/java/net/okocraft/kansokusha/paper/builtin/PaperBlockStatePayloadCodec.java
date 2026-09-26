@@ -23,7 +23,7 @@ public final class PaperBlockStatePayloadCodec {
     }
 
     public static EventPayload encodeBlockBreak(BlockData blockData) {
-        return PaperPayloadNbtCodec.encode(blockState(blockData));
+        return PaperPayloadNbtCodec.encode(blockProperties(blockData));
     }
 
     public static EventPayload encodeBlockPlace(
@@ -32,12 +32,16 @@ public final class PaperBlockStatePayloadCodec {
     ) {
         var payload = new CompoundTag();
         payload.put(REPLACED_STATE_KEY, blockState(replacedBlockData));
-        payload.put(PLACED_STATE_KEY, blockState(placedBlockData));
+        payload.put(PLACED_STATE_KEY, blockProperties(placedBlockData));
         return PaperPayloadNbtCodec.encode(payload);
     }
 
     static CompoundTag blockState(BlockData blockData) {
         return NbtUtils.writeBlockState(toMinecraftState(blockData));
+    }
+
+    static CompoundTag blockProperties(BlockData blockData) {
+        return blockState(blockData).getCompoundOrEmpty("Properties").copy();
     }
 
     static CompoundTag airBlockState() {

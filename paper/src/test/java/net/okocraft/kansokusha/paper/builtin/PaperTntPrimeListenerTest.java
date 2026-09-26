@@ -64,11 +64,8 @@ class PaperTntPrimeListenerTest {
 
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
         Assertions.assertEquals("player", payload.getString("cause").orElseThrow());
-        Assertions.assertEquals(
-            PLAYER_ID.toString(),
-            payload.getString("actor_entity_uuid").orElseThrow()
-        );
-        Assertions.assertEquals("PLAYER", payload.getString("actor_entity_type").orElseThrow());
+        Assertions.assertFalse(payload.contains("actor_entity_uuid"));
+        Assertions.assertFalse(payload.contains("actor_entity_type"));
         Assertions.assertEquals(
             PaperBlockEventTestSupport.position(new BlockPosition(9, 64, 20)),
             payload.get("priming_block")
