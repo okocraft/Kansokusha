@@ -1,7 +1,8 @@
 # ADR-0001: v1 のイベント契約と公開 API 境界
 
 - 日付: 2026-09-20
-- 関連 Issue: #5, #12
+- 更新: 2026-09-26 — #152, #153 の proxy-local activity に対応して server identifier を任意化
+- 関連 Issue: #5, #12, #152, #153
 
 ## コンテキスト
 
@@ -49,11 +50,11 @@ generation は schema や serializer 自体を表さない。payload の encodin
 - event type key
 - payload format generation
 - 発生時刻
-- server identifier
 - opaque payload
 
 任意フィールドは次のとおりとする。
 
+- server identifier
 - world identifier
 - position
 - subject reference
@@ -62,7 +63,11 @@ server と world の識別子には Adventure `Key` を使用し、position は�
 
 subject は sealed interface による platform-neutral な値として表現する。v1 は UUID を保持する player subject のみを定義し、他の主体は具体的な要件が生じた時点で追加する。
 
-Paper integration はローカル server key を API から取得可能にする。複数の backend server を扱う Velocity integration では、送信側が対象 server key を指定する。
+Paper integration はローカル server key を API から取得可能にする。複数の backend server を扱う Velocity integration では、event が特定 backend server の事実を表す場合にその server key を指定する。
+
+proxy-local activity のように特定 backend を event の server context として正しく特定できない場合は、server identifier を省略する。現在接続中の backend を proxy-local event の target とみなしたり、synthetic proxy server identity を作って `servers` metadata に混在させたりしない。
+
+world identifier は server-scoped なので、world を指定する event では server identifier も必須とする。
 
 payload は byte sequence とし、Kansokusha は内容を解釈しない。
 

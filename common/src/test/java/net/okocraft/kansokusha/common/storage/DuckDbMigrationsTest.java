@@ -13,12 +13,13 @@ import java.util.Map;
 class DuckDbMigrationsTest {
 
     @Test
-    void testInitialSchemaMatchesV1Contract(@TempDir Path dir) throws Exception {
+    void testCurrentSchemaMatchesV1Contract(@TempDir Path dir) throws Exception {
         try (var database = DuckDbDatabase.open(dir.resolve("schema.duckdb"))) {
             var connection = database.connection();
             DuckDbMigrations.migrate(database);
 
             Assertions.assertEquals("initial_v1_schema", migrationName(connection, 1));
+            Assertions.assertEquals("optional_event_server", migrationName(connection, 2));
 
             assertColumn(connection, "event_types", "id", "INTEGER", false);
             assertColumn(connection, "event_types", "event_type_key", "VARCHAR", false);
@@ -31,7 +32,7 @@ class DuckDbMigrationsTest {
             Assertions.assertEquals(11, eventColumns.size());
             assertColumn(eventColumns, "payload_generation_id", "INTEGER", false);
             assertColumn(eventColumns, "occurred_at", "TIMESTAMP_MS", false);
-            assertColumn(eventColumns, "server_id", "INTEGER", false);
+            assertColumn(eventColumns, "server_id", "INTEGER", true);
             assertColumn(eventColumns, "world_id", "INTEGER", true);
             assertColumn(eventColumns, "block_x", "INTEGER", true);
             assertColumn(eventColumns, "block_y", "INTEGER", true);
@@ -43,6 +44,120 @@ class DuckDbMigrationsTest {
 
             Assertions.assertEquals(0, eventIdentityConstraintCount(connection));
             Assertions.assertEquals(0, eventIndexCount(connection));
+        }
+    }
+
+    @Test
+    void testOptionalServerMigrationPreservesServerfulRowsAndAllowsServerlessRows(
+        @TempDir Path dir
+    ) throws Exception {
+        var filepath = dir.resolve("optional-server-upgrade.duckdb");
+
+        try (var database = DuckDbDatabase.open(filepath)) {
+            var connection = database.connection();
+            DuckDbMigrationRunner.of(DuckDbMigrations.INITIAL_V1_SCHEMA).migrate(connection);
+
+            assertColumn(connection, "events", "server_id", "INTEGER", false);
+
+            execute(connection, "INSERT INTO event_types (event_type_key) VALUES ('example:event')");
+            var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");
+            execute(
+                connection,
+                "INSERT INTO payload_generations (event_type_id, generation) VALUES ("
+                    + eventTypeId + ", 1)"
+            );
+            var generationId = singleInt(
+                connection,
+                "SELECT id FROM payload_generations WHERE event_type_id = " + eventTypeId
+            );
+
+            execute(connection, "INSERT INTO servers (server_key) VALUES ('example:server')");
+            var serverId = idForKey(connection, "servers", "server_key", "example:server");
+
+            execute(
+                connection,
+                "INSERT INTO retention_policies (retention_policy_key) VALUES ('example:audit')"
+            );
+            var retentionId = idForKey(
+                connection,
+                "retention_policies",
+                "retention_policy_key",
+                "example:audit"
+            );
+
+            try (var statement = connection.prepareStatement(
+                """
+                    INSERT INTO events (
+                        payload_generation_id, occurred_at, server_id,
+                        retention_policy_id, expires_at, payload
+                    ) VALUES (?, make_timestamp_ms(?), ?, ?, make_timestamp_ms(?), ?)
+                    """
+            )) {
+                statement.setInt(1, generationId);
+                statement.setLong(2, 1_700_000_000_123L);
+                statement.setInt(3, serverId);
+                statement.setInt(4, retentionId);
+                statement.setLong(5, 1_700_086_400_123L);
+                statement.setBytes(6, new byte[]{1});
+                Assertions.assertEquals(1, statement.executeUpdate());
+            }
+        }
+
+        try (var database = DuckDbDatabase.open(filepath)) {
+            var connection = database.connection();
+            DuckDbMigrations.migrate(database);
+
+            Assertions.assertEquals("optional_event_server", migrationName(connection, 2));
+            assertColumn(connection, "events", "server_id", "INTEGER", true);
+
+            try (var statement = connection.createStatement();
+                 var rows = statement.executeQuery(
+                     """
+                         SELECT s.server_key, hex(e.payload) payload_hex
+                         FROM events e
+                         JOIN servers s ON s.id = e.server_id
+                         """
+                 )) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals("example:server", rows.getString("server_key"));
+                Assertions.assertEquals("01", rows.getString("payload_hex"));
+                Assertions.assertFalse(rows.next());
+            }
+
+            var eventTypeId = idForKey(connection, "event_types", "event_type_key", "example:event");
+            var generationId = singleInt(
+                connection,
+                "SELECT id FROM payload_generations WHERE event_type_id = " + eventTypeId
+            );
+            var retentionId = idForKey(
+                connection,
+                "retention_policies",
+                "retention_policy_key",
+                "example:audit"
+            );
+
+            try (var statement = connection.prepareStatement(
+                """
+                    INSERT INTO events (
+                        payload_generation_id, occurred_at, server_id,
+                        retention_policy_id, expires_at, payload
+                    ) VALUES (?, make_timestamp_ms(?), NULL, ?, make_timestamp_ms(?), ?)
+                    """
+            )) {
+                statement.setInt(1, generationId);
+                statement.setLong(2, 1_700_000_001_123L);
+                statement.setInt(3, retentionId);
+                statement.setLong(4, 1_700_086_401_123L);
+                statement.setBytes(5, new byte[]{2});
+                Assertions.assertEquals(1, statement.executeUpdate());
+            }
+
+            Assertions.assertEquals(2, singleInt(connection, "SELECT count(*) FROM events"));
+            Assertions.assertEquals(1, singleInt(connection, "SELECT count(*) FROM servers"));
+            Assertions.assertEquals(
+                1,
+                singleInt(connection, "SELECT count(*) FROM events WHERE server_id IS NULL")
+            );
         }
     }
 

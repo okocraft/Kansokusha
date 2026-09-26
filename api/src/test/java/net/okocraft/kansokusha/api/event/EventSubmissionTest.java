@@ -43,21 +43,23 @@ class EventSubmissionTest {
     }
 
     @Test
-    void testOptionalFieldsMayBeAbsentAndPositionRequiresWorld() {
-        EventSubmission withoutLocation = submission(SERVER_KEY, null, null, null);
+    void testOptionalFieldsMayBeAbsentAndLocationRequiresServerContext() {
+        EventSubmission withoutContext = submission(null, null, null, null);
         assertAll(
-            () -> assertNull(withoutLocation.worldKey()),
-            () -> assertNull(withoutLocation.position()),
-            () -> assertNull(withoutLocation.subject()),
+            () -> assertNull(withoutContext.serverKey()),
+            () -> assertNull(withoutContext.worldKey()),
+            () -> assertNull(withoutContext.position()),
+            () -> assertNull(withoutContext.subject()),
+            () -> assertThrows(IllegalArgumentException.class,
+                () -> submission(null, WORLD_KEY, null, null)),
             () -> assertThrows(IllegalArgumentException.class,
                 () -> submission(SERVER_KEY, null, new BlockPosition(0, 64, 0), null))
         );
     }
 
     @Test
-    void testNullIdentifiersAndRequiredValuesAreRejected() {
+    void testRequiredValuesAreRejectedWhenNull() {
         assertAll(
-            () -> assertThrows(NullPointerException.class, () -> submission(null, null, null, null)),
             () -> assertThrows(NullPointerException.class,
                 () -> new EventSubmission(null, PayloadGeneration.FIRST, OCCURRED_AT,
                     SERVER_KEY, null, null, null, PAYLOAD)),
@@ -69,10 +71,7 @@ class EventSubmissionTest {
                     SERVER_KEY, null, null, null, PAYLOAD)),
             () -> assertThrows(NullPointerException.class,
                 () -> new EventSubmission(EVENT_TYPE, PayloadGeneration.FIRST, OCCURRED_AT,
-                    SERVER_KEY, null, null, null, null)),
-            () -> assertThrows(NullPointerException.class,
-                () -> new EventSubmission(EVENT_TYPE, PayloadGeneration.FIRST, OCCURRED_AT,
-                    null, null, null, null, PAYLOAD))
+                    SERVER_KEY, null, null, null, null))
         );
     }
 

@@ -129,10 +129,7 @@ class VelocityPlayerSessionListenerTest {
             VelocityServerKeyCodec.encode("Survival-1").orElseThrow(),
             payload.currentBackendKey()
         );
-        Assertions.assertEquals(
-            VelocityPlayerSessionListener.PROXY_SERVER_KEY,
-            submission.serverKey()
-        );
+        Assertions.assertNull(submission.serverKey());
     }
 
     @Test
@@ -464,10 +461,7 @@ class VelocityPlayerSessionListenerTest {
 
     private static void assertProxyCommonFields(EventSubmission submission) {
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(
-            VelocityPlayerSessionListener.PROXY_SERVER_KEY,
-            submission.serverKey()
-        );
+        Assertions.assertNull(submission.serverKey());
         Assertions.assertNull(submission.worldKey());
         Assertions.assertNull(submission.position());
         Assertions.assertEquals(
