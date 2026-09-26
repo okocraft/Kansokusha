@@ -80,9 +80,11 @@ CREATE TABLE player_name_history (
 );
 ```
 
-`player_name_history` は accepted `paper_join` / `velocity_post_login` からのみ更新する検索 projection である。`normalized_name` は `Locale.ROOT` lower-case で、名前→UUID は case-insensitive に比較し、`(last_seen, last_event_id)` が最新の UUID を採用する。同一 UUID・同一 exact name の再観測は同じ row の `last_seen` を更新し、case-only rename を含む exact name の変化は別 history row として残す。offline player-name completion は `normalized_name` ごとに最新 casing を1件返す。
+`player_name_history` は accepted `paper_join` / `velocity_post_login` からのみ更新する検索 projection である。`normalized_name` は `Locale.ROOT` lower-case で、名前→UUID は case-insensitive に比較し、`(last_seen, last_event_id)` が最新の UUID を採用する。同一 UUID・同一 exact name の再観測は同じ row を更新し、`first_seen` は最小値、`(last_seen, last_event_id)` は最大値を維持する。したがって時計の巻き戻り等で stale observation が後から処理されても latest state は巻き戻らない。case-only rename を含む exact name の変化は別 history row として残す。offline player-name completion は `normalized_name` ごとに最新 casing を1件返す。
 
-同じ UUID の直前観測名と異なる login が accepted された場合、storage writer は login と同一 transaction で `kansokusha:player_name_change` を追加する。actor は `PlayerActor(uuid)`、`occurred_at` は login と同一、payload generation 1 は `previous_name` / `new_name` の2 field である。初回観測と同一名再 login では生成しない。Paper `paper_join` と Velocity `velocity_post_login` 自体にも login 時点の username を payload に保存するため、projection は監査ログの代替ではない。
+同じ UUID の current observation より `(occurred_at, event_id)` が新しい login で exact username が変化した場合、storage writer は login と同一 transaction で `kansokusha:player_name_change` を追加する。actor は `PlayerActor(uuid)`、`occurred_at` は login と同一、payload generation 1 は `previous_name` / `new_name` の2 field である。初回観測、同一名再 login、stale observation では生成しない。Paper `paper_join` と Velocity `velocity_post_login` 自体にも login 時点の username を payload に保存するため、projection は監査ログの代替ではない。
+
+Paper `paper_join` は payload generation 1 のまま、`username` を backward-compatible な optional field として追加する。T2 より前の generation-1 empty compound は引き続き有効で、欠落は username 未 capture を意味する。これは既存 field の意味を変えない optional field の追加であり、非互換変更ではないため generation は上げない。
 
 - `event_id` は保存時に生成する UUIDv7 で、event identity、同一 `occurred_at` 内の tie-break、将来の cursor pagination / inspect に使う。安定した時系列順は `(occurred_at, event_id)` とする。UUIDv7 に含まれる生成時刻は event の発生時刻として扱わず、`occurred_at` は引き続き `EventSubmission.occurredAt()` を正とする。
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
