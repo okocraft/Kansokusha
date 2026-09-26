@@ -150,7 +150,7 @@ Paper / Folia の generation 1 payload は、各 event codec が `CompoundTag` �
 
 payload ごとの Deflate / Zstd 等の圧縮は行わない。短い payload に圧縮 header を追加せず、chat / command の自由長 text は compact envelope 内の UTF-8 string として保存する。
 
-common fields（event type、generation、occurredAt、server、world、position、actor、target type）から一意に復元できる情報は payload に重複保存しない。primary actor の UUID/type は actor columns を正とし、payload には shooter / owner 等の indirect attribution のみを残す。block state や ItemStack のように event 固有の復元に必要な構造は payload に保持する。
+common fields（event type、generation、occurredAt、server、world、position、actor、target type）から一意に復元できる情報は payload に重複保存しない。primary actor の UUID/type、target と同一の block/item type、destination world、event type から固定的に決まる `semantics` / `source_event` は payload から除く。payload には shooter / owner 等の indirect attribution、before/after state、ItemStack 等の event 固有情報を保持する。
 
 ### Paper / Folia capture semantics
 
@@ -235,9 +235,9 @@ common fields:
 
 payload generation 1 は Paper module の compact binary codec で保存する。
 
-MONITOR 時点で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を logical structure として codec に渡す。
+MONITOR 時点で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換する。block type は common `target_type` から復元できるため payload には重複保存せず、`NbtUtils.writeBlockState` が生成する `Properties` のみを logical payload として compact codec に渡す。
 
-これにより block identity と全 block-state properties を Minecraft の block-state serialization の意味を保ったまま保持する。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
+これにより block-state properties は Minecraft の block-state serialization の意味を保ったまま保持し、block identity は `target_type` を正とする。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
 
 ## `kansokusha:block_place`
 
@@ -261,8 +261,8 @@ common fields:
 
 payload generation 1 の logical payload は次の2 child compounds を持ち、Paper compact binary codec で保存する。
 
-1. `replaced`: event の replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
-2. `placed`: MONITOR 時点で world に仮設置されている Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
+1. `replaced`: event の replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value。placed type と異なる可能性があるため block identity も保持する
+2. `placed`: MONITOR 時点で world に仮設置されている Minecraft `BlockState` の `Properties`。placed block identity は common `target_type` から復元する
 
 outer compound の field name / primitive value は compact binary codec で保存する。block entity NBT は generation 1 payload に含めない。
 
@@ -309,7 +309,6 @@ cancel されていない event について、MONITOR 時点の pre-state と s
 generation 1 payload は次を持つ。
 
 - `operation`: `harvest` / `shear`
-- `source_event`: source platform event class
 - `hand`
 - `pre_state`
 - `harvest_items`: harvest source の items。shear では empty
