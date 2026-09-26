@@ -26,7 +26,6 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 public final class PaperBlockFertilizeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_fertilize");
-    static final String SOURCE_EVENT = "block_fertilize";
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -93,7 +92,6 @@ public final class PaperBlockFertilizeListener implements Listener {
                 PaperBlockEventPayloadCodec.encodeFertilize(
                     preState,
                     postState,
-                    SOURCE_EVENT,
                     sourcePosition
                 )
             ));
