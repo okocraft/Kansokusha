@@ -55,11 +55,13 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
 
         var world = event.getWorld();
         var gameRule = event.getGameRule();
+        var valueType = gameRule.getType();
         this.inFlight.put(event, new Snapshot(
             this.clock.instant(),
             PaperKansokusha.key(world.getKey()),
             PaperKansokusha.key(gameRule.getKey()).asString(),
-            currentValue(world.getGameRuleValue(gameRule)),
+            valueType,
+            currentValue(valueType, world.getGameRuleValue(gameRule)),
             PaperAdministrativeSource.snapshot(event.getCommandSender())
         ));
     }
@@ -73,7 +75,7 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
             return;
         }
 
-        var after = event.getValue();
+        var after = canonicalValue(snapshot.valueType(), event.getValue());
         if (snapshot.before().equals(after)) {
             return;
         }
@@ -104,14 +106,37 @@ public final class PaperGameRuleChangeListener implements PaperInFlightListener 
         return this.inFlight.size();
     }
 
-    private static String currentValue(Object value) {
-        return String.valueOf(Objects.requireNonNull(value, "gameRuleValue"));
+    private static String currentValue(Class<?> valueType, Object value) {
+        Objects.requireNonNull(valueType, "valueType");
+        Objects.requireNonNull(value, "gameRuleValue");
+        if (!valueType.isInstance(value)) {
+            throw new IllegalArgumentException(
+                "Game rule value type mismatch: expected "
+                    + valueType.getName()
+                    + ", got "
+                    + value.getClass().getName()
+            );
+        }
+        return value.toString();
+    }
+
+    private static String canonicalValue(Class<?> valueType, String value) {
+        Objects.requireNonNull(valueType, "valueType");
+        Objects.requireNonNull(value, "value");
+        if (valueType == Boolean.class) {
+            return Boolean.toString(Boolean.parseBoolean(value));
+        }
+        if (valueType == Integer.class) {
+            return Integer.toString(Integer.parseInt(value));
+        }
+        throw new IllegalArgumentException("Unsupported game rule value type: " + valueType.getName());
     }
 
     private record Snapshot(
         Instant occurredAt,
         Key worldKey,
         String gameRule,
+        Class<?> valueType,
         String before,
         @Nullable PaperAdministrativeSource.Snapshot source
     ) {
