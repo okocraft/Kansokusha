@@ -135,7 +135,8 @@ class VelocityPlayerSessionListenerTest {
     }
 
     @Test
-    void testInvalidCurrentBackendIsSkippedAndWarnedOnce() {
+    void testInvalidCurrentBackendStillRecordsDisconnectAndWarnsOnce()
+        throws Exception {
         var api = api();
         var logger = Mockito.mock(Logger.class);
         var listener = VelocityPlayerSessionListener.register(
@@ -155,7 +156,14 @@ class VelocityPlayerSessionListenerTest {
         listener.onDisconnect(event);
         listener.onDisconnect(event);
 
-        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
+        var captor = ArgumentCaptor.forClass(EventSubmission.class);
+        Mockito.verify(api, Mockito.times(2)).submit(captor.capture());
+        for (var submission : captor.getAllValues()) {
+            var payload = VelocityPlayerSessionPayloadCodec.decodeDisconnect(
+                submission.payload()
+            );
+            Assertions.assertNull(payload.currentBackendKey());
+        }
         Mockito.verify(logger, Mockito.times(1))
             .warn(Mockito.anyString(), Mockito.eq("東京"));
     }
