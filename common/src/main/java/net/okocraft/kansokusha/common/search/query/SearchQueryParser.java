@@ -231,7 +231,7 @@ public final class SearchQueryParser {
     private static Key parseKey(String value, String field) {
         try {
             return Key.key(value);
-        } catch (IllegalArgumentException e) {
+        } catch (RuntimeException e) {
             throw error("invalid " + field + " key: " + value, e);
         }
     }
