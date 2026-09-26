@@ -82,10 +82,8 @@ class PaperPlayerStateListenerTest {
             new BlockPosition(30, 80, 40)
         );
         var worldPayload = PaperPayloadNbtCodec.decode(worldSubmission.payload());
-        Assertions.assertEquals(
-            "gameplay_world_state_transition",
-            worldPayload.getString("semantics").orElseThrow()
-        );
+        Assertions.assertFalse(worldPayload.contains("semantics"));
+        Assertions.assertFalse(worldPayload.getCompoundOrEmpty("to").contains("world"));
         Assertions.assertEquals("example:from", worldPayload.getString("from_world").orElseThrow());
     }
 
@@ -115,9 +113,8 @@ class PaperPlayerStateListenerTest {
             new BlockPosition(-11, 90, 20)
         );
         var expected = new CompoundTag();
-        expected.putString("semantics", "successful_teleport_operation");
         expected.put("from", locationTag("example:from", 1.125, 64.5, 2.875, 10, 20));
-        expected.put("to", locationTag("example:final", -10.125, 90.875, 20.5, 50, 60));
+        expected.put("to", locationTag(null, -10.125, 90.875, 20.5, 50, 60));
         expected.putString("cause", "command");
         var flags = new CompoundTag();
         flags.putBoolean(flag.name().toLowerCase(Locale.ROOT), true);
@@ -267,10 +264,7 @@ class PaperPlayerStateListenerTest {
         );
         Assertions.assertTrue(setPayload.getBooleanOr("forced", false));
         Assertions.assertEquals("bed", setPayload.getString("cause").orElseThrow());
-        Assertions.assertEquals(
-            "player_set_spawn",
-            setPayload.getString("source_event").orElseThrow()
-        );
+        Assertions.assertFalse(setPayload.contains("source_event"));
 
         Mockito.when(player.getRespawnLocation()).thenReturn(finalSpawn);
         var clearEvent = Mockito.mock(PlayerSetSpawnEvent.class);
