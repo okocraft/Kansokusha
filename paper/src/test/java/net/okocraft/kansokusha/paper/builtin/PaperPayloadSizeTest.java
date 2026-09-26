@@ -64,7 +64,7 @@ class PaperPayloadSizeTest {
         );
         Assertions.assertTrue(
             compactTotal * 100 <= legacyTotal * 70,
-            () -> "Expected representative total reduction >= 30%, legacy="
+            "Expected representative total reduction >= 30%, legacy="
                 + legacyTotal + ", compact=" + compactTotal
         );
     }
