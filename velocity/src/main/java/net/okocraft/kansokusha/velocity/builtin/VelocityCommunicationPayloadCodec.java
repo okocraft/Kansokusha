@@ -65,12 +65,12 @@ public final class VelocityCommunicationPayloadCodec {
         } catch (IOException e) {
             throw new AssertionError("Unexpected in-memory Velocity payload encoding failure.", e);
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     private static DataInputStream input(EventPayload payload) {
         return new DataInputStream(
-            new ByteArrayInputStream(Objects.requireNonNull(payload, "payload").copyBytes())
+            Objects.requireNonNull(payload, "payload").openStream()
         );
     }
 
