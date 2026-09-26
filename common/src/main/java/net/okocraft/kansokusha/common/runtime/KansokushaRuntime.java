@@ -51,6 +51,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private final int batchSize;
     private final BlockingQueue<QueuedEvent> queue;
     private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
+    // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final ScheduledExecutorService storageThread;
     // Guarantees that no event enters the queue after close() has drained it.
