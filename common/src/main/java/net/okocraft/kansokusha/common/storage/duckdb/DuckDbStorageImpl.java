@@ -5,7 +5,11 @@ import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
+import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import net.okocraft.kansokusha.common.storage.StorageHealth;
@@ -25,8 +29,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.UUID;
 
 /**
  * DuckDB-backed storage implementation loaded in an isolated class loader.
@@ -72,6 +80,26 @@ public final class DuckDbStorageImpl implements Storage {
         "payload"
     );
 
+    private static final String CREATE_PLAYER_NAME_HISTORY_TABLE = """
+        CREATE TABLE IF NOT EXISTS player_name_history (
+            player_uuid UUID NOT NULL,
+            name VARCHAR NOT NULL,
+            normalized_name VARCHAR NOT NULL,
+            first_seen TIMESTAMP_MS NOT NULL,
+            last_seen TIMESTAMP_MS NOT NULL,
+            last_event_id UUID NOT NULL
+        )
+        """;
+
+    private static final List<String> PLAYER_NAME_HISTORY_COLUMNS = List.of(
+        "player_uuid",
+        "name",
+        "normalized_name",
+        "first_seen",
+        "last_seen",
+        "last_event_id"
+    );
+
     private static final byte[] PLAYER_ACTOR_KIND = "player".getBytes(StandardCharsets.UTF_8);
     private static final byte[] ENTITY_ACTOR_KIND = "entity".getBytes(StandardCharsets.UTF_8);
     private static final byte[] BLOCK_ACTOR_KIND = "block".getBytes(StandardCharsets.UTF_8);
@@ -99,7 +127,21 @@ public final class DuckDbStorageImpl implements Storage {
         );
         try (var statement = connection.createStatement()) {
             statement.execute(CREATE_EVENTS_TABLE);
-            verifyEventsColumns(statement);
+            verifyColumns(statement, "events", EVENTS_COLUMNS);
+            statement.execute(CREATE_PLAYER_NAME_HISTORY_TABLE);
+            verifyColumns(statement, "player_name_history", PLAYER_NAME_HISTORY_COLUMNS);
+            statement.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS player_name_history_uuid_name
+                ON player_name_history(player_uuid, name)
+                """);
+            statement.execute("""
+                CREATE INDEX IF NOT EXISTS player_name_history_name_lookup
+                ON player_name_history(normalized_name, last_seen, last_event_id)
+                """);
+            statement.execute("""
+                CREATE INDEX IF NOT EXISTS player_name_history_uuid_latest
+                ON player_name_history(player_uuid, last_seen, last_event_id)
+                """);
         } catch (SQLException e) {
             connection.close();
             throw e;
@@ -111,30 +153,10 @@ public final class DuckDbStorageImpl implements Storage {
     @Override
     public void append(List<QueuedEvent> events) throws SQLException {
         try {
+            var storedEvents = this.prepareStoredEvents(events);
             var appender = this.appender();
-            for (var queued : events) {
-                var event = queued.submission();
-                appender.beginRow()
-                    .append(TimeBasedUUID.generate())
-                    .append(this.encode(event.eventType()))
-                    .append(event.payloadGeneration().value())
-                    .appendEpochMillis(queued.occurredAtMillis());
-                this.appendNullable(appender, event.serverKey());
-                this.appendNullable(appender, event.worldKey());
-
-                var position = event.position();
-                if (position == null) {
-                    appender.appendNull().appendNull().appendNull();
-                } else {
-                    appender.append(position.x()).append(position.y()).append(position.z());
-                }
-
-                this.appendActor(appender, event.actor());
-                this.appendNullable(appender, event.targetType());
-
-                appender.appendEpochMillis(queued.expiresAtMillis())
-                    .append(event.payload().unsafeBytes())
-                    .endRow();
+            for (var stored : storedEvents) {
+                this.appendEvent(appender, stored);
             }
             appender.flush();
             this.connection.commit();
@@ -143,6 +165,193 @@ public final class DuckDbStorageImpl implements Storage {
             this.rollback(e);
             throw e;
         }
+    }
+
+    private List<StoredEvent> prepareStoredEvents(List<QueuedEvent> events) throws SQLException {
+        var storedEvents = new ArrayList<StoredEvent>(events.size());
+        for (var queued : events) {
+            var eventId = TimeBasedUUID.generate();
+            storedEvents.add(new StoredEvent(queued, eventId));
+
+            var observation = queued.playerNameObservation();
+            if (observation == null) {
+                continue;
+            }
+
+            if (!(queued.submission().actor() instanceof PlayerActor player)) {
+                throw new IllegalArgumentException("A player-name observation requires a PlayerActor.");
+            }
+
+            var previousName = this.latestPlayerName(player.uniqueId()).orElse(null);
+            if (previousName != null && !previousName.equals(observation.username())) {
+                var nameChange = new EventSubmission(
+                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE,
+                    PayloadGeneration.FIRST,
+                    Instant.ofEpochMilli(queued.occurredAtMillis()),
+                    null,
+                    null,
+                    null,
+                    player,
+                    null,
+                    PlayerNameChangePayloadCodec.encode(previousName, observation.username())
+                );
+                storedEvents.add(new StoredEvent(
+                    new QueuedEvent(
+                        nameChange,
+                        queued.occurredAtMillis(),
+                        observation.nameChangeExpiresAtMillis(),
+                        null
+                    ),
+                    TimeBasedUUID.generate()
+                ));
+            }
+
+            this.recordPlayerName(
+                player.uniqueId(),
+                observation.username(),
+                queued.occurredAtMillis(),
+                eventId
+            );
+        }
+        return storedEvents;
+    }
+
+    private void appendEvent(DuckDBAppender appender, StoredEvent stored) throws SQLException {
+        var queued = stored.queued();
+        var event = queued.submission();
+        appender.beginRow()
+            .append(stored.eventId())
+            .append(this.encode(event.eventType()))
+            .append(event.payloadGeneration().value())
+            .appendEpochMillis(queued.occurredAtMillis());
+        this.appendNullable(appender, event.serverKey());
+        this.appendNullable(appender, event.worldKey());
+
+        var position = event.position();
+        if (position == null) {
+            appender.appendNull().appendNull().appendNull();
+        } else {
+            appender.append(position.x()).append(position.y()).append(position.z());
+        }
+
+        this.appendActor(appender, event.actor());
+        this.appendNullable(appender, event.targetType());
+
+        appender.appendEpochMillis(queued.expiresAtMillis())
+            .append(event.payload().unsafeBytes())
+            .endRow();
+    }
+
+    private Optional<String> latestPlayerName(UUID playerId) throws SQLException {
+        try (var statement = this.connection.prepareStatement("""
+            SELECT name
+            FROM player_name_history
+            WHERE player_uuid = ?
+            ORDER BY last_seen DESC, last_event_id DESC
+            LIMIT 1
+            """)) {
+            statement.setObject(1, playerId);
+            try (var rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(rows.getString(1)) : Optional.empty();
+            }
+        }
+    }
+
+    private void recordPlayerName(
+        UUID playerId,
+        String username,
+        long observedAtMillis,
+        UUID eventId
+    ) throws SQLException {
+        var normalizedName = normalizeName(username);
+        try (var update = this.connection.prepareStatement("""
+            UPDATE player_name_history
+            SET
+                normalized_name = ?,
+                first_seen = least(first_seen, epoch_ms(?)),
+                last_seen = epoch_ms(?),
+                last_event_id = ?
+            WHERE player_uuid = ? AND name = ?
+            """)) {
+            update.setString(1, normalizedName);
+            update.setLong(2, observedAtMillis);
+            update.setLong(3, observedAtMillis);
+            update.setObject(4, eventId);
+            update.setObject(5, playerId);
+            update.setString(6, username);
+            if (update.executeUpdate() != 0) {
+                return;
+            }
+        }
+
+        try (var insert = this.connection.prepareStatement("""
+            INSERT INTO player_name_history (
+                player_uuid,
+                name,
+                normalized_name,
+                first_seen,
+                last_seen,
+                last_event_id
+            )
+            VALUES (?, ?, ?, epoch_ms(?), epoch_ms(?), ?)
+            """)) {
+            insert.setObject(1, playerId);
+            insert.setString(2, username);
+            insert.setString(3, normalizedName);
+            insert.setLong(4, observedAtMillis);
+            insert.setLong(5, observedAtMillis);
+            insert.setObject(6, eventId);
+            insert.executeUpdate();
+        }
+    }
+
+    @Override
+    public Optional<UUID> resolvePlayerName(String name) throws SQLException {
+        var normalizedName = normalizeName(name);
+        try (var statement = this.connection.prepareStatement("""
+            SELECT player_uuid
+            FROM player_name_history
+            WHERE normalized_name = ?
+            ORDER BY last_seen DESC, last_event_id DESC
+            LIMIT 1
+            """)) {
+            statement.setString(1, normalizedName);
+            try (var rows = statement.executeQuery()) {
+                return rows.next()
+                    ? Optional.of(rows.getObject(1, UUID.class))
+                    : Optional.empty();
+            }
+        }
+    }
+
+    @Override
+    public List<String> offlinePlayerNames() throws SQLException {
+        var names = new ArrayList<String>();
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery("""
+                 SELECT name
+                 FROM (
+                     SELECT
+                         name,
+                         normalized_name,
+                         row_number() OVER (
+                             PARTITION BY normalized_name
+                             ORDER BY last_seen DESC, last_event_id DESC
+                         ) AS recency_rank
+                     FROM player_name_history
+                 )
+                 WHERE recency_rank = 1
+                 ORDER BY normalized_name
+                 """)) {
+            while (rows.next()) {
+                names.add(rows.getString(1));
+            }
+        }
+        return List.copyOf(names);
+    }
+
+    private static String normalizeName(String name) {
+        return Objects.requireNonNull(name, "name").toLowerCase(Locale.ROOT);
     }
 
     @Override
@@ -206,20 +415,25 @@ public final class DuckDbStorageImpl implements Storage {
         return appender;
     }
 
-    private static void verifyEventsColumns(Statement statement) throws SQLException {
+    private static void verifyColumns(
+        Statement statement,
+        String tableName,
+        List<String> expectedColumns
+    ) throws SQLException {
         var columns = new ArrayList<String>();
         try (var rows = statement.executeQuery(
             "SELECT column_name FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'events' "
+                + "WHERE table_schema = current_schema() AND table_name = '" + tableName + "' "
                 + "ORDER BY ordinal_position"
         )) {
             while (rows.next()) {
                 columns.add(rows.getString(1));
             }
         }
-        if (!columns.equals(EVENTS_COLUMNS)) {
+        if (!columns.equals(expectedColumns)) {
             throw new SQLException(
-                "The events table has unsupported columns " + columns + " (expected " + EVENTS_COLUMNS
+                "The " + tableName + " table has unsupported columns " + columns
+                    + " (expected " + expectedColumns
                     + "). The database was created by an incompatible version of Kansokusha."
             );
         }
@@ -309,5 +523,8 @@ public final class DuckDbStorageImpl implements Storage {
         if (failure != null) {
             throw failure;
         }
+    }
+
+    private record StoredEvent(QueuedEvent queued, UUID eventId) {
     }
 }
