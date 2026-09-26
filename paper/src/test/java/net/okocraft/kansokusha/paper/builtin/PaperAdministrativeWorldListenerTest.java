@@ -143,7 +143,7 @@ class PaperAdministrativeWorldListenerTest {
         var noOp = Mockito.mock(WorldGameRuleChangeEvent.class);
         Mockito.when(noOp.getWorld()).thenReturn(world);
         Mockito.doReturn(rule).when(noOp).getGameRule();
-        Mockito.when(noOp.getValue()).thenReturn("+03");
+        Mockito.when(noOp.getValue()).thenReturn("03");
         Mockito.when(noOp.isCancelled()).thenReturn(false);
 
         listener.capture(noOp);
@@ -153,7 +153,7 @@ class PaperAdministrativeWorldListenerTest {
         var changed = Mockito.mock(WorldGameRuleChangeEvent.class);
         Mockito.when(changed.getWorld()).thenReturn(world);
         Mockito.doReturn(rule).when(changed).getGameRule();
-        Mockito.when(changed.getValue()).thenReturn("+04");
+        Mockito.when(changed.getValue()).thenReturn("04");
         Mockito.when(changed.isCancelled()).thenReturn(false);
 
         listener.capture(changed);
