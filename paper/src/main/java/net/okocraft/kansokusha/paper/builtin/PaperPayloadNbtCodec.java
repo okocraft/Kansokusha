@@ -32,7 +32,8 @@ import java.util.UUID;
 /**
  * Compact binary codec for Paper built-in payloads.
  *
- * <p>The event type and payload generation define the payload schema, so the persisted bytes do
+ * <p>The event type and payload generation define the payload schema, including any
+ * backward-compatible optional fields appended within that generation, so the persisted bytes do
  * not need NBT's repeated field-name strings. Built-in field names and common fixed strings are
  * encoded as small integer IDs; unknown names still have a literal fallback for block-state
  * properties and other open-ended nested data.</p>
@@ -101,7 +102,7 @@ public final class PaperPayloadNbtCodec {
         "fixed", "drop_leash", "indirect_damage", "experience_reward", "ignore_discounts",
         "rewarding_experience", "increasing_trade_uses", "source_present",
         "before_enabled", "after_enabled", "before_whitelisted", "after_whitelisted",
-        "new_owner", "hanging"
+        "new_owner", "hanging", "username"
     };
 
     // Common schema constants. IDs are append-only for the same reason as FIELD_NAMES.

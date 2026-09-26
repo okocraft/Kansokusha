@@ -24,7 +24,7 @@
   - 未登録の event type、generation の不一致、保存できない発生時刻（保持期限の計算で範囲外になるものを含む）はプログラムの誤りなので `IllegalArgumentException`。この検証を submit 時に行うため、不正な 1 件が同じバッチの他のイベントの書き込みを失敗させることはない。
 - `localServerKey()`: Paper ではローカルサーバーの key。Velocity では空。
 
-`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / actor / target type を任意で持つ。
+`EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / actor / target type を任意で持つ。player-name lookup は public `KansokushaApi` に公開せず、platform implementation と将来の内部検索処理だけが common の internal `PlayerNameDirectory` を使う。
 world は server に、座標は world に属するため、それぞれ前者なしには指定できない。
 
 - actor（誰が）: イベントを直接起こした主体。`PlayerActor`（UUID）、`EntityActor`（UUID と entity type key）、`BlockActor`（block type key）のいずれか。プレイヤーが撃った矢や着火した TNT のような間接的な主体は actor にせず、必要なら payload に残す。
@@ -41,13 +41,13 @@ submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと / b
 - 呼び出し側はキューへの `offer` のみを行い、ブロックしない（要件 §11）。
 - キューは `queue-capacity` で上限を持ち、満杯時の submit は破棄する（要件 §12）。
 - `kansokusha-storage` スレッドが `flush-interval` ごとにキューのイベントを書き込む。キューが `batch-size` 件に達した場合は間隔を待たずに書き込む。1 トランザクションは最大 `batch-size` 件で、それを超える分は続けて別のトランザクションで書き込む。
-- 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
+- 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。Paper join / Velocity post-login は username を internal metadata として同じ queue item に付加し、storage thread が login event の保存と同一 transaction で player-name projection を更新し、必要なら `player_name_change` event を追加する。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
 - 書き込みに失敗したバッチはサーバーログへ出力して破棄し、次のバッチの書き込みは続ける（要件 §13）。
 - 停止時は新しいイベントの受け付けを止め、キューに残ったイベントを書き込む。続いて保持期限切れイベントを最終削除し、DuckDB の `CHECKPOINT` を実行してから DB health（イベント件数、DB サイズ、使用中 / 再利用可能 block、WAL サイズ、停止時の削除件数）をログへ出して接続を閉じる。受け付けの停止とキューの排出は lock で順序付けており、停止後にキューへ入るイベントはない。
 
 ## ストレージ
 
-データディレクトリの `kansokusha.duckdb` に次の 1 テーブルだけを持つ。
+データディレクトリの `kansokusha.duckdb` に監査ログ本体 `events` と、名前検索支援用の derived projection `player_name_history` を持つ。名前変更履歴の source of truth は `events` であり、projection だけに監査情報を保存しない。
 
 ```sql
 CREATE TABLE events (
@@ -69,11 +69,28 @@ CREATE TABLE events (
 );
 ```
 
+```sql
+CREATE TABLE player_name_history (
+    player_uuid UUID NOT NULL,
+    name VARCHAR NOT NULL,
+    normalized_name VARCHAR NOT NULL,
+    first_seen TIMESTAMP_MS NOT NULL,
+    last_seen TIMESTAMP_MS NOT NULL,
+    last_event_id UUID NOT NULL
+);
+```
+
+`player_name_history` は accepted `paper_join` / `velocity_post_login` からのみ更新する検索 projection である。`normalized_name` は `Locale.ROOT` lower-case で、名前→UUID は case-insensitive に比較し、`(last_seen, last_event_id)` が最新の UUID を採用する。同一 UUID・同一 exact name の再観測は同じ row を更新し、`first_seen` は最小値、`(last_seen, last_event_id)` は最大値を維持する。したがって時計の巻き戻り等で stale observation が後から処理されても latest state は巻き戻らない。case-only rename を含む exact name の変化は別 history row として残す。offline player-name completion は `normalized_name` ごとに最新 casing を1件返す。
+
+同じ UUID の current observation より `(occurred_at, event_id)` が新しい login で exact username が変化した場合、storage writer は login と同一 transaction で `kansokusha:player_name_change` を追加する。actor は `PlayerActor(uuid)`、`occurred_at` は login と同一、payload generation 1 は `previous_name` / `new_name` の2 field である。初回観測、同一名再 login、stale observation では生成しない。Paper `paper_join` と Velocity `velocity_post_login` 自体にも login 時点の username を payload に保存するため、projection は監査ログの代替ではない。
+
+Paper `paper_join` は payload generation 1 のまま、`username` を backward-compatible な optional field として追加する。T2 より前の generation-1 empty compound は引き続き有効で、欠落は username 未 capture を意味する。これは既存 field の意味を変えない optional field の追加であり、非互換変更ではないため generation は上げない。
+
 - `event_id` は保存時に生成する UUIDv7 で、event identity、同一 `occurred_at` 内の tie-break、将来の cursor pagination / inspect に使う。安定した時系列順は `(occurred_at, event_id)` とする。UUIDv7 に含まれる生成時刻は event の発生時刻として扱わず、`occurred_at` は引き続き `EventSubmission.occurredAt()` を正とする。
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
 - actor は `actor_kind`（`player` / `entity` / `block`）、`actor_uuid`（player と entity）、`actor_type`（entity type または block type の key。player では NULL）の 3 列に保存する。種類ごとの列にせず 1 組の列にまとめることで、「このプレイヤー / このエンティティ個体（`actor_uuid`）」「クリーパー全般 / ピストン全般（`actor_type`）」のどちらも 1 列の条件で検索できる。
 - `target_type` と `actor_type` も key 文字列のまま保存する。
-- 起動時に `CREATE TABLE IF NOT EXISTS` でテーブルを作り、列構成が期待と一致しなければ起動を失敗させる。本番運用前のため `event_id` 追加を含む旧スキーマからの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
+- 起動時に `events` / `player_name_history` を `CREATE TABLE IF NOT EXISTS` で用意し、各列構成が期待と一致しなければ起動を失敗させる。projection には UUID/name と case-insensitive lookup 用 index を張る。本番運用前のため `event_id` 追加を含む旧 `events` schema からの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
 
 ## 保持期間
 

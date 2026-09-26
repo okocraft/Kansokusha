@@ -11,7 +11,9 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -22,7 +24,9 @@ import java.net.InetSocketAddress;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
 
 class VelocityPlayerSessionListenerTest {
@@ -30,6 +34,27 @@ class VelocityPlayerSessionListenerTest {
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-26T00:00:00Z");
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+
+    @Test
+    void testPostLoginUsesCommonPlayerNameDirectory() {
+        var api = new NameAwareApi();
+        var listener = listener(api);
+        var player = player();
+        Mockito.when(player.getRemoteAddress()).thenReturn(
+            new InetSocketAddress("203.0.113.10", 54321)
+        );
+        Mockito.when(player.getVirtualHost()).thenReturn(Optional.empty());
+        Mockito.when(player.getRawVirtualHost()).thenReturn(Optional.empty());
+
+        listener.onPostLogin(new PostLoginEvent(player));
+
+        Assertions.assertEquals(List.of("TestPlayer"), api.playerLoginNames);
+        Assertions.assertEquals(1, api.submissions.size());
+        Assertions.assertEquals(
+            VelocityPlayerSessionListener.POST_LOGIN_EVENT_TYPE,
+            api.submissions.getFirst().eventType()
+        );
+    }
 
     @Test
     void testPostLoginRecordsSuccessfulProxySessionWithoutBackendSemantics()
@@ -442,6 +467,43 @@ class VelocityPlayerSessionListenerTest {
             new PlayerActor(PLAYER_ID),
             submission.actor()
         );
+    }
+
+    private static final class NameAwareApi implements KansokushaApi, PlayerNameDirectory {
+
+        private final List<EventSubmission> submissions = new java.util.ArrayList<>();
+        private final List<String> playerLoginNames = new java.util.ArrayList<>();
+
+        @Override
+        public Optional<net.kyori.adventure.key.Key> localServerKey() {
+            return Optional.empty();
+        }
+
+        @Override
+        public void registerEventType(EventTypeDefinition definition) {
+        }
+
+        @Override
+        public boolean submit(EventSubmission submission) {
+            this.submissions.add(submission);
+            return true;
+        }
+
+        @Override
+        public boolean submitPlayerLogin(EventSubmission submission, String username) {
+            this.playerLoginNames.add(username);
+            return this.submit(submission);
+        }
+
+        @Override
+        public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        @Override
+        public CompletableFuture<List<String>> offlinePlayerNames() {
+            return CompletableFuture.completedFuture(List.of());
+        }
     }
 
     private static void assertKickCommonFields(

@@ -4,6 +4,7 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
@@ -22,6 +23,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -69,7 +71,25 @@ class PaperPlayerSessionListenerTest {
             PaperPlayerJoinListener.EVENT_TYPE,
             new BlockPosition(12, 64, 8)
         );
-        Assertions.assertEquals(new CompoundTag(), PaperPayloadNbtCodec.decode(submission.payload()));
+        var payload = new CompoundTag();
+        payload.putString("username", "TestPlayer");
+        Assertions.assertEquals(payload, PaperPayloadNbtCodec.decode(submission.payload()));
+        Assertions.assertEquals(List.of("TestPlayer"), List.copyOf(api.playerLoginNames));
+    }
+
+    @Test
+    void testJoinGenerationOneAcceptsLegacyPayloadWithoutUsername() throws Exception {
+        var legacyPayload = PaperPayloadNbtCodec.encode(new CompoundTag());
+
+        Assertions.assertNull(
+            PaperPlayerSessionPayloadCodec.decodeJoinUsername(legacyPayload)
+        );
+        Assertions.assertEquals(
+            "TestPlayer",
+            PaperPlayerSessionPayloadCodec.decodeJoinUsername(
+                PaperPlayerSessionPayloadCodec.encodeJoin("TestPlayer")
+            )
+        );
     }
 
     @Test
@@ -221,6 +241,7 @@ class PaperPlayerSessionListenerTest {
     private static Player player(World world, double x, double y, double z) {
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
+        Mockito.when(player.getName()).thenReturn("TestPlayer");
         Mockito.when(player.getLocation()).thenReturn(new Location(world, x, y, z));
         return player;
     }
@@ -236,6 +257,7 @@ class PaperPlayerSessionListenerTest {
         BlockPosition position
     ) {
         Assertions.assertEquals(eventType, submission.eventType());
+        Assertions.assertEquals(PayloadGeneration.FIRST, submission.payloadGeneration());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());

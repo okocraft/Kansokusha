@@ -6,6 +6,7 @@ import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -50,21 +51,26 @@ public final class PaperPlayerJoinListener implements Listener {
         Objects.requireNonNull(event, "event");
 
         var player = event.getPlayer();
+        var username = player.getName();
+        var occurredAt = this.clock.instant();
         var location = player.getLocation();
         var world = Objects.requireNonNull(location.getWorld(), "player.location.world");
 
-        this.api.submit(
-            new EventSubmission(
-                EVENT_TYPE,
-                PayloadGeneration.FIRST,
-                this.clock.instant(),
-                this.serverKey,
-                PaperKansokusha.key(world.getKey()),
-                new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ()),
-                new PlayerActor(player.getUniqueId()),
-                null,
-                PaperPlayerSessionPayloadCodec.encodeJoin()
-            )
+        var submission = new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
+            occurredAt,
+            this.serverKey,
+            PaperKansokusha.key(world.getKey()),
+            new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ()),
+            new PlayerActor(player.getUniqueId()),
+            null,
+            PaperPlayerSessionPayloadCodec.encodeJoin(username)
         );
+        if (this.api instanceof PlayerNameDirectory playerNames) {
+            playerNames.submitPlayerLogin(submission, username);
+        } else {
+            this.api.submit(submission);
+        }
     }
 }

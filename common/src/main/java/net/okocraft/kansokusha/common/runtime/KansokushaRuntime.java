@@ -6,7 +6,9 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
+import net.okocraft.kansokusha.common.storage.PlayerNameObservation;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import net.okocraft.kansokusha.common.storage.StorageHealth;
@@ -18,12 +20,16 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,7 +45,7 @@ import java.util.function.Consumer;
  * access is never concurrent.</p>
  */
 @NotNullByDefault
-public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
+public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirectory, AutoCloseable {
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
@@ -148,6 +154,57 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
     @Override
     public boolean submit(EventSubmission submission) {
+        var registered = this.requireRegisteredEventType(submission);
+        // Validate here so that one invalid event cannot make the whole batch fail to write.
+        return this.enqueue(toQueuedEvent(submission, registered.retentionMillis(), null));
+    }
+
+    @Override
+    public boolean submitPlayerLogin(EventSubmission submission, String username) {
+        if (!(submission.actor() instanceof net.okocraft.kansokusha.api.actor.PlayerActor)) {
+            throw new IllegalArgumentException("A player login must use PlayerActor.");
+        }
+        if (username.isEmpty()) {
+            throw new IllegalArgumentException("username must not be empty");
+        }
+
+        var registered = this.requireRegisteredEventType(submission);
+        try {
+            var occurredAtMillis = requireStorableMillis(submission.occurredAt().toEpochMilli());
+            var loginExpiresAtMillis = requireStorableMillis(
+                Math.addExact(occurredAtMillis, registered.retentionMillis())
+            );
+            var nameChangeRetentionMillis = this.retention.durationOf(
+                PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE
+            ).toMillis();
+            var nameChangeExpiresAtMillis = requireStorableMillis(
+                Math.addExact(occurredAtMillis, nameChangeRetentionMillis)
+            );
+            return this.enqueue(new QueuedEvent(
+                submission,
+                occurredAtMillis,
+                loginExpiresAtMillis,
+                new PlayerNameObservation(username, nameChangeExpiresAtMillis)
+            ));
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(
+                "occurredAt is out of range: " + submission.occurredAt(),
+                e
+            );
+        }
+    }
+
+    @Override
+    public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
+        return this.queryStorage(() -> this.storage.resolvePlayerName(name));
+    }
+
+    @Override
+    public CompletableFuture<List<String>> offlinePlayerNames() {
+        return this.queryStorage(this.storage::offlinePlayerNames);
+    }
+
+    private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
         var registered = this.eventTypes.get(submission.eventType());
         if (registered == null || !submission.payloadGeneration().equals(registered.payloadGeneration())) {
             throw new IllegalArgumentException(
@@ -155,9 +212,10 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
                     + submission.payloadGeneration().value()
             );
         }
-        // Validate here so that one invalid event cannot make the whole batch fail to write.
-        var queued = toQueuedEvent(submission, registered.retentionMillis());
+        return registered;
+    }
 
+    private boolean enqueue(QueuedEvent queued) {
         if (!this.beginSubmission()) {
             return false;
         }
@@ -175,18 +233,39 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         }
     }
 
-    private static QueuedEvent toQueuedEvent(EventSubmission submission, long retentionMillis) {
+    private static QueuedEvent toQueuedEvent(
+        EventSubmission submission,
+        long retentionMillis,
+        @Nullable PlayerNameObservation playerNameObservation
+    ) {
         try {
             // toEpochMilli() rounds towards negative infinity, the same as truncating to milliseconds.
             var occurredAtMillis = submission.occurredAt().toEpochMilli();
             return new QueuedEvent(
                 submission,
                 requireStorableMillis(occurredAtMillis),
-                requireStorableMillis(Math.addExact(occurredAtMillis, retentionMillis))
+                requireStorableMillis(Math.addExact(occurredAtMillis, retentionMillis)),
+                playerNameObservation
             );
         } catch (ArithmeticException e) {
             throw new IllegalArgumentException("occurredAt is out of range: " + submission.occurredAt(), e);
         }
+    }
+
+    private <T> CompletableFuture<T> queryStorage(StorageQuery<T> query) {
+        var result = new CompletableFuture<T>();
+        try {
+            this.storageThread.execute(() -> {
+                try {
+                    result.complete(query.get());
+                } catch (SQLException | RuntimeException e) {
+                    result.completeExceptionally(e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            result.completeExceptionally(new IllegalStateException("Kansokusha is stopped.", e));
+        }
+        return result;
     }
 
     // DuckDB uses the minimum and maximum values as -infinity and infinity.
@@ -334,5 +413,11 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
     // Resolves the retention period at registration instead of on every submission.
     private record RegisteredEventType(PayloadGeneration payloadGeneration, long retentionMillis) {
+    }
+
+    @FunctionalInterface
+    private interface StorageQuery<T> {
+
+        T get() throws SQLException;
     }
 }
