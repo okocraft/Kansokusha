@@ -22,6 +22,8 @@ public interface Storage extends AutoCloseable {
 
     List<String> offlinePlayerNames() throws SQLException;
 
+    List<UUID> findEventIdsContaining(String literal) throws SQLException;
+
     int deleteExpired(Instant now) throws SQLException;
 
     void checkpoint() throws SQLException;
