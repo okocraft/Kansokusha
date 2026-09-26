@@ -8,6 +8,8 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
@@ -30,6 +32,7 @@ class DuckDbStorageTest {
 
     private static final Key SHORT = Key.key("example", "short");
     private static final Key LONG = Key.key("example", "long");
+    private static final Key LOGIN = Key.key("kansokusha", "paper_join");
     private static final Map<Key, Duration> DURATIONS = Map.of(LONG, Duration.ofDays(10));
     private static final Instant NOW = Instant.parse("2026-09-26T00:00:00.123Z");
 
@@ -192,6 +195,87 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testPlayerNameObservationCreatesOnlyRealNameChanges(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174100");
+        var renamedAt = NOW.plusSeconds(2);
+
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(List.of(queuedLogin(player, "FirstName", NOW)));
+            storage.append(List.of(queuedLogin(player, "FirstName", NOW.plusSeconds(1))));
+            storage.append(List.of(queuedLogin(player, "SecondName", renamedAt)));
+        }
+
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var statement = connection.prepareStatement("""
+                 SELECT event_type, epoch_ms(occurred_at), actor_kind, actor_uuid, payload
+                 FROM events
+                 WHERE event_type = ?
+                 ORDER BY occurred_at, event_id
+                 """)) {
+            statement.setString(1, PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString());
+            try (var rows = statement.executeQuery()) {
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals(
+                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString(),
+                    rows.getString("event_type")
+                );
+                Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(2));
+                Assertions.assertEquals("player", rows.getString(3));
+                Assertions.assertEquals(player, rows.getObject(4, UUID.class));
+                var payload = PlayerNameChangePayloadCodec.decode(
+                    EventPayload.copyOf(rows.getBytes(5))
+                );
+                Assertions.assertEquals("FirstName", payload.previousName());
+                Assertions.assertEquals("SecondName", payload.newName());
+                Assertions.assertFalse(rows.next());
+            }
+        }
+    }
+
+    @Test
+    void testResolvePlayerNameUsesNewestHistoricalOwnerCaseInsensitively(
+        @TempDir Path dir
+    ) throws Exception {
+        var first = UUID.fromString("123e4567-e89b-12d3-a456-426614174101");
+        var second = UUID.fromString("123e4567-e89b-12d3-a456-426614174102");
+
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(queuedLogin(first, "SharedName", NOW)));
+            storage.append(List.of(queuedLogin(second, "SharedName", NOW.plusSeconds(1))));
+
+            Assertions.assertEquals(
+                Optional.of(second),
+                storage.resolvePlayerName("sHaReDnAmE")
+            );
+
+            storage.append(List.of(queuedLogin(first, "SharedName", NOW.plusSeconds(2))));
+            Assertions.assertEquals(
+                Optional.of(first),
+                storage.resolvePlayerName("SHAREDNAME")
+            );
+        }
+    }
+
+    @Test
+    void testOfflinePlayerNamesAreCaseInsensitiveCandidates(@TempDir Path dir)
+        throws Exception {
+        var first = UUID.fromString("123e4567-e89b-12d3-a456-426614174103");
+        var second = UUID.fromString("123e4567-e89b-12d3-a456-426614174104");
+
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(queuedLogin(first, "FirstName", NOW)));
+            storage.append(List.of(queuedLogin(first, "FIRSTNAME", NOW.plusSeconds(1))));
+            storage.append(List.of(queuedLogin(second, "OtherName", NOW.plusSeconds(2))));
+
+            Assertions.assertEquals(
+                List.of("FIRSTNAME", "OtherName"),
+                storage.offlinePlayerNames()
+            );
+        }
+    }
+
+    @Test
     void testDeleteExpiredRemovesOnlyExpiredEvents(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
@@ -273,7 +357,31 @@ class DuckDbStorageTest {
         return new QueuedEvent(
             event,
             event.occurredAt().toEpochMilli(),
-            event.occurredAt().plus(DURATIONS.getOrDefault(event.eventType(), Duration.ofDays(1))).toEpochMilli()
+            event.occurredAt().plus(DURATIONS.getOrDefault(event.eventType(), Duration.ofDays(1))).toEpochMilli(),
+            null
+        );
+    }
+
+    private static QueuedEvent queuedLogin(UUID playerId, String username, Instant occurredAt) {
+        var event = new EventSubmission(
+            LOGIN,
+            PayloadGeneration.FIRST,
+            occurredAt,
+            null,
+            null,
+            null,
+            new PlayerActor(playerId),
+            null,
+            EventPayload.copyOf(new byte[0])
+        );
+        return new QueuedEvent(
+            event,
+            occurredAt.toEpochMilli(),
+            occurredAt.plus(Duration.ofDays(30)).toEpochMilli(),
+            new PlayerNameObservation(
+                username,
+                occurredAt.plus(Duration.ofDays(180)).toEpochMilli()
+            )
         );
     }
 
