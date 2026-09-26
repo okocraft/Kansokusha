@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
+import net.okocraft.kansokusha.common.storage.StorageHealth;
 import org.duckdb.DuckDBAppender;
 import org.duckdb.DuckDBConnection;
 import org.duckdb.DuckDBDriver;
@@ -152,6 +153,43 @@ public final class DuckDbStorageImpl implements Storage {
         } catch (SQLException | RuntimeException e) {
             this.rollback(e);
             throw e;
+        }
+    }
+
+    @Override
+    public void checkpoint() throws SQLException {
+        try (var statement = this.connection.createStatement()) {
+            statement.execute("CHECKPOINT");
+        }
+    }
+
+    @Override
+    public StorageHealth health() throws SQLException {
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery("""
+                 SELECT
+                     (SELECT count(*) FROM events) AS event_count,
+                     database_size,
+                     block_size,
+                     total_blocks,
+                     used_blocks,
+                     free_blocks,
+                     wal_size
+                 FROM pragma_database_size()
+                 WHERE database_name = current_database()
+                 """)) {
+            if (!rows.next()) {
+                throw new SQLException("DuckDB did not report database size information.");
+            }
+            return new StorageHealth(
+                rows.getLong("event_count"),
+                rows.getString("database_size"),
+                rows.getLong("block_size"),
+                rows.getLong("total_blocks"),
+                rows.getLong("used_blocks"),
+                rows.getLong("free_blocks"),
+                rows.getString("wal_size")
+            );
         }
     }
 
