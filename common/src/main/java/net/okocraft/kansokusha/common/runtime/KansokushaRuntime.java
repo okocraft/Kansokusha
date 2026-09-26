@@ -218,14 +218,17 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         }
         this.awaitSubmissions();
 
-        // Waits for a running flush or cleanup so that the connection is never used concurrently.
+        // Keep the final flush and close on the storage thread. DuckDBAppender is thread-confined
+        // to the thread that created it, even when calls are not concurrent.
+        this.storageThread.execute(() -> {
+            this.flush();
+            try {
+                this.storage.close();
+            } catch (SQLException e) {
+                this.errorReporter.accept("Failed to close the Kansokusha database.", e);
+            }
+        });
         this.storageThread.close();
-        this.flush();
-        try {
-            this.storage.close();
-        } catch (SQLException e) {
-            this.errorReporter.accept("Failed to close the Kansokusha database.", e);
-        }
     }
 
     private boolean beginClose() {
