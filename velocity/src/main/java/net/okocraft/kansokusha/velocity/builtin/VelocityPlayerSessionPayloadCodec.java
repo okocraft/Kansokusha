@@ -155,14 +155,12 @@ public final class VelocityPlayerSessionPayloadCodec {
                 e
             );
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     private static DataInputStream input(EventPayload payload) {
         return new DataInputStream(
-            new ByteArrayInputStream(
-                Objects.requireNonNull(payload, "payload").copyBytes()
-            )
+            Objects.requireNonNull(payload, "payload").openStream()
         );
     }
 
