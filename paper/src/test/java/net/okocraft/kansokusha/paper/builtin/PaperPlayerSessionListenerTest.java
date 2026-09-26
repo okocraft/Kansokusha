@@ -22,6 +22,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -69,7 +70,10 @@ class PaperPlayerSessionListenerTest {
             PaperPlayerJoinListener.EVENT_TYPE,
             new BlockPosition(12, 64, 8)
         );
-        Assertions.assertEquals(new CompoundTag(), PaperPayloadNbtCodec.decode(submission.payload()));
+        var payload = new CompoundTag();
+        payload.putString("username", "TestPlayer");
+        Assertions.assertEquals(payload, PaperPayloadNbtCodec.decode(submission.payload()));
+        Assertions.assertEquals(List.of("TestPlayer"), List.copyOf(api.playerLoginNames));
     }
 
     @Test
@@ -221,6 +225,7 @@ class PaperPlayerSessionListenerTest {
     private static Player player(World world, double x, double y, double z) {
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
+        Mockito.when(player.getName()).thenReturn("TestPlayer");
         Mockito.when(player.getLocation()).thenReturn(new Location(world, x, y, z));
         return player;
     }
