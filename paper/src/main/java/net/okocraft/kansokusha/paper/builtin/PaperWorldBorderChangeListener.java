@@ -117,6 +117,13 @@ public final class PaperWorldBorderChangeListener implements PaperInFlightListen
             return;
         }
 
+        var durationTicks = event.getDurationTicks();
+        var transitionType =
+            event.getType() == WorldBorderBoundsChangeEvent.Type.STARTED_MOVE
+                && durationTicks > 0
+                ? WorldBorderBoundsChangeEvent.Type.STARTED_MOVE
+                : WorldBorderBoundsChangeEvent.Type.INSTANT_MOVE;
+
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -128,8 +135,8 @@ public final class PaperWorldBorderChangeListener implements PaperInFlightListen
             PaperAdministrativePayloadCodec.encodeBorderBoundsChange(
                 snapshot.before(),
                 after,
-                PaperAdministrativePayloadCodec.enumName(event.getType()),
-                event.getDurationTicks()
+                PaperAdministrativePayloadCodec.enumName(transitionType),
+                durationTicks
             )
         ));
     }
