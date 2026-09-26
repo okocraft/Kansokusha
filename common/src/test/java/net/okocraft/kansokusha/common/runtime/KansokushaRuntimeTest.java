@@ -74,20 +74,13 @@ class KansokushaRuntimeTest {
     }
 
     @Test
-    void testExpiredEventsAreDeletedOnStart(@TempDir Path dir) throws Exception {
+    void testExpiredEventsAreDeletedOnClose(@TempDir Path dir) throws Exception {
         try (var runtime = start(dir, 10)) {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             runtime.submit(event(Instant.now().minus(Duration.ofDays(2))));
             runtime.submit(event(Instant.now()));
         }
-        Assertions.assertEquals(2, countEvents(dir));
 
-        try (var ignored = start(dir, 10)) {
-            var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-            while (countEvents(dir) != 1 && System.nanoTime() < deadline) {
-                Thread.sleep(10);
-            }
-        }
         Assertions.assertEquals(1, countEvents(dir));
     }
 
