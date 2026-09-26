@@ -23,6 +23,8 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 class KansokushaRuntimeTest {
 
@@ -72,20 +74,13 @@ class KansokushaRuntimeTest {
     }
 
     @Test
-    void testExpiredEventsAreDeletedOnStart(@TempDir Path dir) throws Exception {
+    void testExpiredEventsAreDeletedOnClose(@TempDir Path dir) throws Exception {
         try (var runtime = start(dir, 10)) {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             runtime.submit(event(Instant.now().minus(Duration.ofDays(2))));
             runtime.submit(event(Instant.now()));
         }
-        Assertions.assertEquals(2, countEvents(dir));
 
-        try (var ignored = start(dir, 10)) {
-            var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-            while (countEvents(dir) != 1 && System.nanoTime() < deadline) {
-                Thread.sleep(10);
-            }
-        }
         Assertions.assertEquals(1, countEvents(dir));
     }
 
@@ -147,6 +142,22 @@ class KansokushaRuntimeTest {
         runtime.close();
 
         Assertions.assertEquals(BATCH_SIZE + 1, countEvents(dir));
+    }
+
+    @Test
+    void testCloseReportsDatabaseHealth(@TempDir Path dir) throws Exception {
+        var report = new AtomicReference<String>();
+        var runtime = start(dir, 10, BATCH_SIZE, report::set);
+        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+        Assertions.assertTrue(runtime.submit(event(Instant.now())));
+
+        runtime.close();
+
+        var message = report.get();
+        Assertions.assertNotNull(message);
+        Assertions.assertTrue(message.contains("events=1"));
+        Assertions.assertTrue(message.contains("reusable="));
+        Assertions.assertTrue(message.contains("expired-on-shutdown="));
     }
 
     @Test
@@ -224,10 +235,26 @@ class KansokushaRuntimeTest {
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity, int batchSize) throws Exception {
-        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
-        return KansokushaRuntime.start(storage, config(queueCapacity, batchSize), SERVER_KEY, (message, failure) -> {
-            throw new AssertionError(message, failure);
+        return start(dir, queueCapacity, batchSize, message -> {
         });
+    }
+
+    private static KansokushaRuntime start(
+        Path dir,
+        int queueCapacity,
+        int batchSize,
+        Consumer<String> infoReporter
+    ) throws Exception {
+        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
+        return KansokushaRuntime.start(
+            storage,
+            config(queueCapacity, batchSize),
+            SERVER_KEY,
+            infoReporter,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
     }
 
     private static KansokushaConfig config(int queueCapacity, int batchSize) {

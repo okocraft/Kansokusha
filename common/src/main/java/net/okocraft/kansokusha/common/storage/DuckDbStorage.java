@@ -358,6 +358,16 @@ public final class DuckDbStorage {
         }
 
         @Override
+        public void checkpoint() throws SQLException {
+            this.delegate.checkpoint();
+        }
+
+        @Override
+        public StorageHealth health() throws SQLException {
+            return this.delegate.health();
+        }
+
+        @Override
         public void close() throws SQLException {
             SQLException failure = null;
             try {

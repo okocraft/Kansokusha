@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
+import net.okocraft.kansokusha.common.storage.StorageHealth;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -27,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
@@ -45,6 +48,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
     private final Storage storage;
+    private final Consumer<String> infoReporter;
     private final BiConsumer<String, Throwable> errorReporter;
     private final ConcurrentHashMap<Key, RegisteredEventType> eventTypes = new ConcurrentHashMap<>();
     private final int batchSize;
@@ -61,11 +65,13 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         @Nullable Key localServerKey,
         KansokushaConfig config,
         Storage storage,
+        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) {
         this.localServerKey = Optional.ofNullable(localServerKey);
         this.retention = config.retention();
         this.storage = storage;
+        this.infoReporter = infoReporter;
         this.errorReporter = errorReporter;
         this.batchSize = config.batchSize();
         this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
@@ -78,28 +84,31 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
      * Opens the database in the data directory and starts the storage thread.
      *
      * @param localServerKey the local server identity, or {@code null} for proxies
+     * @param infoReporter   receives storage health information on shutdown
      * @param errorReporter  receives storage failures so that administrators can notice them
      */
     public static KansokushaRuntime start(
         Path dataDirectory,
         KansokushaConfig config,
         @Nullable Key localServerKey,
+        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) throws IOException, SQLException {
         var storage = DuckDbStorage.open(
             dataDirectory,
             dataDirectory.resolve(DATABASE_FILENAME)
         );
-        return start(storage, config, localServerKey, errorReporter);
+        return start(storage, config, localServerKey, infoReporter, errorReporter);
     }
 
     static KansokushaRuntime start(
         Storage storage,
         KansokushaConfig config,
         @Nullable Key localServerKey,
+        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) {
-        var runtime = new KansokushaRuntime(localServerKey, config, storage, errorReporter);
+        var runtime = new KansokushaRuntime(localServerKey, config, storage, infoReporter, errorReporter);
 
         var flushMillis = config.flushInterval().toMillis();
         runtime.storageThread.scheduleWithFixedDelay(
@@ -222,6 +231,8 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         // to the thread that created it, even when calls are not concurrent.
         this.storageThread.execute(() -> {
             this.flush();
+            var deleted = this.deleteExpired(Instant.now());
+            this.checkpointAndReportHealth(deleted);
             try {
                 this.storage.close();
             } catch (SQLException e) {
@@ -275,11 +286,50 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     }
 
     private void deleteExpired() {
+        this.deleteExpired(Instant.now());
+    }
+
+    private int deleteExpired(Instant now) {
         try {
-            this.storage.deleteExpired(Instant.now());
+            return this.storage.deleteExpired(now);
         } catch (SQLException | RuntimeException e) {
             this.errorReporter.accept("Failed to delete expired events.", e);
+            return -1;
         }
+    }
+
+    private void checkpointAndReportHealth(int deleted) {
+        try {
+            this.storage.checkpoint();
+        } catch (SQLException | RuntimeException e) {
+            this.errorReporter.accept("Failed to checkpoint the Kansokusha database.", e);
+        }
+
+        try {
+            this.infoReporter.accept(formatStorageHealth(this.storage.health(), deleted));
+        } catch (SQLException | RuntimeException e) {
+            this.errorReporter.accept("Failed to report Kansokusha database health.", e);
+        }
+    }
+
+    private static String formatStorageHealth(StorageHealth health, int deleted) {
+        var reusablePercent = health.totalBlocks() == 0
+            ? 0.0
+            : (double) health.freeBlocks() * 100.0 / health.totalBlocks();
+        var deletedText = deleted >= 0 ? Integer.toString(deleted) : "unknown";
+        return String.format(
+            Locale.ROOT,
+            "Database health: events=%d, size=%s, used=%d/%d blocks, reusable=%d blocks (%.1f%%), "
+                + "WAL=%s, expired-on-shutdown=%s.",
+            health.eventCount(),
+            health.databaseSize(),
+            health.usedBlocks(),
+            health.totalBlocks(),
+            health.freeBlocks(),
+            reusablePercent,
+            health.walSize(),
+            deletedText
+        );
     }
 
     // Resolves the retention period at registration instead of on every submission.

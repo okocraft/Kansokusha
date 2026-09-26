@@ -18,6 +18,10 @@ public interface Storage extends AutoCloseable {
 
     int deleteExpired(Instant now) throws SQLException;
 
+    void checkpoint() throws SQLException;
+
+    StorageHealth health() throws SQLException;
+
     @Override
     void close() throws SQLException;
 }
