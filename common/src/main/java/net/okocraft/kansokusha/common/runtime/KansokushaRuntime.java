@@ -15,9 +15,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
-import java.time.DateTimeException;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -48,7 +46,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private final KansokushaConfig.Retention retention;
     private final Storage storage;
     private final BiConsumer<String, Throwable> errorReporter;
-    private final ConcurrentHashMap<Key, PayloadGeneration> eventTypes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Key, RegisteredEventType> eventTypes = new ConcurrentHashMap<>();
     private final int batchSize;
     private final BlockingQueue<QueuedEvent> queue;
     private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
@@ -126,25 +124,30 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
     @Override
     public void registerEventType(EventTypeDefinition definition) {
-        var existing = this.eventTypes.putIfAbsent(definition.key(), definition.payloadGeneration());
-        if (existing != null && !existing.equals(definition.payloadGeneration())) {
+        var registered = new RegisteredEventType(
+            definition.payloadGeneration(),
+            this.retention.durationOf(definition.key()).toMillis()
+        );
+        var existing = this.eventTypes.putIfAbsent(definition.key(), registered);
+        if (existing != null && !existing.payloadGeneration().equals(definition.payloadGeneration())) {
             throw new IllegalArgumentException(
-                definition.key().asString() + " is already registered with payload generation " + existing.value()
+                definition.key().asString() + " is already registered with payload generation "
+                    + existing.payloadGeneration().value()
             );
         }
     }
 
     @Override
     public boolean submit(EventSubmission submission) {
-        var generation = this.eventTypes.get(submission.eventType());
-        if (!submission.payloadGeneration().equals(generation)) {
+        var registered = this.eventTypes.get(submission.eventType());
+        if (registered == null || !submission.payloadGeneration().equals(registered.payloadGeneration())) {
             throw new IllegalArgumentException(
                 submission.eventType().asString() + " is not registered with payload generation "
                     + submission.payloadGeneration().value()
             );
         }
         // Validate here so that one invalid event cannot make the whole batch fail to write.
-        var queued = this.toQueuedEvent(submission);
+        var queued = toQueuedEvent(submission, registered.retentionMillis());
 
         if (!this.beginSubmission()) {
             return false;
@@ -163,16 +166,16 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         }
     }
 
-    private QueuedEvent toQueuedEvent(EventSubmission submission) {
+    private static QueuedEvent toQueuedEvent(EventSubmission submission, long retentionMillis) {
         try {
-            var occurredAt = submission.occurredAt().truncatedTo(ChronoUnit.MILLIS);
-            var expiresAt = occurredAt.plus(this.retention.durationOf(submission.eventType()));
+            // toEpochMilli() rounds towards negative infinity, the same as truncating to milliseconds.
+            var occurredAtMillis = submission.occurredAt().toEpochMilli();
             return new QueuedEvent(
                 submission,
-                requireStorableMillis(occurredAt.toEpochMilli()),
-                requireStorableMillis(expiresAt.toEpochMilli())
+                requireStorableMillis(occurredAtMillis),
+                requireStorableMillis(Math.addExact(occurredAtMillis, retentionMillis))
             );
-        } catch (ArithmeticException | DateTimeException e) {
+        } catch (ArithmeticException e) {
             throw new IllegalArgumentException("occurredAt is out of range: " + submission.occurredAt(), e);
         }
     }
@@ -274,5 +277,9 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         } catch (SQLException | RuntimeException e) {
             this.errorReporter.accept("Failed to delete expired events.", e);
         }
+    }
+
+    // Resolves the retention period at registration instead of on every submission.
+    private record RegisteredEventType(PayloadGeneration payloadGeneration, long retentionMillis) {
     }
 }

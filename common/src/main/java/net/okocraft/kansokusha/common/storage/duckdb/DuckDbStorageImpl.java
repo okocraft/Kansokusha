@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage.duckdb;
 
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
@@ -10,11 +11,14 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -39,7 +43,12 @@ public final class DuckDbStorageImpl implements Storage {
         )
         """;
 
+    // Bounds the cache in case a platform creates worlds with unique keys indefinitely.
+    private static final int MAX_CACHED_KEYS = 1024;
+
     private final DuckDBConnection connection;
+    // Key#asString() concatenates on every call, and the appender encodes strings to UTF-8 on every call.
+    private final Map<Key, byte[]> encodedKeys = new HashMap<>();
     private @Nullable DuckDBAppender appender;
 
     private DuckDbStorageImpl(DuckDBConnection connection) {
@@ -71,11 +80,11 @@ public final class DuckDbStorageImpl implements Storage {
             for (var queued : events) {
                 var event = queued.submission();
                 appender.beginRow()
-                    .append(event.eventType().asString())
+                    .append(this.encode(event.eventType()))
                     .append(event.payloadGeneration().value())
                     .appendEpochMillis(queued.occurredAtMillis());
-                appendNullable(appender, event.serverKey() == null ? null : event.serverKey().asString());
-                appendNullable(appender, event.worldKey() == null ? null : event.worldKey().asString());
+                this.appendNullable(appender, event.serverKey());
+                this.appendNullable(appender, event.worldKey());
 
                 var position = event.position();
                 if (position == null) {
@@ -127,12 +136,24 @@ public final class DuckDbStorageImpl implements Storage {
         return appender;
     }
 
-    private static void appendNullable(DuckDBAppender appender, @Nullable String value) throws SQLException {
-        if (value == null) {
+    private void appendNullable(DuckDBAppender appender, @Nullable Key key) throws SQLException {
+        if (key == null) {
             appender.appendNull();
         } else {
-            appender.append(value);
+            appender.append(this.encode(key));
         }
+    }
+
+    private byte[] encode(Key key) {
+        var encoded = this.encodedKeys.get(key);
+        if (encoded == null) {
+            if (this.encodedKeys.size() >= MAX_CACHED_KEYS) {
+                this.encodedKeys.clear();
+            }
+            encoded = key.asString().getBytes(StandardCharsets.UTF_8);
+            this.encodedKeys.put(key, encoded);
+        }
+        return encoded;
     }
 
     private void discardAppender(Exception failure) {

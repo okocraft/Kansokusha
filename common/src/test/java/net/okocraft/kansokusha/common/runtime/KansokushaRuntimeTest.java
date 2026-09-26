@@ -96,6 +96,16 @@ class KansokushaRuntimeTest {
             runtime.submit(event(Instant.now()));
 
             Assertions.assertThrows(IllegalArgumentException.class, () -> runtime.submit(event(Instant.MAX)));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> runtime.submit(event(Instant.MIN)));
+            // occurredAt fits in epoch milliseconds, but expiresAt does not.
+            Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> runtime.submit(event(Instant.ofEpochMilli(Long.MAX_VALUE - 1)))
+            );
+            Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> runtime.submit(event(Instant.ofEpochMilli(Long.MIN_VALUE)))
+            );
 
             runtime.submit(event(Instant.now()));
         }
