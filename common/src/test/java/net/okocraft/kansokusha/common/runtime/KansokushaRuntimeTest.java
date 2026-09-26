@@ -15,9 +15,12 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 class KansokushaRuntimeTest {
 
@@ -114,6 +117,39 @@ class KansokushaRuntimeTest {
                 Thread.sleep(10);
             }
             Assertions.assertEquals(BATCH_SIZE, countEvents(dir));
+        }
+    }
+
+    @Test
+    void testConcurrentFullBatchIsWrittenBeforeFlushInterval(@TempDir Path dir) throws Exception {
+        var batchSize = 32;
+        try (
+            var runtime = start(dir, 64, batchSize);
+            var submitters = Executors.newFixedThreadPool(4)
+        ) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+            var start = new CountDownLatch(1);
+            var futures = new ArrayList<java.util.concurrent.Future<?>>();
+            for (var thread = 0; thread < 4; thread++) {
+                futures.add(submitters.submit(() -> {
+                    start.await();
+                    for (var index = 0; index < batchSize / 4; index++) {
+                        Assertions.assertTrue(runtime.submit(event(Instant.now())));
+                    }
+                    return null;
+                }));
+            }
+
+            start.countDown();
+            for (var future : futures) {
+                future.get();
+            }
+
+            var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (countEvents(dir) != batchSize && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            Assertions.assertEquals(batchSize, countEvents(dir));
         }
     }
 
