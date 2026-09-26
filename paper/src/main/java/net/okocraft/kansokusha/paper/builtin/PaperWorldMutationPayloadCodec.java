@@ -94,15 +94,11 @@ final class PaperWorldMutationPayloadCodec {
 
     static EventPayload encodeEntityBlockChange(
         BlockData before,
-        BlockData to,
-        UUID actorId,
-        String actorType
+        BlockData to
     ) {
         var payload = new CompoundTag();
         payload.put("before", PaperBlockStatePayloadCodec.blockState(before));
         payload.put("to", PaperBlockStatePayloadCodec.blockState(to));
-        payload.putString("actor_entity_uuid", actorId.toString());
-        payload.putString("actor_entity_type", actorType);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -110,8 +106,6 @@ final class PaperWorldMutationPayloadCodec {
         CompoundTag payload,
         PaperEntityAttribution attribution
     ) {
-        putUuid(payload, "actor_entity_uuid", attribution.entityId());
-        putString(payload, "actor_entity_type", attribution.entityType());
         putUuid(payload, "source_entity_uuid", attribution.sourceEntityId());
         putString(payload, "source_entity_type", attribution.sourceEntityType());
         putUuid(payload, "shooter_entity_uuid", attribution.shooterEntityId());
