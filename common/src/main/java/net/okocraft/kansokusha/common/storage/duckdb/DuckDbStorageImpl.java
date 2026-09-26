@@ -182,8 +182,14 @@ public final class DuckDbStorageImpl implements Storage {
                 throw new IllegalArgumentException("A player-name observation requires a PlayerActor.");
             }
 
-            var previousName = this.latestPlayerName(player.uniqueId()).orElse(null);
-            if (previousName != null && !previousName.equals(observation.username())) {
+            var previous = this.latestPlayerName(player.uniqueId()).orElse(null);
+            var advancesLatest = previous == null
+                || isNewerObservation(queued.occurredAtMillis(), eventId, previous);
+            if (
+                advancesLatest
+                    && previous != null
+                    && !previous.name().equals(observation.username())
+            ) {
                 var nameChange = new EventSubmission(
                     PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE,
                     PayloadGeneration.FIRST,
@@ -193,7 +199,10 @@ public final class DuckDbStorageImpl implements Storage {
                     null,
                     player,
                     null,
-                    PlayerNameChangePayloadCodec.encode(previousName, observation.username())
+                    PlayerNameChangePayloadCodec.encode(
+                        previous.name(),
+                        observation.username()
+                    )
                 );
                 storedEvents.add(new StoredEvent(
                     new QueuedEvent(
@@ -242,9 +251,9 @@ public final class DuckDbStorageImpl implements Storage {
             .endRow();
     }
 
-    private Optional<String> latestPlayerName(UUID playerId) throws SQLException {
+    private Optional<PlayerNameState> latestPlayerName(UUID playerId) throws SQLException {
         try (var statement = this.connection.prepareStatement("""
-            SELECT name
+            SELECT name, epoch_ms(last_seen), last_event_id
             FROM player_name_history
             WHERE player_uuid = ?
             ORDER BY last_seen DESC, last_event_id DESC
@@ -252,9 +261,29 @@ public final class DuckDbStorageImpl implements Storage {
             """)) {
             statement.setObject(1, playerId);
             try (var rows = statement.executeQuery()) {
-                return rows.next() ? Optional.of(rows.getString(1)) : Optional.empty();
+                return rows.next()
+                    ? Optional.of(new PlayerNameState(
+                        rows.getString(1),
+                        rows.getLong(2),
+                        rows.getObject(3, UUID.class)
+                    ))
+                    : Optional.empty();
             }
         }
+    }
+
+    private static boolean isNewerObservation(
+        long observedAtMillis,
+        UUID eventId,
+        PlayerNameState previous
+    ) {
+        var timestampComparison = Long.compare(
+            observedAtMillis,
+            previous.lastSeenMillis()
+        );
+        return timestampComparison > 0
+            || timestampComparison == 0
+            && eventId.compareTo(previous.lastEventId()) > 0;
     }
 
     private void recordPlayerName(
@@ -264,22 +293,38 @@ public final class DuckDbStorageImpl implements Storage {
         UUID eventId
     ) throws SQLException {
         var normalizedName = normalizeName(username);
-        try (var update = this.connection.prepareStatement("""
+        try (var updateFirstSeen = this.connection.prepareStatement("""
             UPDATE player_name_history
             SET
                 normalized_name = ?,
-                first_seen = least(first_seen, epoch_ms(?)),
-                last_seen = epoch_ms(?),
-                last_event_id = ?
+                first_seen = least(first_seen, epoch_ms(?))
             WHERE player_uuid = ? AND name = ?
             """)) {
-            update.setString(1, normalizedName);
-            update.setLong(2, observedAtMillis);
-            update.setLong(3, observedAtMillis);
-            update.setObject(4, eventId);
-            update.setObject(5, playerId);
-            update.setString(6, username);
-            if (update.executeUpdate() != 0) {
+            updateFirstSeen.setString(1, normalizedName);
+            updateFirstSeen.setLong(2, observedAtMillis);
+            updateFirstSeen.setObject(3, playerId);
+            updateFirstSeen.setString(4, username);
+            if (updateFirstSeen.executeUpdate() != 0) {
+                try (var updateLastSeen = this.connection.prepareStatement("""
+                    UPDATE player_name_history
+                    SET last_seen = epoch_ms(?), last_event_id = ?
+                    WHERE
+                        player_uuid = ?
+                        AND name = ?
+                        AND (
+                            last_seen < epoch_ms(?)
+                            OR (last_seen = epoch_ms(?) AND last_event_id < ?)
+                        )
+                    """)) {
+                    updateLastSeen.setLong(1, observedAtMillis);
+                    updateLastSeen.setObject(2, eventId);
+                    updateLastSeen.setObject(3, playerId);
+                    updateLastSeen.setString(4, username);
+                    updateLastSeen.setLong(5, observedAtMillis);
+                    updateLastSeen.setLong(6, observedAtMillis);
+                    updateLastSeen.setObject(7, eventId);
+                    updateLastSeen.executeUpdate();
+                }
                 return;
             }
         }
@@ -523,6 +568,13 @@ public final class DuckDbStorageImpl implements Storage {
         if (failure != null) {
             throw failure;
         }
+    }
+
+    private record PlayerNameState(
+        String name,
+        long lastSeenMillis,
+        UUID lastEventId
+    ) {
     }
 
     private record StoredEvent(QueuedEvent queued, UUID eventId) {
