@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -15,6 +16,8 @@ import java.util.UUID;
 @ApiStatus.Internal
 @NotNullByDefault
 final class PaperBlockEventPayloadCodec {
+
+    static final Key NATURAL_RETENTION_QUALIFIER = Key.key("kansokusha", "natural");
 
     private PaperBlockEventPayloadCodec() {
     }
@@ -124,18 +127,28 @@ final class PaperBlockEventPayloadCodec {
         @Nullable UUID entityId,
         @Nullable String entityType
     ) {
+        var reasonValue = Objects.requireNonNull(reason, "reason");
+        var actorKindValue = Objects.requireNonNull(actorKind, "actorKind");
         var payload = new CompoundTag();
         payload.put("old_state", PaperBlockStatePayloadCodec.blockState(oldState));
         payload.put("new_state", PaperBlockStatePayloadCodec.blockState(newState));
-        payload.putString("reason", Objects.requireNonNull(reason, "reason"));
-        payload.putString("actor_kind", Objects.requireNonNull(actorKind, "actorKind"));
+        payload.putString("reason", reasonValue);
+        payload.putString("actor_kind", actorKindValue);
         if (entityId != null) {
             payload.putString("actor_entity_uuid", entityId.toString());
         }
         if (entityType != null) {
             payload.putString("actor_entity_type", entityType);
         }
-        return PaperPayloadNbtCodec.encode(payload);
+
+        var encoded = PaperPayloadNbtCodec.encode(payload);
+        if (
+            "none".equals(actorKindValue)
+                && ("NATURAL_FILL".equals(reasonValue) || "EVAPORATE".equals(reasonValue))
+        ) {
+            return encoded.withRetentionQualifier(NATURAL_RETENTION_QUALIFIER);
+        }
+        return encoded;
     }
 
     private static EventPayload encodeNaturalChange(
