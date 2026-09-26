@@ -27,10 +27,15 @@ public final class EventPayload {
     }
 
     /**
-     * Attaches transient semantic metadata used only by operator-configured retention mappings.
-     * The qualifier is not part of the opaque payload bytes and does not name a retention policy.
+     * Returns a copy carrying a transient semantic qualifier for operator-configured retention.
+     *
+     * <p>Event providers may use this when one event type needs retention classification based on
+     * event-specific semantics. The qualifier is not part of the opaque payload bytes, is not
+     * persisted, and does not name or select a retention policy by itself.</p>
+     *
+     * @param qualifier provider-defined semantic classification key
+     * @return a payload with the same opaque bytes and the supplied retention qualifier
      */
-    @ApiStatus.Internal
     public EventPayload withRetentionQualifier(Key qualifier) {
         return new EventPayload(
             this.bytes.clone(),
