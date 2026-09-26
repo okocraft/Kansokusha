@@ -36,7 +36,6 @@ class PaperPayloadSizeTest {
 
         long legacyTotal = 0;
         long compactTotal = 0;
-        var report = new StringBuilder();
         for (var sample : samples) {
             var legacy = legacyNbtSize(sample.legacy());
             var compact = sample.compact().copyBytes().length;
@@ -47,18 +46,22 @@ class PaperPayloadSizeTest {
                 compact < legacy,
                 () -> sample.name() + " did not shrink: legacy=" + legacy + ", compact=" + compact
             );
-            report.append(sample.name())
-                .append(" legacy=").append(legacy)
-                .append(" compact=").append(compact)
-                .append(" reduction=").append(String.format("%.1f%%", reductionPercent(legacy, compact)))
-                .append("; ");
+            System.out.printf(
+                "payload-size %s legacy=%d compact=%d reduction=%.1f%%%n",
+                sample.name(),
+                legacy,
+                compact,
+                reductionPercent(legacy, compact)
+            );
         }
 
         var totalReduction = reductionPercent(legacyTotal, compactTotal);
-        report.append("total legacy=").append(legacyTotal)
-            .append(" compact=").append(compactTotal)
-            .append(" reduction=").append(String.format("%.1f%%", totalReduction));
-        Assertions.fail(report.toString());
+        System.out.printf(
+            "payload-size total legacy=%d compact=%d reduction=%.1f%%%n",
+            legacyTotal,
+            compactTotal,
+            totalReduction
+        );
         Assertions.assertTrue(
             compactTotal * 100 <= legacyTotal * 70,
             "Expected representative total reduction >= 30%, legacy="
