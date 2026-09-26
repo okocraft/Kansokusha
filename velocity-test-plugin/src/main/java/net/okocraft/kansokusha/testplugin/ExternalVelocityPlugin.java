@@ -65,7 +65,7 @@ public final class ExternalVelocityPlugin {
             this.writeFailure(failure);
         }
 
-        this.proxy.getScheduler().buildTask(this, this.proxy::shutdown).schedule();
+        this.proxy.getScheduler().buildTask(this, () -> this.proxy.shutdown()).schedule();
     }
 
     // Kansokusha handles ProxyShutdownEvent with the highest priority, so it has already shut down here.
