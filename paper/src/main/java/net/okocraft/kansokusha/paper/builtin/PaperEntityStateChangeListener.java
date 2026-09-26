@@ -4,12 +4,14 @@ import io.papermc.paper.entity.Leashable;
 import io.papermc.paper.event.player.PlayerItemFrameChangeEvent;
 import io.papermc.paper.event.player.PlayerNameEntityEvent;
 import net.kyori.adventure.key.Key;
+import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import org.bukkit.Rotation;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,6 +20,7 @@ import org.bukkit.event.entity.EntityTameEvent;
 import org.bukkit.event.entity.PlayerLeashEntityEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerUnleashEntityEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -50,13 +53,13 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
         new PaperInFlightMap<>();
     private final PaperInFlightMap<PlayerLeashEntityEvent, Snapshot> leashInFlight =
         new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerUnleashEntityEvent, Snapshot> unleashInFlight =
+    private final PaperInFlightMap<PlayerUnleashEntityEvent, UnleashSnapshot> unleashInFlight =
         new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerItemFrameChangeEvent, Snapshot> itemFrameInFlight =
+    private final PaperInFlightMap<PlayerItemFrameChangeEvent, ItemFrameSnapshot> itemFrameInFlight =
         new PaperInFlightMap<>();
     private final PaperInFlightMap<EntityTameEvent, Snapshot> tameInFlight =
         new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerNameEntityEvent, Snapshot> nameInFlight =
+    private final PaperInFlightMap<PlayerNameEntityEvent, NameSnapshot> nameInFlight =
         new PaperInFlightMap<>();
 
     private PaperEntityStateChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
@@ -161,20 +164,16 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
 
         var targetEntity = event.getEntity();
         var target = PaperEntityEventPayloadCodec.snapshotEntity(targetEntity);
-        var holder = snapshotLeashHolder(targetEntity);
         this.unleashInFlight.put(
             event,
-            this.snapshot(
-                target,
+            new UnleashSnapshot(
+                Instant.now(this.clock),
+                this.serverKey,
                 new PlayerSubject(event.getPlayer().getUniqueId()),
-                PaperEntityStateChangePayloadCodec.encodeLeashChange(
-                    "unleash",
-                    target,
-                    holder,
-                    enumName(event.getReason()),
-                    event.getHand(),
-                    event.isDropLeash()
-                )
+                target,
+                snapshotLeashHolder(targetEntity),
+                enumName(event.getReason()),
+                event.getHand()
             )
         );
     }
@@ -182,10 +181,26 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeUnleash(PlayerUnleashEntityEvent event) {
         Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
+
+        var snapshot = this.unleashInFlight.remove(event);
+        if (snapshot == null || event.isCancelled()) {
+            return;
+        }
+
+        this.submit(
             ENTITY_LEASH_CHANGE_EVENT_TYPE,
-            event.isCancelled(),
-            this.unleashInFlight.remove(event)
+            snapshot.occurredAt(),
+            snapshot.serverKey(),
+            snapshot.target(),
+            snapshot.subject(),
+            PaperEntityStateChangePayloadCodec.encodeLeashChange(
+                "unleash",
+                snapshot.target(),
+                snapshot.holder(),
+                snapshot.reason(),
+                snapshot.hand(),
+                event.isDropLeash()
+            )
         );
     }
 
@@ -195,34 +210,17 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
 
         var frame = event.getItemFrame();
         var target = PaperEntityEventPayloadCodec.snapshotEntity(frame);
-        var action = event.getAction();
-        var itemBefore = PaperItemStackPayloadCodec.encode(frame.getItem());
-        var eventItem = PaperItemStackPayloadCodec.encode(event.getItemStack());
-        var itemAfter = switch (action) {
-            case PLACE, ROTATE -> eventItem;
-            case REMOVE -> PaperItemStackPayloadCodec.encode(ItemStack.empty());
-        };
-        var rotationBefore = frame.getRotation();
-        var rotationAfter = action == PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE
-            ? rotationBefore.rotateClockwise()
-            : rotationBefore;
-        var fixed = frame.isFixed();
-
         this.itemFrameInFlight.put(
             event,
-            this.snapshot(
-                target,
+            new ItemFrameSnapshot(
+                Instant.now(this.clock),
+                this.serverKey,
                 new PlayerSubject(event.getPlayer().getUniqueId()),
-                PaperEntityStateChangePayloadCodec.encodeItemFrameChange(
-                    target,
-                    enumName(action),
-                    itemBefore,
-                    itemAfter,
-                    rotationBefore,
-                    rotationAfter,
-                    fixed,
-                    fixed
-                )
+                target,
+                event.getAction(),
+                PaperItemStackPayloadCodec.encode(frame.getItem()),
+                frame.getRotation(),
+                frame.isFixed()
             )
         );
     }
@@ -230,10 +228,32 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeItemFrameChange(PlayerItemFrameChangeEvent event) {
         Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
+
+        var snapshot = this.itemFrameInFlight.remove(event);
+        if (snapshot == null || event.isCancelled()) {
+            return;
+        }
+
+        var rotationAfter =
+            snapshot.action() == PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE
+                ? snapshot.rotationBefore().rotateClockwise()
+                : snapshot.rotationBefore();
+        this.submit(
             ITEM_FRAME_CHANGE_EVENT_TYPE,
-            event.isCancelled(),
-            this.itemFrameInFlight.remove(event)
+            snapshot.occurredAt(),
+            snapshot.serverKey(),
+            snapshot.target(),
+            snapshot.subject(),
+            PaperEntityStateChangePayloadCodec.encodeItemFrameChange(
+                snapshot.target(),
+                enumName(snapshot.action()),
+                snapshot.itemBefore(),
+                snapshotItemFrameResult(snapshot.action(), event.getItemStack()),
+                snapshot.rotationBefore(),
+                rotationAfter,
+                snapshot.fixedBefore(),
+                snapshot.fixedBefore()
+            )
         );
     }
 
@@ -270,19 +290,12 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
     public void captureNameChange(PlayerNameEntityEvent event) {
         Objects.requireNonNull(event, "event");
 
-        var entity = event.getEntity();
-        var target = PaperEntityEventPayloadCodec.snapshotEntity(entity);
         this.nameInFlight.put(
             event,
-            this.snapshot(
-                target,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
-                PaperEntityStateChangePayloadCodec.encodeNameChange(
-                    target,
-                    entity.customName(),
-                    event.getName(),
-                    event.isPersistent()
-                )
+            new NameSnapshot(
+                Instant.now(this.clock),
+                this.serverKey,
+                new PlayerSubject(event.getPlayer().getUniqueId())
             )
         );
     }
@@ -290,10 +303,26 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeNameChange(PlayerNameEntityEvent event) {
         Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
+
+        var snapshot = this.nameInFlight.remove(event);
+        if (snapshot == null || event.isCancelled()) {
+            return;
+        }
+
+        var entity = event.getEntity();
+        var target = PaperEntityEventPayloadCodec.snapshotEntity(entity);
+        this.submit(
             ENTITY_NAME_CHANGE_EVENT_TYPE,
-            event.isCancelled(),
-            this.nameInFlight.remove(event)
+            snapshot.occurredAt(),
+            snapshot.serverKey(),
+            target,
+            snapshot.subject(),
+            PaperEntityStateChangePayloadCodec.encodeNameChange(
+                target,
+                entity.customName(),
+                event.getName(),
+                event.isPersistent()
+            )
         );
     }
 
@@ -324,12 +353,7 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
         return new Snapshot(
             Instant.now(this.clock),
             this.serverKey,
-            target.worldKey(),
-            new BlockPosition(
-                (int) Math.floor(target.x()),
-                (int) Math.floor(target.y()),
-                (int) Math.floor(target.z())
-            ),
+            target,
             subject,
             payload
         );
@@ -340,16 +364,38 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
             return;
         }
 
+        this.submit(
+            eventType,
+            snapshot.occurredAt(),
+            snapshot.serverKey(),
+            snapshot.target(),
+            snapshot.subject(),
+            snapshot.payload()
+        );
+    }
+
+    private void submit(
+        Key eventType,
+        Instant occurredAt,
+        Key serverKey,
+        PaperEntityEventPayloadCodec.EntitySnapshot target,
+        @Nullable PlayerSubject subject,
+        EventPayload payload
+    ) {
         this.api.submit(
             new EventSubmission(
                 eventType,
                 PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
-                snapshot.subject(),
-                snapshot.payload()
+                occurredAt,
+                serverKey,
+                target.worldKey(),
+                new BlockPosition(
+                    (int) Math.floor(target.x()),
+                    (int) Math.floor(target.y()),
+                    (int) Math.floor(target.z())
+                ),
+                subject,
+                payload
             )
         );
     }
@@ -363,6 +409,22 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
         return PaperEntityEventPayloadCodec.snapshotEntity(leashable.getLeashHolder());
     }
 
+    private static CompoundTag snapshotItemFrameResult(
+        PlayerItemFrameChangeEvent.ItemFrameChangeAction action,
+        ItemStack eventItem
+    ) {
+        Objects.requireNonNull(action, "action");
+        Objects.requireNonNull(eventItem, "eventItem");
+        if (action == PlayerItemFrameChangeEvent.ItemFrameChangeAction.REMOVE
+            || eventItem.isEmpty()) {
+            return PaperItemStackPayloadCodec.encode(ItemStack.empty());
+        }
+
+        var normalized = eventItem.clone();
+        normalized.setAmount(1);
+        return PaperItemStackPayloadCodec.encode(normalized);
+    }
+
     private static String enumName(Enum<?> value) {
         return Objects.requireNonNull(value, "value").name().toLowerCase(Locale.ROOT);
     }
@@ -370,10 +432,39 @@ public final class PaperEntityStateChangeListener implements PaperInFlightListen
     private record Snapshot(
         Instant occurredAt,
         Key serverKey,
-        Key worldKey,
-        BlockPosition position,
+        PaperEntityEventPayloadCodec.EntitySnapshot target,
         @Nullable PlayerSubject subject,
         EventPayload payload
+    ) {
+    }
+
+    private record UnleashSnapshot(
+        Instant occurredAt,
+        Key serverKey,
+        PlayerSubject subject,
+        PaperEntityEventPayloadCodec.EntitySnapshot target,
+        PaperEntityEventPayloadCodec.EntitySnapshot holder,
+        String reason,
+        EquipmentSlot hand
+    ) {
+    }
+
+    private record ItemFrameSnapshot(
+        Instant occurredAt,
+        Key serverKey,
+        PlayerSubject subject,
+        PaperEntityEventPayloadCodec.EntitySnapshot target,
+        PlayerItemFrameChangeEvent.ItemFrameChangeAction action,
+        CompoundTag itemBefore,
+        Rotation rotationBefore,
+        boolean fixedBefore
+    ) {
+    }
+
+    private record NameSnapshot(
+        Instant occurredAt,
+        Key serverKey,
+        PlayerSubject subject
     ) {
     }
 }
