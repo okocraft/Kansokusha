@@ -196,6 +196,79 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testSearchTextUsesCaseInsensitiveLiteralSubstringAndSkipsUnrelatedEvents(
+        @TempDir Path dir
+    ) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var unreadablePayload = new EventSubmission(
+            SHORT,
+            PayloadGeneration.FIRST,
+            NOW,
+            null,
+            null,
+            null,
+            null,
+            null,
+            EventPayload.copyOf(new byte[]{(byte) 0xff, 0x00, 0x7f})
+        );
+
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(List.of(
+                queued(unreadablePayload, "Prefix Ban%_* Suffix"),
+                queued(event(LONG), "another BAN entry"),
+                queued(new EventSubmission(
+                    Key.key("example", "unrelated"),
+                    PayloadGeneration.FIRST,
+                    NOW,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    EventPayload.copyOf(new byte[]{1, 2, 3})
+                ))
+            ));
+
+            Assertions.assertEquals(2, storage.findEventIdsContaining("bAn").size());
+            Assertions.assertEquals(1, storage.findEventIdsContaining("%").size());
+            Assertions.assertEquals(1, storage.findEventIdsContaining("_").size());
+            Assertions.assertEquals(1, storage.findEventIdsContaining("*").size());
+            Assertions.assertTrue(storage.findEventIdsContaining("ban?").isEmpty());
+        }
+
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery("""
+                 SELECT
+                     (SELECT count(*) FROM events),
+                     (SELECT count(*) FROM event_search_text)
+                 """)) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(3, rows.getLong(1));
+            Assertions.assertEquals(2, rows.getLong(2));
+        }
+    }
+
+    @Test
+    void testDeleteExpiredRemovesMatchingSearchTextProjection(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(
+                queued(event(SHORT), "short-only"),
+                queued(event(LONG), "long-only")
+            ));
+
+            Assertions.assertEquals(1, storage.findEventIdsContaining("short-only").size());
+            Assertions.assertEquals(1, storage.findEventIdsContaining("long-only").size());
+
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1))));
+            Assertions.assertTrue(storage.findEventIdsContaining("short-only").isEmpty());
+            Assertions.assertEquals(1, storage.findEventIdsContaining("long-only").size());
+
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
+            Assertions.assertTrue(storage.findEventIdsContaining("long-only").isEmpty());
+        }
+    }
+
+    @Test
     void testPlayerNameObservationCreatesOnlyRealNameChanges(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174100");
@@ -426,11 +499,16 @@ class DuckDbStorageTest {
     }
 
     private static QueuedEvent queued(EventSubmission event) {
+        return queued(event, null);
+    }
+
+    private static QueuedEvent queued(EventSubmission event, String searchText) {
         return new QueuedEvent(
             event,
             event.occurredAt().toEpochMilli(),
             event.occurredAt().plus(DURATIONS.getOrDefault(event.eventType(), Duration.ofDays(1))).toEpochMilli(),
-            null
+            null,
+            searchText
         );
     }
 
@@ -453,7 +531,8 @@ class DuckDbStorageTest {
             new PlayerNameObservation(
                 username,
                 occurredAt.plus(Duration.ofDays(180)).toEpochMilli()
-            )
+            ),
+            null
         );
     }
 
