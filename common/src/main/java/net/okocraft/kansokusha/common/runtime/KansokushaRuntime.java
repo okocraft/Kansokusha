@@ -7,13 +7,16 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
+import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -22,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
@@ -29,8 +33,9 @@ import java.util.function.BiConsumer;
 /**
  * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
  *
- * <p>Submitting threads only enqueue events. A single background thread periodically writes queued
- * events to DuckDB and deletes expired events, so storage access is never concurrent.</p>
+ * <p>Submitting threads only enqueue events. A single background thread writes queued events to
+ * DuckDB every flush interval, or as soon as a batch is full, and deletes expired events, so storage
+ * access is never concurrent.</p>
  */
 @NotNullByDefault
 public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
@@ -42,7 +47,9 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private final DuckDbStorage storage;
     private final BiConsumer<String, Throwable> errorReporter;
     private final ConcurrentHashMap<Key, PayloadGeneration> eventTypes = new ConcurrentHashMap<>();
-    private final BlockingQueue<EventSubmission> queue;
+    private final int batchSize;
+    private final BlockingQueue<QueuedEvent> queue;
+    private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
     private final ScheduledExecutorService storageThread;
     // Guarantees that no event enters the queue after close() has drained it.
     private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
@@ -58,6 +65,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         this.retention = config.retention();
         this.storage = storage;
         this.errorReporter = errorReporter;
+        this.batchSize = config.batchSize();
         this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
         this.storageThread = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().name("kansokusha-storage").factory()
@@ -111,14 +119,44 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
                     + submission.payloadGeneration().value()
             );
         }
+        // Validate here so that one invalid event cannot make the whole batch fail to write.
+        var queued = this.toQueuedEvent(submission);
 
         var lock = this.closeLock.readLock();
         lock.lock();
         try {
-            return !this.closed && this.queue.offer(submission);
+            if (this.closed || !this.queue.offer(queued)) {
+                return false;
+            }
+            if (this.queue.size() >= this.batchSize && this.earlyFlushScheduled.compareAndSet(false, true)) {
+                this.storageThread.execute(this::flush);
+            }
+            return true;
         } finally {
             lock.unlock();
         }
+    }
+
+    private QueuedEvent toQueuedEvent(EventSubmission submission) {
+        try {
+            var occurredAt = submission.occurredAt().truncatedTo(ChronoUnit.MILLIS);
+            var expiresAt = occurredAt.plus(this.retention.durationOf(submission.eventType()));
+            return new QueuedEvent(
+                submission,
+                requireStorableMillis(occurredAt.toEpochMilli()),
+                requireStorableMillis(expiresAt.toEpochMilli())
+            );
+        } catch (ArithmeticException | DateTimeException e) {
+            throw new IllegalArgumentException("occurredAt is out of range: " + submission.occurredAt(), e);
+        }
+    }
+
+    // DuckDB uses the minimum and maximum values as -infinity and infinity.
+    private static long requireStorableMillis(long millis) {
+        if (millis == Long.MIN_VALUE || millis == Long.MAX_VALUE) {
+            throw new ArithmeticException("reserved timestamp value");
+        }
+        return millis;
     }
 
     /**
@@ -148,16 +186,15 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     }
 
     private void flush() {
-        var batch = new ArrayList<EventSubmission>(this.queue.size());
-        this.queue.drainTo(batch);
-        if (batch.isEmpty()) {
-            return;
-        }
-
-        try {
-            this.storage.append(batch, this.retention);
-        } catch (SQLException | RuntimeException e) {
-            this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
+        this.earlyFlushScheduled.set(false);
+        var batch = new ArrayList<QueuedEvent>(this.batchSize);
+        while (this.queue.drainTo(batch, this.batchSize) > 0) {
+            try {
+                this.storage.append(batch);
+            } catch (SQLException | RuntimeException e) {
+                this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
+            }
+            batch.clear();
         }
     }
 

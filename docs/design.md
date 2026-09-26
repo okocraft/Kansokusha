@@ -21,7 +21,7 @@
 - `submit(EventSubmission)`: イベントをキューへ入れ、ストレージ I/O を待たずに返る。
   - `true`: キューに入った。永続化の完了は意味しない。
   - `false`: キューが満杯、または Kansokusha が停止済みのため破棄した。
-  - 未登録の event type や generation の不一致はプログラムの誤りなので `IllegalArgumentException`。
+  - 未登録の event type、generation の不一致、保存できない発生時刻（保持期限の計算で範囲外になるものを含む）はプログラムの誤りなので `IllegalArgumentException`。この検証を submit 時に行うため、不正な 1 件が同じバッチの他のイベントの書き込みを失敗させることはない。
 - `localServerKey()`: Paper ではローカルサーバーの key。Velocity では空。
 
 `EventSubmission` は event type、payload generation、発生時刻、opaque な payload を必須とし、server / world / 座標 / player を任意で持つ。
@@ -31,13 +31,14 @@ payload の形式と解釈は提供側の責任で、形式を非互換に変え
 ## 記録パイプライン
 
 ```text
-submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと──▶ DuckDB
+submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと / batch-size 到達時──▶ DuckDB
                                    (kansokusha-storage スレッド 1 本)
 ```
 
 - 呼び出し側はキューへの `offer` のみを行い、ブロックしない（要件 §11）。
 - キューは `queue-capacity` で上限を持ち、満杯時の submit は破棄する（要件 §12）。
-- `kansokusha-storage` スレッドが `flush-interval` ごとにキューの全イベントを 1 トランザクションで書き込む。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
+- `kansokusha-storage` スレッドが `flush-interval` ごとにキューのイベントを書き込む。キューが `batch-size` 件に達した場合は間隔を待たずに書き込む。1 トランザクションは最大 `batch-size` 件で、それを超える分は続けて別のトランザクションで書き込む。
+- 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
 - 書き込みに失敗したバッチはサーバーログへ出力して破棄し、次のバッチの書き込みは続ける（要件 §13）。
 - 停止時は新しいイベントの受け付けを止め、キューに残ったイベントを書き込んでから接続を閉じる。受け付けの停止とキューの排出は lock で順序付けており、停止後にキューへ入るイベントはない。
 
@@ -67,7 +68,7 @@ CREATE TABLE events (
 ## 保持期間
 
 - 保持期間は `config.yml` の `retention` で event type ごとに設定する。一覧にない event type は `retention.default` を使う。
-- 書き込み時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
+- submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
 - `cleanup-interval` ごと（および起動直後）に `expires_at <= 現在時刻` の行を削除する。
 - 設定の変更は再起動で反映する。
 
@@ -79,6 +80,7 @@ CREATE TABLE events (
 | --- | --- |
 | `server-key` | Paper / Folia のサーバー key。空なら `kansokusha:<サーバーディレクトリ名>` |
 | `queue-capacity` | 書き込み待ちイベント数の上限 |
+| `batch-size` | 1 トランザクションで書き込む最大件数。この件数がキューにたまると間隔を待たずに書き込む |
 | `flush-interval` | キューを DuckDB へ書き込む間隔 |
 | `cleanup-interval` | 保持期限切れイベントを削除する間隔 |
 | `retention.default` | 一覧にない event type の保持期間 |

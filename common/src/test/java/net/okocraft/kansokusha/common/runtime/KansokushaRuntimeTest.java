@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
@@ -24,6 +23,7 @@ class KansokushaRuntimeTest {
 
     private static final Key EVENT_TYPE = Key.key("example", "event");
     private static final Key SERVER_KEY = Key.key("example", "server");
+    private static final int BATCH_SIZE = 2;
 
     @Test
     void testRegistrationIsIdempotentAndRejectsConflicts(@TempDir Path dir) throws Exception {
@@ -50,7 +50,8 @@ class KansokushaRuntimeTest {
 
     @Test
     void testQueuedEventsArePersistedOnClose(@TempDir Path dir) throws Exception {
-        var runtime = start(dir, 2);
+        // The batch size exceeds the capacity so that no early flush frees the queue.
+        var runtime = start(dir, 2, 10);
         Assertions.assertEquals(Optional.of(SERVER_KEY), runtime.localServerKey());
         runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
 
@@ -86,28 +87,51 @@ class KansokushaRuntimeTest {
     }
 
     @Test
-    void testWriteFailuresAreReported(@TempDir Path dir) throws Exception {
-        var errors = new ArrayList<String>();
-        var runtime = KansokushaRuntime.start(dir, config(10), null, (message, failure) -> errors.add(message));
-        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
-        // Instant.MAX cannot be converted to epoch milliseconds, so writing the batch fails.
-        runtime.submit(event(Instant.MAX));
-        runtime.close();
+    void testInvalidEventIsRejectedWithoutAffectingOthers(@TempDir Path dir) throws Exception {
+        try (var runtime = start(dir, 10)) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+            runtime.submit(event(Instant.now()));
 
-        Assertions.assertEquals(1, errors.size());
-        Assertions.assertTrue(errors.getFirst().contains("1 events"), errors.getFirst());
+            // Instant.MAX cannot be stored as epoch milliseconds.
+            Assertions.assertThrows(IllegalArgumentException.class, () -> runtime.submit(event(Instant.MAX)));
+
+            runtime.submit(event(Instant.now()));
+        }
+        Assertions.assertEquals(2, countEvents(dir));
+    }
+
+    @Test
+    void testFullBatchIsWrittenBeforeFlushInterval(@TempDir Path dir) throws Exception {
+        try (var runtime = start(dir, 10)) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+            runtime.submit(event(Instant.now()));
+            Thread.sleep(200);
+            Assertions.assertEquals(0, countEvents(dir), "A partial batch waits for the flush interval.");
+
+            runtime.submit(event(Instant.now()));
+            var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (countEvents(dir) != BATCH_SIZE && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            Assertions.assertEquals(BATCH_SIZE, countEvents(dir));
+        }
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity) throws Exception {
-        return KansokushaRuntime.start(dir, config(queueCapacity), SERVER_KEY, (message, failure) -> {
+        return start(dir, queueCapacity, BATCH_SIZE);
+    }
+
+    private static KansokushaRuntime start(Path dir, int queueCapacity, int batchSize) throws Exception {
+        return KansokushaRuntime.start(dir, config(queueCapacity, batchSize), SERVER_KEY, (message, failure) -> {
             throw new AssertionError(message, failure);
         });
     }
 
-    private static KansokushaConfig config(int queueCapacity) {
+    private static KansokushaConfig config(int queueCapacity, int batchSize) {
         return new KansokushaConfig(
             Optional.empty(),
             queueCapacity,
+            batchSize,
             Duration.ofHours(1),
             Duration.ofHours(1),
             new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1))

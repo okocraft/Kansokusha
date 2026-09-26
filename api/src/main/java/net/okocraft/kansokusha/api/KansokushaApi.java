@@ -35,7 +35,8 @@ public interface KansokushaApi {
      * already been persisted. {@code false} means that the event was dropped because the queue is
      * full or Kansokusha has shut down.</p>
      *
-     * @throws IllegalArgumentException if the event type is not registered with the submitted payload generation
+     * @throws IllegalArgumentException if the event type is not registered with the submitted payload generation,
+     *                                  or the occurrence time or its expiry cannot be stored
      */
     boolean submit(EventSubmission submission);
 }

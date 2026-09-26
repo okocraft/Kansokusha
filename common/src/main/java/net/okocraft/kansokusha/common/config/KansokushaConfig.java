@@ -25,6 +25,7 @@ import java.util.Optional;
 public record KansokushaConfig(
     Optional<Key> serverKey,
     int queueCapacity,
+    int batchSize,
     Duration flushInterval,
     Duration cleanupInterval,
     Retention retention
@@ -73,6 +74,7 @@ public record KansokushaConfig(
 
         String serverKey = "";
         int queueCapacity = 0;
+        int batchSize = 0;
         String flushInterval = "";
         String cleanupInterval = "";
         RawRetention retention = new RawRetention();
@@ -81,11 +83,15 @@ public record KansokushaConfig(
             if (this.queueCapacity <= 0) {
                 throw invalid("queue-capacity must be positive");
             }
+            if (this.batchSize <= 0) {
+                throw invalid("batch-size must be positive");
+            }
             return new KansokushaConfig(
                 this.serverKey == null || this.serverKey.isBlank()
                     ? Optional.empty()
                     : Optional.of(parseKey(this.serverKey, "server-key")),
                 this.queueCapacity,
+                this.batchSize,
                 parseDuration(this.flushInterval, "flush-interval"),
                 parseDuration(this.cleanupInterval, "cleanup-interval"),
                 Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate()

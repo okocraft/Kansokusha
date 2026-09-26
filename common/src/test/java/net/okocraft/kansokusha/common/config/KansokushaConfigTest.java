@@ -20,6 +20,7 @@ class KansokushaConfigTest {
         Assertions.assertTrue(Files.isRegularFile(dir.resolve("plugins/Kansokusha/config.yml")));
         Assertions.assertEquals(Optional.empty(), config.serverKey());
         Assertions.assertEquals(10_000, config.queueCapacity());
+        Assertions.assertEquals(1_000, config.batchSize());
         Assertions.assertEquals(Duration.ofSeconds(1), config.flushInterval());
         Assertions.assertEquals(Duration.ofHours(1), config.cleanupInterval());
 
@@ -35,6 +36,7 @@ class KansokushaConfigTest {
         Files.writeString(dir.resolve("config.yml"), """
             server-key: example:lobby
             queue-capacity: 4
+            batch-size: 2
             flush-interval: PT0.5S
             cleanup-interval: PT5M
             retention:
@@ -50,6 +52,7 @@ class KansokushaConfigTest {
 
         Assertions.assertEquals(Optional.of(Key.key("example", "lobby")), config.serverKey());
         Assertions.assertEquals(4, config.queueCapacity());
+        Assertions.assertEquals(2, config.batchSize());
         Assertions.assertEquals(Duration.ofMillis(500), config.flushInterval());
         Assertions.assertEquals(Duration.ofMinutes(5), config.cleanupInterval());
         Assertions.assertEquals(Duration.ofDays(365), config.retention().durationOf(Key.key("example", "important")));
@@ -59,6 +62,7 @@ class KansokushaConfigTest {
     @Test
     void testInvalidValuesAreRejected(@TempDir Path dir) throws IOException {
         assertInvalid(dir, "queue-capacity", config("''", "0", "PT1S", ""));
+        assertInvalid(dir, "batch-size", config("''", "1", "PT1S", "").replace("batch-size: 1", "batch-size: 0"));
         assertInvalid(dir, "flush-interval", config("''", "1", "1s", ""));
         assertInvalid(dir, "at least 1 millisecond", config("''", "1", "PT0S", ""));
         assertInvalid(dir, "server-key", config("lobby", "1", "PT1S", ""));
@@ -77,6 +81,7 @@ class KansokushaConfigTest {
         return """
             server-key: %s
             queue-capacity: %s
+            batch-size: 1
             flush-interval: %s
             cleanup-interval: PT1H
             retention:

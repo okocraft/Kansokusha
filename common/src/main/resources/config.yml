@@ -5,6 +5,10 @@ server-key: ''
 # Maximum number of events waiting to be written. Events submitted while the queue is full are dropped.
 queue-capacity: 10000
 
+# Maximum number of events written in one transaction. When this many events are queued,
+# they are written immediately without waiting for flush-interval.
+batch-size: 1000
+
 # Interval (ISO-8601 duration) at which queued events are written to the database.
 flush-interval: PT1S
 

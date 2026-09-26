@@ -2,7 +2,6 @@ package net.okocraft.kansokusha.common.storage;
 
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import org.duckdb.DuckDBConnection;
 import org.duckdb.DuckDBDriver;
 import org.duckdb.DuckDBAppender;
@@ -63,16 +62,14 @@ public final class DuckDbStorage implements AutoCloseable {
         return new DuckDbStorage(connection);
     }
 
-    public void append(List<EventSubmission> events, KansokushaConfig.Retention retention) throws SQLException {
+    public void append(List<QueuedEvent> events) throws SQLException {
         try (var appender = this.connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, "events")) {
-            for (var event : events) {
-                var occurredAt = event.occurredAt().toEpochMilli();
-                var expiresAt = event.occurredAt().plus(retention.durationOf(event.eventType())).toEpochMilli();
-
+            for (var queued : events) {
+                var event = queued.submission();
                 appender.beginRow()
                     .append(event.eventType().asString())
                     .append(event.payloadGeneration().value())
-                    .appendEpochMillis(occurredAt);
+                    .appendEpochMillis(queued.occurredAtMillis());
                 appendNullable(appender, event.serverKey() == null ? null : event.serverKey().asString());
                 appendNullable(appender, event.worldKey() == null ? null : event.worldKey().asString());
 
@@ -89,7 +86,7 @@ public final class DuckDbStorage implements AutoCloseable {
                     appender.appendNull();
                 }
 
-                appender.appendEpochMillis(expiresAt)
+                appender.appendEpochMillis(queued.expiresAtMillis())
                     .append(event.payload().copyBytes())
                     .endRow();
             }

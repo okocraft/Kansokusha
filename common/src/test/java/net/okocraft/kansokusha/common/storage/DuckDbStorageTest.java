@@ -6,7 +6,6 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -19,15 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 class DuckDbStorageTest {
 
     private static final Key SHORT = Key.key("example", "short");
     private static final Key LONG = Key.key("example", "long");
-    private static final KansokushaConfig.Retention RETENTION = new KansokushaConfig.Retention(
-        Map.of(LONG, Duration.ofDays(10)),
-        Duration.ofDays(1)
-    );
+    private static final Map<Key, Duration> DURATIONS = Map.of(LONG, Duration.ofDays(10));
     private static final Instant NOW = Instant.parse("2026-09-26T00:00:00.123Z");
 
     @Test
@@ -36,7 +33,7 @@ class DuckDbStorageTest {
         var player = UUID.randomUUID();
 
         try (var storage = DuckDbStorage.open(file)) {
-            storage.append(List.of(
+            storage.append(Stream.of(
                 new EventSubmission(
                     LONG, new PayloadGeneration(2), NOW,
                     Key.key("example", "server"), Key.key("minecraft", "overworld"), new BlockPosition(1, -2, 3),
@@ -45,7 +42,7 @@ class DuckDbStorageTest {
                 new EventSubmission(
                     SHORT, PayloadGeneration.FIRST, NOW, null, null, null, null, EventPayload.copyOf(new byte[0])
                 )
-            ), RETENTION);
+            ).map(DuckDbStorageTest::queued).toList());
         }
 
         try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
@@ -81,7 +78,7 @@ class DuckDbStorageTest {
     @Test
     void testDeleteExpiredRemovesOnlyExpiredEvents(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorage.open(dir.resolve("kansokusha.duckdb"))) {
-            storage.append(List.of(event(SHORT), event(LONG)), RETENTION);
+            storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
 
             Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(1)).minusMillis(1)));
             Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1))));
@@ -93,11 +90,19 @@ class DuckDbStorageTest {
     void testReopeningKeepsExistingEvents(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         try (var storage = DuckDbStorage.open(file)) {
-            storage.append(List.of(event(LONG)), RETENTION);
+            storage.append(List.of(queued(event(LONG))));
         }
         try (var storage = DuckDbStorage.open(file)) {
             Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
         }
+    }
+
+    private static QueuedEvent queued(EventSubmission event) {
+        return new QueuedEvent(
+            event,
+            event.occurredAt().toEpochMilli(),
+            event.occurredAt().plus(DURATIONS.getOrDefault(event.eventType(), Duration.ofDays(1))).toEpochMilli()
+        );
     }
 
     private static EventSubmission event(Key type) {
