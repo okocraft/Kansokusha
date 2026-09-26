@@ -146,7 +146,11 @@ block の変化で変化前と変化後の両方がある event の target は�
 
 payload は provider-defined opaque bytes とし、platform 固有の built-in event を common codec へ抽象化しない。
 
-common fields（event type、generation、occurredAt、server、world、position）は payload に重複保存しない。actor と target type は検索用の列であり、payload generation 1 の既存 field（`actor_entity_uuid`、block state 等）と内容が重なっても payload から除かない。
+Paper / Folia の generation 1 payload は、各 event codec が `CompoundTag` を logical structure として構築した後、`PaperPayloadNbtCodec` の compact binary format へ encode する。persisted bytes は binary NBT ではない。built-in field name は append-only の small integer ID、integer は ZigZag + varint、boolean は専用 tag、UUID string は 16 bytes、`minecraft:` key string は namespace を省略して保存する。block-state property 等の open-ended field name には UTF-8 literal fallback を使う。
+
+payload ごとの Deflate / Zstd 等の圧縮は行わない。短い payload に圧縮 header を追加せず、chat / command の自由長 text は compact envelope 内の UTF-8 string として保存する。
+
+common fields（event type、generation、occurredAt、server、world、position、actor、target type）から一意に復元できる情報は payload に重複保存しない。primary actor の UUID/type は actor columns を正とし、payload には shooter / owner 等の indirect attribution のみを残す。block state や ItemStack のように event 固有の復元に必要な構造は payload に保持する。
 
 ### Paper / Folia capture semantics
 
@@ -229,11 +233,11 @@ common fields:
 - actor: breaking player
 - target type: broken block type
 
-payload generation 1 は Paper module で paperweight-userdev を利用して生成する binary NBT とする。
+payload generation 1 は Paper module の compact binary codec で保存する。
 
-MONITOR 時点で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を `NbtIo.write` で payload bytes にする。
+MONITOR 時点で取得した Bukkit `BlockData` を `CraftBlockData#getState()` で Minecraft `BlockState` に変換し、`NbtUtils.writeBlockState` の `CompoundTag` を logical structure として codec に渡す。
 
-これにより block identity と全 block-state properties を Minecraft の block-state serialization で保持する。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
+これにより block identity と全 block-state properties を Minecraft の block-state serialization の意味を保ったまま保持する。block entity NBT、item drops、experience、tool durability 等は generation 1 payload に含めない。
 
 ## `kansokusha:block_place`
 
