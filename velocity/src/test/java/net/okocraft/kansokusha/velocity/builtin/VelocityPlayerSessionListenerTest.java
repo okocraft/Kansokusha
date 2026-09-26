@@ -109,8 +109,9 @@ class VelocityPlayerSessionListenerTest {
         var api = api();
         var listener = listener(api);
         var player = player();
+        var currentServer = connection("Survival-1");
         Mockito.when(player.getCurrentServer()).thenReturn(
-            Optional.of(connection("Survival-1"))
+            Optional.of(currentServer)
         );
 
         listener.onDisconnect(
@@ -145,8 +146,9 @@ class VelocityPlayerSessionListenerTest {
             Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
         var player = player();
+        var currentServer = connection("東京");
         Mockito.when(player.getCurrentServer()).thenReturn(
-            Optional.of(connection("東京"))
+            Optional.of(currentServer)
         );
         var event = new DisconnectEvent(
             player,
