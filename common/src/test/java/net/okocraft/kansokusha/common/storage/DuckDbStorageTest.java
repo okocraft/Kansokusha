@@ -6,6 +6,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class DuckDbStorageTest {
         var file = dir.resolve("kansokusha.duckdb");
         var player = UUID.randomUUID();
 
-        try (var storage = DuckDbStorage.open(file)) {
+        try (var storage = DuckDbStorageImpl.open(file)) {
             storage.append(Stream.of(
                 new EventSubmission(
                     LONG, new PayloadGeneration(2), NOW,
@@ -77,7 +78,7 @@ class DuckDbStorageTest {
 
     @Test
     void testDeleteExpiredRemovesOnlyExpiredEvents(@TempDir Path dir) throws Exception {
-        try (var storage = DuckDbStorage.open(dir.resolve("kansokusha.duckdb"))) {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
 
             Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(1)).minusMillis(1)));
@@ -89,7 +90,7 @@ class DuckDbStorageTest {
     @Test
     void testAppenderCanBeReusedAcrossTransactions(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
-        try (var storage = DuckDbStorage.open(file)) {
+        try (var storage = DuckDbStorageImpl.open(file)) {
             storage.append(List.of(queued(event(SHORT))));
             Assertions.assertEquals(0, storage.deleteExpired(NOW.minusMillis(1)));
             storage.append(List.of(queued(event(LONG))));
@@ -105,10 +106,10 @@ class DuckDbStorageTest {
     @Test
     void testReopeningKeepsExistingEvents(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
-        try (var storage = DuckDbStorage.open(file)) {
+        try (var storage = DuckDbStorageImpl.open(file)) {
             storage.append(List.of(queued(event(LONG))));
         }
-        try (var storage = DuckDbStorage.open(file)) {
+        try (var storage = DuckDbStorageImpl.open(file)) {
             Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
         }
     }
@@ -122,6 +123,8 @@ class DuckDbStorageTest {
     }
 
     private static EventSubmission event(Key type) {
-        return new EventSubmission(type, PayloadGeneration.FIRST, NOW, null, null, null, null, EventPayload.copyOf(new byte[0]));
+        return new EventSubmission(
+            type, PayloadGeneration.FIRST, NOW, null, null, null, null, EventPayload.copyOf(new byte[0])
+        );
     }
 }

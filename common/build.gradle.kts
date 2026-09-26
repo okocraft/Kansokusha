@@ -1,7 +1,9 @@
 dependencies {
     api(projects.kansokushaApi)
-    implementation(libs.duckdb.jdbc)
+
+    compileOnly(libs.duckdb.jdbc)
 
     testImplementation(libs.adventure.key)
+    testImplementation(libs.duckdb.jdbc)
 }
 

@@ -3,6 +3,7 @@ import org.gradle.api.tasks.bundling.Jar
 import xyz.jpenilla.runvelocity.task.RunVelocity
 import java.net.URLClassLoader
 import java.util.Properties
+import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.bundler)
@@ -73,8 +74,27 @@ tasks {
             }
 
             val packagedJar = velocityShadowJar.get().archiveFile.get().asFile
+            ZipFile(packagedJar).use { jar ->
+                check(jar.getEntry("org/duckdb/DuckDBDriver.class") == null) {
+                    "Packaged Kansokusha jar must not contain the DuckDB JDBC driver."
+                }
+            }
+
+            val libraryDirectory = externalApiTestDirectory.get()
+                .dir("plugins/kansokusha/libs")
+                .asFile
+            val duckDbJars = libraryDirectory.listFiles { file ->
+                file.isFile &&
+                    file.name.startsWith("duckdb_jdbc-") &&
+                    file.name.endsWith(".jar")
+            }?.toList().orEmpty()
+            check(duckDbJars.size == 1) {
+                "Expected one downloaded DuckDB JDBC artifact, found: " +
+                    duckDbJars.joinToString { it.name }
+            }
+
             URLClassLoader(
-                arrayOf(packagedJar.toURI().toURL()),
+                arrayOf(duckDbJars.single().toURI().toURL()),
                 ClassLoader.getPlatformClassLoader()
             ).use { loader ->
                 val driver = loader

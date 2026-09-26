@@ -6,6 +6,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,6 @@ class KansokushaRuntimeTest {
 
     @Test
     void testQueuedEventsArePersistedOnClose(@TempDir Path dir) throws Exception {
-        // The batch size exceeds the capacity so that no early flush frees the queue.
         var runtime = start(dir, 2, 10);
         Assertions.assertEquals(Optional.of(SERVER_KEY), runtime.localServerKey());
         runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
@@ -77,7 +77,6 @@ class KansokushaRuntimeTest {
         Assertions.assertEquals(2, countEvents(dir));
 
         try (var ignored = start(dir, 10)) {
-            // The first cleanup runs asynchronously right after start.
             var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
             while (countEvents(dir) != 1 && System.nanoTime() < deadline) {
                 Thread.sleep(10);
@@ -92,7 +91,6 @@ class KansokushaRuntimeTest {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             runtime.submit(event(Instant.now()));
 
-            // Instant.MAX cannot be stored as epoch milliseconds.
             Assertions.assertThrows(IllegalArgumentException.class, () -> runtime.submit(event(Instant.MAX)));
 
             runtime.submit(event(Instant.now()));
@@ -122,7 +120,8 @@ class KansokushaRuntimeTest {
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity, int batchSize) throws Exception {
-        return KansokushaRuntime.start(dir, config(queueCapacity, batchSize), SERVER_KEY, (message, failure) -> {
+        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
+        return KansokushaRuntime.start(storage, config(queueCapacity, batchSize), SERVER_KEY, (message, failure) -> {
             throw new AssertionError(message, failure);
         });
     }

@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
+import net.okocraft.kansokusha.common.storage.Storage;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,7 +35,7 @@ import java.util.function.BiConsumer;
  * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
  *
  * <p>Submitting threads only enqueue events. A single background thread writes queued events to
- * DuckDB every flush interval, or as soon as a batch is full, and deletes expired events, so storage
+ * storage every flush interval, or as soon as a batch is full, and deletes expired events, so storage
  * access is never concurrent.</p>
  */
 @NotNullByDefault
@@ -44,7 +45,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
-    private final DuckDbStorage storage;
+    private final Storage storage;
     private final BiConsumer<String, Throwable> errorReporter;
     private final ConcurrentHashMap<Key, PayloadGeneration> eventTypes = new ConcurrentHashMap<>();
     private final int batchSize;
@@ -58,7 +59,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private KansokushaRuntime(
         @Nullable Key localServerKey,
         KansokushaConfig config,
-        DuckDbStorage storage,
+        Storage storage,
         BiConsumer<String, Throwable> errorReporter
     ) {
         this.localServerKey = Optional.ofNullable(localServerKey);
@@ -84,13 +85,33 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         @Nullable Key localServerKey,
         BiConsumer<String, Throwable> errorReporter
     ) throws IOException, SQLException {
-        var storage = DuckDbStorage.open(dataDirectory.resolve(DATABASE_FILENAME));
+        var storage = DuckDbStorage.open(
+            dataDirectory,
+            dataDirectory.resolve(DATABASE_FILENAME)
+        );
+        return start(storage, config, localServerKey, errorReporter);
+    }
+
+    static KansokushaRuntime start(
+        Storage storage,
+        KansokushaConfig config,
+        @Nullable Key localServerKey,
+        BiConsumer<String, Throwable> errorReporter
+    ) {
         var runtime = new KansokushaRuntime(localServerKey, config, storage, errorReporter);
 
         var flushMillis = config.flushInterval().toMillis();
-        runtime.storageThread.scheduleWithFixedDelay(runtime::flush, flushMillis, flushMillis, TimeUnit.MILLISECONDS);
         runtime.storageThread.scheduleWithFixedDelay(
-            runtime::deleteExpired, 0, config.cleanupInterval().toMillis(), TimeUnit.MILLISECONDS
+            runtime::flush,
+            flushMillis,
+            flushMillis,
+            TimeUnit.MILLISECONDS
+        );
+        runtime.storageThread.scheduleWithFixedDelay(
+            runtime::deleteExpired,
+            0,
+            config.cleanupInterval().toMillis(),
+            TimeUnit.MILLISECONDS
         );
         return runtime;
     }
