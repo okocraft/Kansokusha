@@ -73,8 +73,7 @@ public final class PaperPlayerSpawnChangeListener implements Listener {
                 before,
                 after,
                 event.isForced(),
-                PaperPlayerStatePayloadCodec.enumName(event.getCause()),
-                "player_set_spawn"
+                PaperPlayerStatePayloadCodec.enumName(event.getCause())
             )
         ));
     }
