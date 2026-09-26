@@ -9,13 +9,17 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 final class PaperBlockEventTestSupport {
@@ -81,9 +85,10 @@ final class PaperBlockEventTestSupport {
         return result;
     }
 
-    static final class RecordingApi implements KansokushaApi {
+    static final class RecordingApi implements KansokushaApi, PlayerNameDirectory {
 
         final ConcurrentLinkedQueue<EventSubmission> submissions = new ConcurrentLinkedQueue<>();
+        final ConcurrentLinkedQueue<String> playerLoginNames = new ConcurrentLinkedQueue<>();
 
         @Override
         public Optional<Key> localServerKey() {
@@ -98,6 +103,22 @@ final class PaperBlockEventTestSupport {
         public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
             return true;
+        }
+
+        @Override
+        public boolean submitPlayerLogin(EventSubmission submission, String username) {
+            this.playerLoginNames.add(username);
+            return this.submit(submission);
+        }
+
+        @Override
+        public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        @Override
+        public CompletableFuture<List<String>> offlinePlayerNames() {
+            return CompletableFuture.completedFuture(List.of());
         }
     }
 }
