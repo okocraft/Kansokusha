@@ -23,6 +23,8 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 class KansokushaRuntimeTest {
 
@@ -150,6 +152,22 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testCloseReportsDatabaseHealth(@TempDir Path dir) throws Exception {
+        var report = new AtomicReference<String>();
+        var runtime = start(dir, 10, BATCH_SIZE, report::set);
+        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+        Assertions.assertTrue(runtime.submit(event(Instant.now())));
+
+        runtime.close();
+
+        var message = report.get();
+        Assertions.assertNotNull(message);
+        Assertions.assertTrue(message.contains("events=1"));
+        Assertions.assertTrue(message.contains("reusable="));
+        Assertions.assertTrue(message.contains("expired-on-shutdown="));
+    }
+
+    @Test
     void testConcurrentFullBatchIsWrittenBeforeFlushInterval(@TempDir Path dir) throws Exception {
         var batchSize = 32;
         try (
@@ -224,10 +242,26 @@ class KansokushaRuntimeTest {
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity, int batchSize) throws Exception {
-        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
-        return KansokushaRuntime.start(storage, config(queueCapacity, batchSize), SERVER_KEY, (message, failure) -> {
-            throw new AssertionError(message, failure);
+        return start(dir, queueCapacity, batchSize, message -> {
         });
+    }
+
+    private static KansokushaRuntime start(
+        Path dir,
+        int queueCapacity,
+        int batchSize,
+        Consumer<String> infoReporter
+    ) throws Exception {
+        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
+        return KansokushaRuntime.start(
+            storage,
+            config(queueCapacity, batchSize),
+            SERVER_KEY,
+            infoReporter,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
     }
 
     private static KansokushaConfig config(int queueCapacity, int batchSize) {
