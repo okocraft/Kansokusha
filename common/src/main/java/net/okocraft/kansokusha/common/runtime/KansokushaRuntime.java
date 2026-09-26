@@ -84,6 +84,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
      * Opens the database in the data directory and starts the storage thread.
      *
      * @param localServerKey the local server identity, or {@code null} for proxies
+     * @param infoReporter   receives storage health information on shutdown
      * @param errorReporter  receives storage failures so that administrators can notice them
      */
     public static KansokushaRuntime start(
