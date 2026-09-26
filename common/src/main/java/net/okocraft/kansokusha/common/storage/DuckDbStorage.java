@@ -39,8 +39,11 @@ public final class DuckDbStorage {
         "net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl";
     private static final String IMPLEMENTATION_PACKAGE =
         "net.okocraft.kansokusha.common.storage.duckdb.";
-    private static final URI MAVEN_CENTRAL = URI.create(
-        "https://repo.maven.apache.org/maven2/org/duckdb/duckdb_jdbc/" + DUCKDB_VERSION + "/"
+    // Use the same Google-hosted Maven Central mirror as Paper for runtime library downloads.
+    // Maven Central itself should not be used as a CDN.
+    private static final URI MAVEN_CENTRAL_MIRROR = URI.create(
+        "https://maven-central.storage-download.googleapis.com/maven2/org/duckdb/duckdb_jdbc/"
+            + DUCKDB_VERSION + "/"
     );
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
@@ -107,7 +110,7 @@ public final class DuckDbStorage {
             }
         }
 
-        var artifactUri = MAVEN_CENTRAL.resolve(fileName);
+        var artifactUri = MAVEN_CENTRAL_MIRROR.resolve(fileName);
         var expectedChecksum = downloadChecksum(URI.create(artifactUri + ".sha256"));
 
         if (Files.isRegularFile(jar) && expectedChecksum.equals(sha256(jar))) {
