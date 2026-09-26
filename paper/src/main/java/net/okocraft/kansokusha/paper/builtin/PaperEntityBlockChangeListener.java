@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -24,7 +25,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperEntityBlockChangeListener implements PaperInFlightListener {
+public final class PaperEntityBlockChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "entity_block_change");
 
@@ -102,11 +103,6 @@ public final class PaperEntityBlockChangeListener implements PaperInFlightListen
             snapshot.subject(),
             snapshot.payload()
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

@@ -6,8 +6,6 @@ import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -51,8 +49,7 @@ class PaperBlockBreakListenerTest {
     @Test
     void testNonCancelledBreakSubmitsLowestSnapshot() throws Exception {
         var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.REGISTERED);
-        Mockito.when(api.submit(Mockito.any())).thenReturn(SubmissionOutcome.ACCEPTED);
+        Mockito.when(api.submit(Mockito.any())).thenReturn(true);
 
         var listener = PaperBlockBreakListener.register(
             api,
@@ -87,7 +84,6 @@ class PaperBlockBreakListenerTest {
     @Test
     void testCancelledBreakDropsAndRemovesSnapshot() {
         var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.REGISTERED);
 
         var listener = PaperBlockBreakListener.register(
             api,
@@ -101,41 +97,6 @@ class PaperBlockBreakListenerTest {
 
         Mockito.verify(api, Mockito.never()).submit(Mockito.any());
         Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testClearInFlightStateDropsCapturedSnapshot() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.REGISTERED);
-
-        var listener = PaperBlockBreakListener.register(
-            api,
-            SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
-        );
-        var event = event(Blocks.STONE.defaultBlockState().asBlockData(), false);
-
-        listener.capture(event);
-        Assertions.assertEquals(1, listener.inFlightCount());
-
-        listener.clearInFlightState();
-        listener.finalizeEvent(event);
-
-        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testRegistrationConflictFailsBeforeListenerCreation() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> PaperBlockBreakListener.register(api, SERVER_KEY)
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:block_break"));
     }
 
     @Test
@@ -248,14 +209,13 @@ class PaperBlockBreakListenerTest {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            return SubmissionOutcome.ACCEPTED;
+            return true;
         }
     }
 }

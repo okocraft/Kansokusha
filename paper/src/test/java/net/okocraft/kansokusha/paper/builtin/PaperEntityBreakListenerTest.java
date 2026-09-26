@@ -1,15 +1,11 @@
 package net.okocraft.kansokusha.paper.builtin;
 
-import net.kyori.adventure.key.Key;
-import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.damage.DamageType;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
@@ -31,41 +27,6 @@ class PaperEntityBreakListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174110");
     private static final UUID BREAKER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174111");
-
-    @Test
-    void testGenericBreakSnapshotsTargetAndMobBreaker() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = listener(api);
-        var world = PaperBlockEventTestSupport.world();
-        var target = entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 8.25, 64, -2.75);
-        var breaker = entity(world, EntityType.ZOMBIE, BREAKER_ID, 9, 64, -2);
-        var event = new PaperGenericEntityBreakEventFixture(
-            target,
-            breaker,
-            damageSource(DamageType.MOB_ATTACK, false),
-            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
-        );
-
-        listener.captureGeneric(event);
-        Mockito.when(target.getLocation()).thenReturn(new Location(world, 99, 99, 99));
-        Mockito.when(breaker.getType()).thenReturn(EntityType.CREEPER);
-        listener.finalizeGeneric(event);
-
-        var submission = onlySubmission(api);
-        assertCommon(submission, new BlockPosition(8, 64, -3));
-        Assertions.assertNull(submission.subject());
-        var payload = PaperPayloadNbtCodec.decode(submission.payload());
-        assertEntity(payload.getCompoundOrEmpty("entity"), ENTITY_ID, "minecraft:armor_stand");
-        assertEntity(payload.getCompoundOrEmpty("breaker"), BREAKER_ID, "minecraft:zombie");
-        Assertions.assertEquals("entity", payload.getString("cause").orElseThrow());
-        Assertions.assertEquals("minecraft:mob_attack", payload.getString("damage_type").orElseThrow());
-        Assertions.assertFalse(payload.getBoolean("indirect_damage").orElseThrow());
-        Assertions.assertEquals(
-            PaperEntityBreakListener.GENERIC_SOURCE_EVENT,
-            payload.getString("source_event").orElseThrow()
-        );
-        Assertions.assertFalse(payload.contains("hanging"));
-    }
 
     @Test
     void testHangingBreakUsesPlayerSubjectAndHangingContext() throws Exception {
@@ -108,14 +69,6 @@ class PaperEntityBreakListenerTest {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);
         var world = PaperBlockEventTestSupport.world();
-        var generic = new PaperGenericEntityBreakEventFixture(
-            entity(world, EntityType.ARMOR_STAND, ENTITY_ID, 1, 2, 3),
-            entity(world, EntityType.ZOMBIE, BREAKER_ID, 2, 2, 3),
-            damageSource(DamageType.MOB_ATTACK, false),
-            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
-        );
-        generic.setCancelled(true);
-
         var hangingEntity = hanging(world, ENTITY_ID, 3, 4, 5);
         var hangingRemover = player(world);
         var hangingSource = damageSource(DamageType.PLAYER_ATTACK, false);
@@ -126,8 +79,6 @@ class PaperEntityBreakListenerTest {
         Mockito.when(hanging.getDamageSource()).thenReturn(hangingSource);
         Mockito.when(hanging.isCancelled()).thenReturn(true);
 
-        listener.captureGeneric(generic);
-        listener.finalizeGeneric(generic);
         listener.captureHanging(hanging);
         listener.finalizeHanging(hanging);
 
@@ -141,22 +92,6 @@ class PaperEntityBreakListenerTest {
             PaperBlockEventTestSupport.SERVER_KEY,
             Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
         );
-    }
-
-    private static Entity entity(
-        World world,
-        EntityType type,
-        UUID id,
-        double x,
-        double y,
-        double z
-    ) {
-        var entity = Mockito.mock(Entity.class);
-        Mockito.when(entity.getUniqueId()).thenReturn(id);
-        Mockito.when(entity.getType()).thenReturn(type);
-        Mockito.when(entity.getWorld()).thenReturn(world);
-        Mockito.when(entity.getLocation()).thenReturn(new Location(world, x, y, z));
-        return entity;
     }
 
     private static Hanging hanging(World world, UUID id, double x, double y, double z) {
@@ -187,19 +122,5 @@ class PaperEntityBreakListenerTest {
     private static EventSubmission onlySubmission(PaperBlockEventTestSupport.RecordingApi api) {
         Assertions.assertEquals(1, api.submissions.size());
         return api.submissions.remove();
-    }
-
-    private static void assertCommon(EventSubmission submission, BlockPosition position) {
-        Assertions.assertEquals(PaperEntityBreakListener.EVENT_TYPE, submission.eventType());
-        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
-        Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
-        Assertions.assertEquals(position, submission.position());
-    }
-
-    private static void assertEntity(CompoundTag entity, UUID id, String type) {
-        Assertions.assertEquals(id.toString(), entity.getString("uuid").orElseThrow());
-        Assertions.assertEquals(type, entity.getString("type").orElseThrow());
-        Assertions.assertEquals("example:world", entity.getString("world").orElseThrow());
     }
 }

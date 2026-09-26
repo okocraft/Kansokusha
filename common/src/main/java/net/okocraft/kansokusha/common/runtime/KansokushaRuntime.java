@@ -2,275 +2,207 @@ package net.okocraft.kansokusha.common.runtime;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.common.api.BoundedEventIntake;
-import net.okocraft.kansokusha.common.api.DefaultKansokushaApi;
+import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
-import net.okocraft.kansokusha.common.event.RetentionPolicySet;
-import net.okocraft.kansokusha.common.event.registry.InMemoryRuntimeEventTypeRegistry;
-import net.okocraft.kansokusha.common.reporting.AdministratorReporter;
-import net.okocraft.kansokusha.common.retention.RetentionCleanupService;
-import net.okocraft.kansokusha.common.storage.DuckDbDatabase;
-import net.okocraft.kansokusha.common.storage.DuckDbEventWriter;
-import net.okocraft.kansokusha.common.storage.DuckDbMigrations;
-import net.okocraft.kansokusha.common.storage.DuckDbRetentionCleaner;
-import net.okocraft.kansokusha.common.writer.AsyncBatchWriterService;
+import net.okocraft.kansokusha.common.storage.DuckDbStorage;
+import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
-import java.util.Objects;
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
 
+/**
+ * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
+ *
+ * <p>Submitting threads only enqueue events. A single background thread writes queued events to
+ * DuckDB every flush interval, or as soon as a batch is full, and deletes expired events, so storage
+ * access is never concurrent.</p>
+ */
 @NotNullByDefault
-public final class KansokushaRuntime implements AutoCloseable {
+public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
-    static final String DATABASE_FILENAME = "kansokusha.duckdb";
-    private static final String STARTUP_FAILURE_MESSAGE = "Kansokusha runtime failed to start.";
-    private static final String WRITER_FAILURE_MESSAGE =
-        "Kansokusha event writer failed; event recording is unavailable.";
-    private static final String CLEANUP_FAILURE_MESSAGE = "Kansokusha retention cleanup failed.";
+    public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
-    private final DefaultKansokushaApi api;
-    private final AsyncBatchWriterService writer;
-    private final RetentionCleanupService cleanup;
-    private final DuckDbDatabase database;
-    private final ConfigurationReloader configurationReloader;
-    private final AtomicBoolean closeStarted = new AtomicBoolean();
-
-    KansokushaRuntime(
-        DefaultKansokushaApi api,
-        AsyncBatchWriterService writer,
-        RetentionCleanupService cleanup,
-        DuckDbDatabase database
-    ) {
-        this(
-            api,
-            writer,
-            cleanup,
-            database,
-            () -> {
-                throw new IllegalStateException(
-                    "Configuration reload is unavailable for this runtime."
-                );
-            }
-        );
-    }
+    private final Optional<Key> localServerKey;
+    private final KansokushaConfig.Retention retention;
+    private final DuckDbStorage storage;
+    private final BiConsumer<String, Throwable> errorReporter;
+    private final ConcurrentHashMap<Key, PayloadGeneration> eventTypes = new ConcurrentHashMap<>();
+    private final int batchSize;
+    private final BlockingQueue<QueuedEvent> queue;
+    private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
+    private final ScheduledExecutorService storageThread;
+    // Guarantees that no event enters the queue after close() has drained it.
+    private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
+    private boolean closed;
 
     private KansokushaRuntime(
-        DefaultKansokushaApi api,
-        AsyncBatchWriterService writer,
-        RetentionCleanupService cleanup,
-        DuckDbDatabase database,
-        ConfigurationReloader configurationReloader
+        @Nullable Key localServerKey,
+        KansokushaConfig config,
+        DuckDbStorage storage,
+        BiConsumer<String, Throwable> errorReporter
     ) {
-        this.api = api;
-        this.writer = writer;
-        this.cleanup = cleanup;
-        this.database = database;
-        this.configurationReloader = configurationReloader;
-    }
-
-    public static KansokushaRuntime start(
-        Path dataDirectory,
-        Key localServerKey,
-        AdministratorReporter failureReporter
-    ) throws IOException, SQLException {
-        return start(
-            dataDirectory,
-            Optional.of(Objects.requireNonNull(localServerKey, "localServerKey")),
-            failureReporter
+        this.localServerKey = Optional.ofNullable(localServerKey);
+        this.retention = config.retention();
+        this.storage = storage;
+        this.errorReporter = errorReporter;
+        this.batchSize = config.batchSize();
+        this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
+        this.storageThread = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().name("kansokusha-storage").factory()
         );
     }
 
+    /**
+     * Opens the database in the data directory and starts the storage thread.
+     *
+     * @param localServerKey the local server identity, or {@code null} for proxies
+     * @param errorReporter  receives storage failures so that administrators can notice them
+     */
     public static KansokushaRuntime start(
         Path dataDirectory,
-        AdministratorReporter failureReporter
+        KansokushaConfig config,
+        @Nullable Key localServerKey,
+        BiConsumer<String, Throwable> errorReporter
     ) throws IOException, SQLException {
-        return start(dataDirectory, Optional.empty(), failureReporter);
-    }
+        var storage = DuckDbStorage.open(dataDirectory.resolve(DATABASE_FILENAME));
+        var runtime = new KansokushaRuntime(localServerKey, config, storage, errorReporter);
 
-    private static KansokushaRuntime start(
-        Path dataDirectory,
-        Optional<Key> localServerKey,
-        AdministratorReporter failureReporter
-    ) throws IOException, SQLException {
-        Objects.requireNonNull(dataDirectory, "dataDirectory");
-        Objects.requireNonNull(localServerKey, "localServerKey");
-        Objects.requireNonNull(failureReporter, "failureReporter");
-
-        DuckDbDatabase database = null;
-        AsyncBatchWriterService writer = null;
-        RetentionCleanupService cleanup = null;
-        DefaultKansokushaApi api = null;
-
-        try {
-            var configHolder = new KansokushaConfig.Holder(dataDirectory);
-            configHolder.reload();
-            var config = configHolder.get();
-
-            database = DuckDbDatabase.open(dataDirectory.resolve(DATABASE_FILENAME));
-            DuckDbMigrations.migrate(database);
-
-            var retentionPolicies = RetentionPolicySet.from(config.retentionSettings());
-            var ingestion = config.ingestionSettings();
-            var intake = new BoundedEventIntake(ingestion.queueCapacity(), retentionPolicies);
-            var registry = new InMemoryRuntimeEventTypeRegistry();
-            api = localServerKey
-                .map(key -> new DefaultKansokushaApi(registry, intake, key))
-                .orElseGet(() -> new DefaultKansokushaApi(registry, intake));
-
-            writer = new AsyncBatchWriterService(
-                intake,
-                new DuckDbEventWriter(database),
-                failure -> failureReporter.report(WRITER_FAILURE_MESSAGE, failure),
-                ingestion.maxBatchSize(),
-                ingestion.maxBatchDelay()
-            );
-
-            var cleanupSettings = config.retentionCleanupSettings();
-            cleanup = new RetentionCleanupService(
-                new DuckDbRetentionCleaner(database),
-                failure -> failureReporter.report(CLEANUP_FAILURE_MESSAGE, failure),
-                cleanupSettings.interval(),
-                cleanupSettings.maxRowsPerPass()
-            );
-
-            writer.start();
-            cleanup.start();
-
-            var reloadableIntake = intake;
-            var reloadableConfig = configHolder;
-            return new KansokushaRuntime(
-                api,
-                writer,
-                cleanup,
-                database,
-                () -> reloadableConfig.reload(
-                    loaded -> reloadableIntake.replaceRetentionPolicies(
-                        RetentionPolicySet.from(loaded.retentionSettings())
-                    )
-                )
-            );
-        } catch (IOException | SQLException | RuntimeException | Error failure) {
-            closeAfterStartupFailure(api, cleanup, writer, database, failureReporter, failure);
-            throw failure;
-        }
-    }
-
-    public KansokushaApi api() {
-        return this.api;
-    }
-
-    public void reloadRetentionPolicies() throws IOException {
-        if (this.closeStarted.get()) {
-            throw new IllegalStateException(
-                "Retention policies cannot be reloaded after shutdown starts."
-            );
-        }
-        this.configurationReloader.reload();
+        var flushMillis = config.flushInterval().toMillis();
+        runtime.storageThread.scheduleWithFixedDelay(runtime::flush, flushMillis, flushMillis, TimeUnit.MILLISECONDS);
+        runtime.storageThread.scheduleWithFixedDelay(
+            runtime::deleteExpired, 0, config.cleanupInterval().toMillis(), TimeUnit.MILLISECONDS
+        );
+        return runtime;
     }
 
     @Override
-    public void close() throws SQLException {
-        if (!this.closeStarted.compareAndSet(false, true)) {
-            return;
-        }
+    public Optional<Key> localServerKey() {
+        return this.localServerKey;
+    }
 
-        this.writer.beginDraining();
-        this.api.close();
-
-        Throwable failure = null;
-        try {
-            this.cleanup.close();
-        } catch (RuntimeException | Error e) {
-            failure = e;
-        }
-
-        try {
-            this.writer.drainAndStop();
-        } catch (RuntimeException | Error e) {
-            failure = suppress(failure, e);
-        }
-
-        try {
-            this.database.close();
-        } catch (SQLException | RuntimeException | Error e) {
-            failure = suppress(failure, e);
-        }
-
-        if (failure instanceof SQLException sqlException) {
-            throw sqlException;
-        }
-        if (failure instanceof RuntimeException runtimeException) {
-            throw runtimeException;
-        }
-        if (failure instanceof Error error) {
-            throw error;
+    @Override
+    public void registerEventType(EventTypeDefinition definition) {
+        var existing = this.eventTypes.putIfAbsent(definition.key(), definition.payloadGeneration());
+        if (existing != null && !existing.equals(definition.payloadGeneration())) {
+            throw new IllegalArgumentException(
+                definition.key().asString() + " is already registered with payload generation " + existing.value()
+            );
         }
     }
 
-    private static void closeAfterStartupFailure(
-        DefaultKansokushaApi api,
-        RetentionCleanupService cleanup,
-        AsyncBatchWriterService writer,
-        DuckDbDatabase database,
-        AdministratorReporter failureReporter,
-        Throwable failure
-    ) {
-        if (api != null) {
-            api.close();
+    @Override
+    public boolean submit(EventSubmission submission) {
+        var generation = this.eventTypes.get(submission.eventType());
+        if (!submission.payloadGeneration().equals(generation)) {
+            throw new IllegalArgumentException(
+                submission.eventType().asString() + " is not registered with payload generation "
+                    + submission.payloadGeneration().value()
+            );
         }
+        // Validate here so that one invalid event cannot make the whole batch fail to write.
+        var queued = this.toQueuedEvent(submission);
 
-        if (cleanup != null) {
-            try {
-                cleanup.close();
-            } catch (Throwable closeFailure) {
-                addSuppressed(failure, closeFailure);
+        var lock = this.closeLock.readLock();
+        lock.lock();
+        try {
+            if (this.closed || !this.queue.offer(queued)) {
+                return false;
             }
-        }
-
-        if (writer != null) {
-            try {
-                writer.drainAndStop();
-            } catch (Throwable closeFailure) {
-                addSuppressed(failure, closeFailure);
+            if (this.queue.size() >= this.batchSize && this.earlyFlushScheduled.compareAndSet(false, true)) {
+                this.storageThread.execute(this::flush);
             }
+            return true;
+        } finally {
+            lock.unlock();
         }
+    }
 
-        if (database != null) {
-            try {
-                database.close();
-            } catch (Throwable closeFailure) {
-                addSuppressed(failure, closeFailure);
-            }
-        }
-
+    private QueuedEvent toQueuedEvent(EventSubmission submission) {
         try {
-            failureReporter.report(STARTUP_FAILURE_MESSAGE, failure);
-        } catch (Throwable reportingFailure) {
-            addSuppressed(failure, reportingFailure);
+            var occurredAt = submission.occurredAt().truncatedTo(ChronoUnit.MILLIS);
+            var expiresAt = occurredAt.plus(this.retention.durationOf(submission.eventType()));
+            return new QueuedEvent(
+                submission,
+                requireStorableMillis(occurredAt.toEpochMilli()),
+                requireStorableMillis(expiresAt.toEpochMilli())
+            );
+        } catch (ArithmeticException | DateTimeException e) {
+            throw new IllegalArgumentException("occurredAt is out of range: " + submission.occurredAt(), e);
         }
     }
 
-    private static Throwable suppress(Throwable primary, Throwable secondary) {
-        if (primary == null) {
-            return secondary;
+    // DuckDB uses the minimum and maximum values as -infinity and infinity.
+    private static long requireStorableMillis(long millis) {
+        if (millis == Long.MIN_VALUE || millis == Long.MAX_VALUE) {
+            throw new ArithmeticException("reserved timestamp value");
         }
-        addSuppressed(primary, secondary);
-        return primary;
+        return millis;
     }
 
-    private static void addSuppressed(Throwable primary, Throwable secondary) {
-        if (primary != secondary) {
-            primary.addSuppressed(secondary);
+    /**
+     * Stops accepting events, writes the queued ones, and closes the database.
+     */
+    @Override
+    public void close() {
+        var lock = this.closeLock.writeLock();
+        lock.lock();
+        try {
+            if (this.closed) {
+                return;
+            }
+            this.closed = true;
+        } finally {
+            lock.unlock();
+        }
+
+        // Waits for a running flush or cleanup so that the connection is never used concurrently.
+        this.storageThread.close();
+        this.flush();
+        try {
+            this.storage.close();
+        } catch (SQLException e) {
+            this.errorReporter.accept("Failed to close the Kansokusha database.", e);
         }
     }
 
-    @FunctionalInterface
-    private interface ConfigurationReloader {
+    private void flush() {
+        this.earlyFlushScheduled.set(false);
+        var batch = new ArrayList<QueuedEvent>(this.batchSize);
+        while (this.queue.drainTo(batch, this.batchSize) > 0) {
+            try {
+                this.storage.append(batch);
+            } catch (SQLException | RuntimeException e) {
+                this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
+            }
+            batch.clear();
+        }
+    }
 
-        void reload() throws IOException;
+    private void deleteExpired() {
+        try {
+            this.storage.deleteExpired(Instant.now());
+        } catch (SQLException | RuntimeException e) {
+            this.errorReporter.accept("Failed to delete expired events.", e);
+        }
     }
 }

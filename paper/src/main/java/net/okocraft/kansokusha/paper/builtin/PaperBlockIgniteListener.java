@@ -15,6 +15,7 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockMultiPlaceEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -39,7 +40,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBlockIgniteListener implements PaperInFlightListener {
+public final class PaperBlockIgniteListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_ignite");
 
@@ -168,14 +169,6 @@ public final class PaperBlockIgniteListener implements PaperInFlightListener {
         }
         for (var snapshot : snapshots) {
             submit(this.api, EVENT_TYPE, withPlayerSubject(snapshot, playerId));
-        }
-    }
-
-    @Override
-    public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-            this.pendingPlayerPlacements.clear();
         }
     }
 

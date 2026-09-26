@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Difficulty;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -20,7 +21,7 @@ import java.util.Objects;
 /** Records established Paper world difficulty state changes. */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperWorldDifficultyChangeListener implements PaperInFlightListener {
+public final class PaperWorldDifficultyChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "world_difficulty_change");
 
@@ -91,11 +92,6 @@ public final class PaperWorldDifficultyChangeListener implements PaperInFlightLi
                 snapshot.source()
             )
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

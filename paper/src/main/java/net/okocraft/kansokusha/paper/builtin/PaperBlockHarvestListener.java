@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -24,7 +25,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBlockHarvestListener implements PaperInFlightListener {
+public final class PaperBlockHarvestListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "block_harvest");
 
@@ -89,11 +90,6 @@ public final class PaperBlockHarvestListener implements PaperInFlightListener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeShear(PlayerShearBlockEvent event) {
         this.finalizeEvent(event, event.isCancelled());
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

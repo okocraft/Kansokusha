@@ -12,6 +12,7 @@ import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
@@ -25,7 +26,7 @@ import java.util.Objects;
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperBucketListener implements PaperInFlightListener {
+public final class PaperBucketListener implements Listener {
 
     static final Key EMPTY_EVENT_TYPE = Key.key("kansokusha", "bucket_empty");
     static final Key FILL_EVENT_TYPE = Key.key("kansokusha", "bucket_fill");
@@ -71,11 +72,6 @@ public final class PaperBucketListener implements PaperInFlightListener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void finalizeFill(PlayerBucketFillEvent event) {
         this.finalizeEvent(event);
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

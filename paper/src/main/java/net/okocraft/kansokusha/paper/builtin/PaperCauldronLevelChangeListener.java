@@ -11,6 +11,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.CauldronLevelChangeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -25,7 +26,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperCauldronLevelChangeListener implements PaperInFlightListener {
+public final class PaperCauldronLevelChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "cauldron_level_change");
 
@@ -117,11 +118,6 @@ public final class PaperCauldronLevelChangeListener implements PaperInFlightList
             snapshot.subject(),
             payload
         ));
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {

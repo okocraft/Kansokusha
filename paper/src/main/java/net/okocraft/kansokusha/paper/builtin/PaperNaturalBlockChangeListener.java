@@ -19,6 +19,7 @@ import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFertilizeEvent;
 import org.bukkit.event.block.BlockFormEvent;
@@ -51,7 +52,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperNaturalBlockChangeListener implements PaperInFlightListener {
+public final class PaperNaturalBlockChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "natural_block_change");
 
@@ -436,16 +437,6 @@ public final class PaperNaturalBlockChangeListener implements PaperInFlightListe
     @EventHandler(priority = EventPriority.MONITOR)
     public void discardFertilizedChanges(BlockFertilizeEvent event) {
         Objects.requireNonNull(event, "event");
-    }
-
-    @Override
-    public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-            this.deferredChanges.clear();
-            this.deferredFades.clear();
-            this.pendingScaffoldingFades.clear();
-        }
     }
 
     int inFlightCount() {

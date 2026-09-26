@@ -7,9 +7,7 @@ import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.jetbrains.annotations.ApiStatus;
@@ -18,7 +16,6 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.time.Clock;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,12 +30,6 @@ public final class VelocityPlayerSessionListener {
         Key.key("kansokusha", "velocity_disconnect");
     static final Key BACKEND_KICK_EVENT_TYPE =
         Key.key("kansokusha", "backend_kick");
-
-    private static final List<EventTypeDefinition> DEFINITIONS = List.of(
-        new EventTypeDefinition(POST_LOGIN_EVENT_TYPE, PayloadGeneration.FIRST),
-        new EventTypeDefinition(DISCONNECT_EVENT_TYPE, PayloadGeneration.FIRST),
-        new EventTypeDefinition(BACKEND_KICK_EVENT_TYPE, PayloadGeneration.FIRST)
-    );
 
     private final KansokushaApi api;
     private final Logger logger;
@@ -60,21 +51,12 @@ public final class VelocityPlayerSessionListener {
         Logger logger,
         Clock clock
     ) {
-        Objects.requireNonNull(api, "api");
-        for (var definition : DEFINITIONS) {
-            var outcome = api.registerEventType(definition);
-            if (
-                outcome != RegistrationOutcome.REGISTERED
-                    && outcome != RegistrationOutcome.ALREADY_REGISTERED
-            ) {
-                throw new IllegalStateException(
-                    "Could not register built-in event type "
-                        + definition.key()
-                        + ": "
-                        + outcome
-                );
-            }
-        }
+        VelocityBuiltInSupport.register(
+            api,
+            POST_LOGIN_EVENT_TYPE,
+            DISCONNECT_EVENT_TYPE,
+            BACKEND_KICK_EVENT_TYPE
+        );
         return new VelocityPlayerSessionListener(api, logger, clock);
     }
 

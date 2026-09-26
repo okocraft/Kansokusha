@@ -2,7 +2,6 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.tasks.bundling.Jar
 import xyz.jpenilla.runvelocity.task.RunVelocity
 import java.net.URLClassLoader
-import java.nio.file.Files
 import java.util.Properties
 
 plugins {
@@ -54,30 +53,7 @@ tasks {
         )
 
         doFirst {
-            val runDirectory = externalApiTestDirectory.get().asFile
-            project.delete(runDirectory)
-
-            val config = runDirectory.toPath()
-                .resolve("plugins")
-                .resolve("kansokusha")
-                .resolve("config.yml")
-            Files.createDirectories(config.parent)
-            Files.writeString(
-                config,
-                """
-                ingestion:
-                  queue-capacity: 4
-                  max-batch-size: 4
-                  max-batch-delay: PT1H
-                retention:
-                  policies:
-                    - key: example:default
-                      duration: P3650D
-                  fallback-policy: example:default
-                  cleanup-interval: PT1H
-                  max-rows-per-pass: 100
-                """.trimIndent()
-            )
+            project.delete(externalApiTestDirectory.get().asFile)
         }
 
         doLast {
@@ -113,14 +89,11 @@ tasks {
                         """
                         SELECT
                             count(*) AS event_count,
-                            min(pg.generation) AS generation,
-                            min(s.server_key) AS server_key,
-                            min(hex(e.payload)) AS payload_hex
-                        FROM events e
-                        JOIN payload_generations pg ON pg.id = e.payload_generation_id
-                        JOIN event_types et ON et.id = pg.event_type_id
-                        JOIN servers s ON s.id = e.server_id
-                        WHERE et.event_type_key = ?
+                            min(payload_generation) AS generation,
+                            min(server) AS server_key,
+                            min(hex(payload)) AS payload_hex
+                        FROM events
+                        WHERE event_type = ?
                         """.trimIndent()
                     ).use { statement ->
                         statement.setString(1, "fixture:custom_event")

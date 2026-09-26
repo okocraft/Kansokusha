@@ -80,7 +80,6 @@ class PaperCauldronLevelChangeListenerTest {
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperCauldronLevelChangeListener.EVENT_TYPE, submission.eventType());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
-        Assertions.assertTrue(submission.payload().retentionQualifier().isEmpty());
         Assertions.assertEquals(new BlockPosition(10, 64, 10), submission.position());
         Assertions.assertEquals(new PlayerSubject(PLAYER_ID), submission.subject());
         Assertions.assertEquals(
@@ -132,7 +131,6 @@ class PaperCauldronLevelChangeListenerTest {
 
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
-        Assertions.assertTrue(submission.payload().retentionQualifier().isEmpty());
         Assertions.assertEquals(
             cauldronPayload(
                 oldState,
@@ -176,10 +174,6 @@ class PaperCauldronLevelChangeListenerTest {
         var submission = api.submissions.remove();
         Assertions.assertNull(submission.subject());
         Assertions.assertEquals(
-            PaperBlockEventPayloadCodec.NATURAL_RETENTION_QUALIFIER,
-            submission.payload().retentionQualifier().orElseThrow()
-        );
-        Assertions.assertEquals(
             cauldronPayload(
                 oldState,
                 newState,
@@ -190,37 +184,6 @@ class PaperCauldronLevelChangeListenerTest {
             ),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
-    }
-
-    @Test
-    void testActorlessUnknownReasonDoesNotReceiveNaturalRetentionQualifier() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperCauldronLevelChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var oldState = Blocks.CAULDRON.defaultBlockState();
-        var newState = waterCauldron(1);
-        var block = PaperBlockEventTestSupport.block(
-            world, 4, 5, 7, oldState, Material.CAULDRON
-        );
-        var changed = PaperBlockEventTestSupport.state(
-            world, block, 4, 5, 7, newState
-        );
-
-        var event = Mockito.mock(CauldronLevelChangeEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(block);
-        Mockito.when(event.getReason()).thenReturn(
-            CauldronLevelChangeEvent.ChangeReason.UNKNOWN
-        );
-        Mockito.when(event.getNewState()).thenReturn(changed);
-
-        listener.capture(event);
-        listener.finalizeEvent(event);
-
-        var submission = api.submissions.remove();
-        Assertions.assertTrue(submission.payload().retentionQualifier().isEmpty());
     }
 
     @Test

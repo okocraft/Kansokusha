@@ -13,6 +13,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.TNTPrimeEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -28,7 +29,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperTntPrimeListener implements PaperInFlightListener {
+public final class PaperTntPrimeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "tnt_prime");
 
@@ -171,16 +172,6 @@ public final class PaperTntPrimeListener implements PaperInFlightListener {
             return;
         }
         submit(snapshot);
-    }
-
-    @Override
-    public void clearInFlightState() {
-        synchronized (this.inFlight) {
-            this.inFlight.clear();
-            this.legacyExplosionInFlight.clear();
-            this.pendingFire.clear();
-        }
-        PaperExplosionTntCorrelation.clear(this.api);
     }
 
     int inFlightCount() {

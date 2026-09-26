@@ -4,8 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.damage.DamageSource;
-import org.bukkit.damage.DamageType;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
@@ -72,81 +70,6 @@ class PaperEntityEventRelationTest {
     }
 
     @Test
-    void testPaperHangingBreakSequenceProducesOnlyHangingCanonicalSubmission()
-        throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperEntityBreakListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        enableGenericCallbacks(listener);
-        var world = PaperBlockEventTestSupport.world();
-        var hanging = hanging(world);
-        var remover = player(world);
-        var damageSource = damageSource();
-
-        var hangingEvent = Mockito.mock(HangingBreakByEntityEvent.class);
-        Mockito.when(hangingEvent.getEntity()).thenReturn(hanging);
-        Mockito.when(hangingEvent.getRemover()).thenReturn(remover);
-        Mockito.when(hangingEvent.getDamageSource()).thenReturn(damageSource);
-        Mockito.when(hangingEvent.getCause()).thenReturn(HangingBreakEvent.RemoveCause.ENTITY);
-
-        var genericEvent = new PaperGenericEntityBreakEventFixture(
-            hanging,
-            remover,
-            damageSource,
-            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
-        );
-
-        // Paper 26.3 fires HangingBreakByEntityEvent first and then the generic
-        // EntityBreakByEntityEvent for the same hanging damage path.
-        listener.captureHanging(hangingEvent);
-        listener.finalizeHanging(hangingEvent);
-        listener.captureGeneric(genericEvent);
-        listener.finalizeGeneric(genericEvent);
-
-        Assertions.assertEquals(1, api.submissions.size());
-        var payload = PaperPayloadNbtCodec.decode(api.submissions.remove().payload());
-        Assertions.assertEquals(
-            PaperEntityBreakListener.HANGING_SOURCE_EVENT,
-            payload.getString("source_event").orElseThrow()
-        );
-        Assertions.assertEquals(1, genericEvent.removerReads());
-        Mockito.verify(hangingEvent, Mockito.never()).getRemover();
-    }
-
-    @Test
-    void testGenericCancellationControlsHangingBreakSubmission() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperEntityBreakListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        enableGenericCallbacks(listener);
-        var world = PaperBlockEventTestSupport.world();
-        var hanging = hanging(world);
-        var remover = player(world);
-        var damageSource = damageSource();
-
-        var hangingEvent = Mockito.mock(HangingBreakByEntityEvent.class);
-        var genericEvent = new PaperGenericEntityBreakEventFixture(
-            hanging,
-            remover,
-            damageSource,
-            PaperGenericEntityBreakEventFixture.RemoveCause.ENTITY
-        );
-
-        listener.captureHanging(hangingEvent);
-        listener.finalizeHanging(hangingEvent);
-        listener.captureGeneric(genericEvent);
-        genericEvent.setCancelled(true);
-        listener.finalizeGeneric(genericEvent);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
     void testNaturalHangingBreakHasNoListenerEntryPoint() {
         Assertions.assertDoesNotThrow(() ->
             PaperEntityBreakListener.class.getMethod(
@@ -161,12 +84,6 @@ class PaperEntityEventRelationTest {
                 HangingBreakEvent.class
             )
         );
-    }
-
-    private static void enableGenericCallbacks(PaperEntityBreakListener listener) throws Exception {
-        var field = PaperEntityBreakListener.class.getDeclaredField("genericCallbacksRegistered");
-        field.setAccessible(true);
-        field.setBoolean(listener, true);
     }
 
     private static Hanging hanging(World world) {
@@ -185,11 +102,5 @@ class PaperEntityEventRelationTest {
         Mockito.when(player.getWorld()).thenReturn(world);
         Mockito.when(player.getLocation()).thenReturn(new Location(world, 4, 65, 5));
         return player;
-    }
-
-    private static DamageSource damageSource() {
-        var source = Mockito.mock(DamageSource.class);
-        Mockito.when(source.getDamageType()).thenReturn(DamageType.PLAYER_ATTACK);
-        return source;
     }
 }

@@ -8,8 +8,6 @@ import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.identity.Identity;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.junit.jupiter.api.Assertions;
@@ -134,20 +132,6 @@ class VelocityCommunicationSubscriberTest {
         Assertions.assertEquals("custom original", payload.command());
     }
 
-    @Test
-    void testRegistrationConflictFails() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> VelocityChatSubscriber.register(api)
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:velocity_chat"));
-    }
-
     private static CommandExecuteEvent commandEvent(
         CommandSource source,
         String command,
@@ -167,9 +151,7 @@ class VelocityCommunicationSubscriberTest {
 
     private static KansokushaApi api() {
         var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.REGISTERED);
-        Mockito.when(api.submit(Mockito.any())).thenReturn(SubmissionOutcome.ACCEPTED);
+        Mockito.when(api.submit(Mockito.any())).thenReturn(true);
         return api;
     }
 

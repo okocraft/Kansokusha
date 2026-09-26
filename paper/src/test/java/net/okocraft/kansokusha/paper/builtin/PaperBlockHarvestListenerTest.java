@@ -6,8 +6,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import org.bukkit.Material;
@@ -165,19 +163,6 @@ class PaperBlockHarvestListenerTest {
         Assertions.assertTrue(handledEventTypes.contains(PlayerShearBlockEvent.class));
         Assertions.assertFalse(PlayerHarvestBlockEvent.class.isAssignableFrom(PlayerShearBlockEvent.class));
         Assertions.assertFalse(PlayerShearBlockEvent.class.isAssignableFrom(PlayerHarvestBlockEvent.class));
-    }
-
-    @Test
-    void testRegistrationConflictFails() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any())).thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> PaperBlockHarvestListener.register(api, SERVER_KEY)
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:block_harvest"));
     }
 
     @Test
@@ -340,14 +325,13 @@ class PaperBlockHarvestListenerTest {
         }
 
         @Override
-        public RegistrationOutcome registerEventType(EventTypeDefinition definition) {
-            return RegistrationOutcome.REGISTERED;
+        public void registerEventType(EventTypeDefinition definition) {
         }
 
         @Override
-        public SubmissionOutcome submit(EventSubmission submission) {
+        public boolean submit(EventSubmission submission) {
             this.submissions.add(submission);
-            return SubmissionOutcome.ACCEPTED;
+            return true;
         }
     }
 }

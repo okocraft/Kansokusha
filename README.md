@@ -43,10 +43,12 @@ the external API fixture, submits a fixture event through the public API, perfor
 normal proxy shutdown, then reopens the instance-local DuckDB file using the driver
 contained in the packaged artifact and verifies the flushed event.
 
-### Reload retention policies
+## Configuration
 
-Runtime retention reload semantics and platform adapter entry points are documented in
-`docs/configuration-reload.md`.
+`config.yml` is created in the plugin data directory on first start. It contains the
+retention periods recommended by `docs/v1-built-in-event-catalog.md`. Restart the server
+or proxy to apply changes. See `docs/design.md` for the recording pipeline and storage
+layout.
 
 ## License
 

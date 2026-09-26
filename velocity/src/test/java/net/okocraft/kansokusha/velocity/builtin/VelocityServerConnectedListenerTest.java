@@ -6,8 +6,6 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.RegistrationOutcome;
-import net.okocraft.kansokusha.api.SubmissionOutcome;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import org.junit.jupiter.api.Assertions;
@@ -85,7 +83,7 @@ class VelocityServerConnectedListenerTest {
     void testRejectedAdmissionDoesNotBlockOrThrow() {
         var api = api();
         Mockito.when(api.submit(Mockito.any()))
-            .thenReturn(SubmissionOutcome.INGESTION_UNAVAILABLE);
+            .thenReturn(false);
         var listener = VelocityServerConnectedListener.register(api, Mockito.mock(Logger.class));
 
         Assertions.assertDoesNotThrow(
@@ -109,25 +107,9 @@ class VelocityServerConnectedListenerTest {
             .warn(Mockito.anyString(), Mockito.eq("東京"));
     }
 
-    @Test
-    void testRegistrationConflictFails() {
-        var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.CONFLICT);
-
-        var failure = Assertions.assertThrows(
-            IllegalStateException.class,
-            () -> VelocityServerConnectedListener.register(api, Mockito.mock(Logger.class))
-        );
-
-        Assertions.assertTrue(failure.getMessage().contains("kansokusha:server_connected"));
-    }
-
     private static KansokushaApi api() {
         var api = Mockito.mock(KansokushaApi.class);
-        Mockito.when(api.registerEventType(Mockito.any()))
-            .thenReturn(RegistrationOutcome.REGISTERED);
-        Mockito.when(api.submit(Mockito.any())).thenReturn(SubmissionOutcome.ACCEPTED);
+        Mockito.when(api.submit(Mockito.any())).thenReturn(true);
         return api;
     }
 

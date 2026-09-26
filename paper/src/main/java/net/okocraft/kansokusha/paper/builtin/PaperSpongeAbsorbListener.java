@@ -10,6 +10,7 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.SpongeAbsorbEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -24,7 +25,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 
 @ApiStatus.Internal
 @NotNullByDefault
-public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
+public final class PaperSpongeAbsorbListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "sponge_absorb");
 
@@ -118,11 +119,6 @@ public final class PaperSpongeAbsorbListener implements PaperInFlightListener {
                 )
             ));
         }
-    }
-
-    @Override
-    public void clearInFlightState() {
-        this.inFlight.clear();
     }
 
     int inFlightCount() {
