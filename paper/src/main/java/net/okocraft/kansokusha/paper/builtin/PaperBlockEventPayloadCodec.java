@@ -10,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.Objects;
-import java.util.UUID;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -23,20 +22,12 @@ final class PaperBlockEventPayloadCodec {
         BlockData preState,
         String cause,
         @Nullable BlockPosition sourcePosition,
-        @Nullable BlockData sourceState,
-        @Nullable UUID entityId,
-        @Nullable String entityType
+        @Nullable BlockData sourceState
     ) {
         var payload = new CompoundTag();
         payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
         payload.putString("cause", Objects.requireNonNull(cause, "cause"));
         putSourceBlock(payload, sourcePosition, sourceState);
-        if (entityId != null) {
-            payload.putString("actor_entity_uuid", entityId.toString());
-        }
-        if (entityType != null) {
-            payload.putString("actor_entity_type", entityType);
-        }
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -119,22 +110,12 @@ final class PaperBlockEventPayloadCodec {
     static EventPayload encodeCauldronLevelChange(
         BlockData oldState,
         BlockData newState,
-        String reason,
-        String actorKind,
-        @Nullable UUID entityId,
-        @Nullable String entityType
+        String reason
     ) {
         var payload = new CompoundTag();
         payload.put("old_state", PaperBlockStatePayloadCodec.blockState(oldState));
         payload.put("new_state", PaperBlockStatePayloadCodec.blockState(newState));
         payload.putString("reason", Objects.requireNonNull(reason, "reason"));
-        payload.putString("actor_kind", Objects.requireNonNull(actorKind, "actorKind"));
-        if (entityId != null) {
-            payload.putString("actor_entity_uuid", entityId.toString());
-        }
-        if (entityType != null) {
-            payload.putString("actor_entity_type", entityType);
-        }
 
         return PaperPayloadNbtCodec.encode(payload);
     }
