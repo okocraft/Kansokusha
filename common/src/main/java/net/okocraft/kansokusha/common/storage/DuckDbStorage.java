@@ -89,7 +89,7 @@ public final class DuckDbStorage implements AutoCloseable {
                 }
 
                 appender.appendEpochMillis(queued.expiresAtMillis())
-                    .append(event.payload().copyBytes())
+                    .append(event.payload().unsafeBytes())
                     .endRow();
             }
             appender.flush();

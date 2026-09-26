@@ -9,7 +9,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -155,14 +154,12 @@ public final class VelocityPlayerSessionPayloadCodec {
                 e
             );
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     private static DataInputStream input(EventPayload payload) {
         return new DataInputStream(
-            new ByteArrayInputStream(
-                Objects.requireNonNull(payload, "payload").copyBytes()
-            )
+            Objects.requireNonNull(payload, "payload").openStream()
         );
     }
 

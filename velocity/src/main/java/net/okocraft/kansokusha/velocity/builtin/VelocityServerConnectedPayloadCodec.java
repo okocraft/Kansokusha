@@ -6,7 +6,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -34,13 +33,13 @@ public final class VelocityServerConnectedPayloadCodec {
         } catch (IOException e) {
             throw new AssertionError("Unexpected in-memory Velocity payload encoding failure.", e);
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     static Optional<Key> decode(EventPayload payload) throws IOException {
         try (
             var input = new DataInputStream(
-                new ByteArrayInputStream(payload.copyBytes())
+                payload.openStream()
             )
         ) {
             var length = input.readInt();
