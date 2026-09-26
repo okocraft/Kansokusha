@@ -2,43 +2,69 @@ package net.okocraft.kansokusha.common.id;
 
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 /**
  * Generates time-ordered UUID v7 values as defined by RFC 9562.
  */
 public final class TimeBasedUUID {
 
-    private static final AtomicLong LAST_V7_TIMESTAMP = new AtomicLong();
+    private static final Generator DEFAULT_GENERATOR = new Generator(
+        System::currentTimeMillis,
+        () -> ThreadLocalRandom.current().nextLong()
+    );
 
     public static UUID generate() {
-        long now = System.currentTimeMillis();
+        return DEFAULT_GENERATOR.generate();
+    }
 
-        while (true) {
-            long last = LAST_V7_TIMESTAMP.get();
-            long lastMillis = last >>> 12;
-            long lastSequence = last & 0xFFF;
+    static final class Generator {
 
-            long next;
-            if (now > lastMillis) {
-                next = now << 12;
-            } else if (lastSequence < 0xFFF) {
-                // Keep values ordered when multiple IDs are generated in one millisecond,
-                // or when the wall clock moves backwards.
-                next = last + 1;
+        private static final long RAND_B_MASK = 0x3FFFFFFFFFFFFFFFL;
+
+        private final LongSupplier clock;
+        private final LongSupplier random;
+
+        private long lastMillis = -1;
+        private int randA;
+        private long randB;
+
+        Generator(LongSupplier clock, LongSupplier random) {
+            this.clock = clock;
+            this.random = random;
+        }
+
+        synchronized UUID generate() {
+            var now = this.clock.getAsLong();
+            if (now > this.lastMillis) {
+                this.lastMillis = now;
+                this.randA = (int) (this.random.getAsLong() & 0xFFF);
+                this.randB = this.random.getAsLong() & RAND_B_MASK;
             } else {
-                do {
-                    now = System.currentTimeMillis();
-                } while (now <= lastMillis);
-                next = now << 12;
+                this.incrementRandom();
             }
 
-            if (LAST_V7_TIMESTAMP.compareAndSet(last, next)) {
-                long msb = ((next >>> 12) << 16) | 0x7000 | (next & 0xFFF);
-                long lsb = (ThreadLocalRandom.current().nextLong() & 0x3FFFFFFFFFFFFFFFL)
-                    | 0x8000000000000000L;
-                return new UUID(msb, lsb);
+            long msb = (this.lastMillis << 16) | 0x7000L | this.randA;
+            long lsb = 0x8000000000000000L | this.randB;
+            return new UUID(msb, lsb);
+        }
+
+        private void incrementRandom() {
+            if (this.randB < RAND_B_MASK) {
+                this.randB++;
+                return;
             }
+
+            this.randB = 0;
+            if (this.randA < 0xFFF) {
+                this.randA++;
+                return;
+            }
+
+            // Exhausting all 74 counter bits in one logical millisecond is not realistic, but
+            // advancing the logical timestamp is still safer than waiting for the wall clock.
+            this.randA = 0;
+            this.lastMillis++;
         }
     }
 
