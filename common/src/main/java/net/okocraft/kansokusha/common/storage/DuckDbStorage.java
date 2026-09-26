@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 
 /**
  * Resolves the platform-specific DuckDB JDBC artifact and loads the storage implementation
@@ -34,7 +35,7 @@ import java.util.Locale;
 @NotNullByDefault
 public final class DuckDbStorage {
 
-    private static final String DUCKDB_VERSION = "1.5.5.1";
+    private static final String DUCKDB_VERSION = loadDuckDbVersion();
     private static final String IMPLEMENTATION_CLASS =
         "net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl";
     private static final String IMPLEMENTATION_PACKAGE =
@@ -51,6 +52,26 @@ public final class DuckDbStorage {
         .build();
 
     private DuckDbStorage() {
+    }
+
+    private static String loadDuckDbVersion() {
+        try (var input = DuckDbStorage.class.getResourceAsStream(
+            "/META-INF/kansokusha/dependencies.properties"
+        )) {
+            if (input == null) {
+                throw new IllegalStateException("Missing Kansokusha dependency metadata.");
+            }
+
+            var properties = new Properties();
+            properties.load(input);
+            var version = properties.getProperty("duckdb-jdbc.version");
+            if (version == null || version.isBlank()) {
+                throw new IllegalStateException("Missing DuckDB JDBC version in dependency metadata.");
+            }
+            return version;
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read Kansokusha dependency metadata.", e);
+        }
     }
 
     public static Storage open(Path dataDirectory, Path filepath) throws IOException, SQLException {
