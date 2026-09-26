@@ -22,7 +22,6 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -320,7 +319,7 @@ public final class SearchQueryParser {
                 duration = duration.plus(part);
                 position = matcher.end();
             }
-        } catch (ArithmeticException e) {
+        } catch (NumberFormatException | ArithmeticException e) {
             throw error("relative duration is out of range: " + value, e);
         }
 
