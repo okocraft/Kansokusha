@@ -4,6 +4,7 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.Location;
@@ -74,6 +75,21 @@ class PaperPlayerSessionListenerTest {
         payload.putString("username", "TestPlayer");
         Assertions.assertEquals(payload, PaperPayloadNbtCodec.decode(submission.payload()));
         Assertions.assertEquals(List.of("TestPlayer"), List.copyOf(api.playerLoginNames));
+    }
+
+    @Test
+    void testJoinGenerationOneAcceptsLegacyPayloadWithoutUsername() throws Exception {
+        var legacyPayload = PaperPayloadNbtCodec.encode(new CompoundTag());
+
+        Assertions.assertNull(
+            PaperPlayerSessionPayloadCodec.decodeJoinUsername(legacyPayload)
+        );
+        Assertions.assertEquals(
+            "TestPlayer",
+            PaperPlayerSessionPayloadCodec.decodeJoinUsername(
+                PaperPlayerSessionPayloadCodec.encodeJoin("TestPlayer")
+            )
+        );
     }
 
     @Test
@@ -241,6 +257,7 @@ class PaperPlayerSessionListenerTest {
         BlockPosition position
     ) {
         Assertions.assertEquals(eventType, submission.eventType());
+        Assertions.assertEquals(PayloadGeneration.FIRST, submission.payloadGeneration());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
         Assertions.assertEquals(PaperBlockEventTestSupport.SERVER_KEY, submission.serverKey());
         Assertions.assertEquals(Key.key("example", "world"), submission.worldKey());
