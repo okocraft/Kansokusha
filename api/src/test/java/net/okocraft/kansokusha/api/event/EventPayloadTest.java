@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EventPayloadTest {
@@ -20,6 +22,24 @@ class EventPayloadTest {
 
         assertEquals(3, payload.size());
         assertArrayEquals(new byte[]{1, 2, 3}, payload.copyBytes());
+        assertNotSame(input, payload.unsafeBytes());
+    }
+
+    @Test
+    void testOwnedBytesAreNotCopied() {
+        byte[] input = {1, 2, 3};
+        EventPayload payload = EventPayload.takeOwnership(input);
+
+        assertSame(input, payload.unsafeBytes());
+    }
+
+    @Test
+    void testOpenStreamReadsPayloadWithoutExposingWritableBytes() throws Exception {
+        EventPayload payload = EventPayload.copyOf(new byte[]{1, 2, 3});
+
+        try (var input = payload.openStream()) {
+            assertArrayEquals(new byte[]{1, 2, 3}, input.readAllBytes());
+        }
     }
 
     @Test
@@ -29,6 +49,7 @@ class EventPayloadTest {
         assertEquals(0, empty.size());
         assertArrayEquals(new byte[0], empty.copyBytes());
         assertThrows(NullPointerException.class, () -> EventPayload.copyOf(null));
+        assertThrows(NullPointerException.class, () -> EventPayload.takeOwnership(null));
     }
 
     @Test
