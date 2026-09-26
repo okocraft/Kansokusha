@@ -205,7 +205,7 @@ class VelocityPlayerSessionListenerTest {
             player,
             source,
             null,
-            false,
+            true,
             KickedFromServerEvent.Notify.create(Component.text("notify message"))
         );
 
@@ -275,6 +275,36 @@ class VelocityPlayerSessionListenerTest {
         Assertions.assertEquals(
             Component.text("notify message"),
             notifyPayload.message()
+        );
+    }
+
+    @Test
+    void testNotifyOutsideServerConnectIsRecordedAsDisconnect() throws Exception {
+        var api = api();
+        var listener = listener(api);
+        var event = new KickedFromServerEvent(
+            player(),
+            server("Lobby"),
+            Component.text("backend kick"),
+            false,
+            KickedFromServerEvent.Notify.create(Component.text("disconnect message"))
+        );
+
+        listener.onKickedFromServer(event);
+
+        var submission = submission(api);
+        assertKickCommonFields(submission, "Lobby");
+        var payload = VelocityPlayerSessionPayloadCodec.decodeBackendKick(
+            submission.payload()
+        );
+        Assertions.assertFalse(payload.duringServerConnect());
+        Assertions.assertEquals(
+            VelocityPlayerSessionPayloadCodec.ProxyAction.DISCONNECT,
+            payload.action()
+        );
+        Assertions.assertEquals(
+            Component.text("disconnect message"),
+            payload.message()
         );
     }
 
