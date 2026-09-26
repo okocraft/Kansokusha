@@ -117,17 +117,93 @@ class KansokushaConfigTest {
             retention.policies().get(Key.key("kansokusha", "default"))
         );
         Assertions.assertEquals(
-            Key.key("kansokusha", "audit"),
-            retention.eventTypeMappings().get(Key.key("kansokusha", "block_break"))
+            Duration.ofDays(7),
+            retention.policies().get(Key.key("kansokusha", "short"))
         );
+
+        assertBuiltInMappings(
+            retention,
+            "audit",
+            "block_break",
+            "block_place",
+            "sign_change",
+            "bucket_empty",
+            "bucket_fill",
+            "block_harvest",
+            "flower_pot_change",
+            "block_ignite",
+            "tnt_prime",
+            "explosion_block_change",
+            "piston_move",
+            "entity_block_change",
+            "sponge_absorb",
+            "block_fertilize",
+            "cauldron_level_change",
+            "item_drop",
+            "item_pickup",
+            "book_edit",
+            "lectern_change",
+            "player_trade",
+            "player_gamemode_change",
+            "player_spawn_change",
+            "player_death",
+            "paper_player_command",
+            "paper_server_command",
+            "velocity_command",
+            "entity_place",
+            "armor_stand_manipulate",
+            "entity_leash_change",
+            "item_frame_change",
+            "entity_tame",
+            "entity_name_change",
+            "entity_break",
+            "gamerule_change",
+            "world_difficulty_change",
+            "world_border_change",
+            "world_spawn_change",
+            "whitelist_change",
+            "backend_registry_change"
+        );
+        assertBuiltInMappings(
+            retention,
+            "short",
+            "block_burn",
+            "natural_block_change",
+            "fluid_change",
+            "container_transfer",
+            "container_pickup",
+            "container_process"
+        );
+        assertBuiltInMappings(
+            retention,
+            "session",
+            "server_connected",
+            "paper_join",
+            "paper_quit",
+            "paper_kick",
+            "player_world_change",
+            "player_teleport",
+            "velocity_post_login",
+            "velocity_disconnect",
+            "backend_kick"
+        );
+        assertBuiltInMappings(
+            retention,
+            "default",
+            "paper_chat",
+            "velocity_chat"
+        );
+        Assertions.assertEquals(56, retention.eventTypeMappings().size());
         Assertions.assertEquals(
-            Key.key("kansokusha", "audit"),
-            retention.eventTypeMappings().get(Key.key("kansokusha", "block_place"))
+            Key.key("kansokusha", "short"),
+            retention.qualifiedEventTypeMappings().get(
+                new KansokushaConfig.QualifiedEventType(
+                    Key.key("kansokusha", "cauldron_level_change"),
+                    Key.key("kansokusha", "natural")
+                )
+            )
         );
-        Assertions.assertEquals(
-            Key.key("kansokusha", "session"),
-            retention.eventTypeMappings().get(Key.key("kansokusha", "server_connected"))
-        );
+        Assertions.assertEquals(1, retention.qualifiedEventTypeMappings().size());
         Assertions.assertEquals(
             Key.key("kansokusha", "default"),
             retention.fallbackPolicy()
@@ -185,6 +261,26 @@ class KansokushaConfigTest {
               fallback-policy: example:audit
             """;
         assertInvalid(dir.resolve("mapping"), duplicateMapping, "duplicate event type mapping");
+
+        var duplicateQualifiedMapping = """
+            retention:
+              policies:
+                - key: example:audit
+                  duration: PT1H
+              event-type-mappings:
+                - event-type: example:event
+                  qualifier: example:natural
+                  policy: example:audit
+                - event-type: example:event
+                  qualifier: example:natural
+                  policy: example:audit
+              fallback-policy: example:audit
+            """;
+        assertInvalid(
+            dir.resolve("qualified-mapping"),
+            duplicateQualifiedMapping,
+            "duplicate qualified event type mapping"
+        );
     }
 
     @Test
@@ -335,6 +431,22 @@ class KansokushaConfigTest {
         );
 
         assertInvalid(
+            dir.resolve("qualifier-key"),
+            """
+                retention:
+                  policies:
+                    - key: example:audit
+                      duration: PT1H
+                  event-type-mappings:
+                    - event-type: example:event
+                      qualifier: Invalid Key
+                      policy: example:audit
+                  fallback-policy: example:audit
+                """,
+            "retention.event-type-mappings[0].qualifier"
+        );
+
+        assertInvalid(
             dir.resolve("implicit-namespace"),
             """
                 retention:
@@ -370,6 +482,21 @@ class KansokushaConfigTest {
             validConfig("PT1000000000000000H", "example:fallback"),
             "millisecond range"
         );
+    }
+
+    private static void assertBuiltInMappings(
+        KansokushaConfig.RetentionSettings retention,
+        String policy,
+        String... eventTypes
+    ) {
+        var expectedPolicy = Key.key("kansokusha", policy);
+        for (var eventType : eventTypes) {
+            Assertions.assertEquals(
+                expectedPolicy,
+                retention.eventTypeMappings().get(Key.key("kansokusha", eventType)),
+                () -> "Unexpected retention mapping for kansokusha:" + eventType
+            );
+        }
     }
 
     private static String ingestionConfig(String queueCapacity, String maxBatchSize, String maxBatchDelay) {
