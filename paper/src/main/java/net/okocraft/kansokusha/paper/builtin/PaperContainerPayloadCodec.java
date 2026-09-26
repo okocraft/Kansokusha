@@ -168,7 +168,6 @@ final class PaperContainerPayloadCodec {
 
     static EventPayload encodeProcess(
         String processKind,
-        String sourceEvent,
         InventorySnapshot container,
         ListTag inputItems,
         CompoundTag ingredient,
@@ -177,7 +176,6 @@ final class PaperContainerPayloadCodec {
     ) {
         var payload = new CompoundTag();
         payload.putString("process_kind", processKind);
-        payload.putString("source_event", sourceEvent);
         payload.put("container", container.payload());
         payload.put("input_items", inputItems);
         payload.put("ingredient", ingredient);
