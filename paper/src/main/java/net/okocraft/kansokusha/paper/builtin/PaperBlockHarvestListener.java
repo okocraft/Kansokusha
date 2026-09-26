@@ -6,12 +6,10 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -20,7 +18,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 @ApiStatus.Internal
@@ -32,7 +29,6 @@ public final class PaperBlockHarvestListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<Event, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperBlockHarvestListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -49,12 +45,11 @@ public final class PaperBlockHarvestListener implements Listener {
         return new PaperBlockHarvestListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureHarvest(PlayerHarvestBlockEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordHarvest(PlayerHarvestBlockEvent event) {
         Objects.requireNonNull(event, "event");
         var block = event.getHarvestedBlock();
-        this.capture(
-            event,
+        this.submit(
             block,
             event.getPlayer(),
             PaperAdditionalBuiltInPayloadCodec.encodeHarvest(
@@ -65,12 +60,11 @@ public final class PaperBlockHarvestListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureShear(PlayerShearBlockEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordShear(PlayerShearBlockEvent event) {
         Objects.requireNonNull(event, "event");
         var block = event.getBlock();
-        this.capture(
-            event,
+        this.submit(
             block,
             event.getPlayer(),
             PaperAdditionalBuiltInPayloadCodec.encodeShear(
@@ -82,62 +76,18 @@ public final class PaperBlockHarvestListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeHarvest(PlayerHarvestBlockEvent event) {
-        this.finalizeEvent(event, event.isCancelled());
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeShear(PlayerShearBlockEvent event) {
-        this.finalizeEvent(event, event.isCancelled());
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private void capture(Event event, Block block, Player player, EventPayload payload) {
-        var snapshot = new Snapshot(
-            Instant.now(this.clock),
-            this.serverKey,
-            PaperKansokusha.key(block.getWorld().getKey()),
-            new BlockPosition(block.getX(), block.getY(), block.getZ()),
-            new PlayerSubject(player.getUniqueId()),
-            payload
-        );
-        this.inFlight.put(event, snapshot);
-    }
-
-    private void finalizeEvent(Event event, boolean cancelled) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || cancelled) {
-            return;
-        }
-
+    private void submit(Block block, Player player, EventPayload payload) {
         this.api.submit(
             new EventSubmission(
                 EVENT_TYPE,
                 PayloadGeneration.FIRST,
-                snapshot.occurredAt(),
-                snapshot.serverKey(),
-                snapshot.worldKey(),
-                snapshot.position(),
-                snapshot.subject(),
-                snapshot.payload()
+                this.clock.instant(),
+                this.serverKey,
+                PaperKansokusha.key(block.getWorld().getKey()),
+                PaperBuiltInSupport.position(block),
+                new PlayerSubject(player.getUniqueId()),
+                payload
             )
         );
-    }
-
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        PlayerSubject subject,
-        EventPayload payload
-    ) {
     }
 }

@@ -42,8 +42,7 @@ class PaperEntityBreakListenerTest {
         Mockito.when(event.getCause()).thenReturn(HangingBreakEvent.RemoveCause.EXPLOSION);
         Mockito.when(event.getDamageSource()).thenReturn(source);
 
-        listener.captureHanging(event);
-        listener.finalizeHanging(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         Assertions.assertEquals(new PlayerSubject(BREAKER_ID), submission.subject());
@@ -79,11 +78,9 @@ class PaperEntityBreakListenerTest {
         Mockito.when(hanging.getDamageSource()).thenReturn(hangingSource);
         Mockito.when(hanging.isCancelled()).thenReturn(true);
 
-        listener.captureHanging(hanging);
-        listener.finalizeHanging(hanging);
+        PaperListenerTestSupport.fire(listener, hanging);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperEntityBreakListener listener(PaperBlockEventTestSupport.RecordingApi api) {

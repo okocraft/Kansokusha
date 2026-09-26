@@ -21,6 +21,7 @@ public final class PaperBuiltInListeners {
         PaperBucketListener::register,
         PaperBlockHarvestListener::register,
         PaperFlowerPotChangeListener::register,
+        PaperPlayerItemAuditListener::register,
         PaperBlockIgniteListener::register,
         PaperBlockBurnListener::register,
         PaperTntPrimeListener::register,

@@ -87,8 +87,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         int clickedY,
         int clickedZ,
         CompoundTag preState,
-        CompoundTag initialResultItem,
-        CompoundTag finalResultItem
+        CompoundTag resultItem
     ) {
         var payload = new CompoundTag();
         payload.putString("operation", Objects.requireNonNull(operation, "operation"));
@@ -99,8 +98,7 @@ public final class PaperAdditionalBuiltInPayloadCodec {
         payload.putInt("clicked_y", clickedY);
         payload.putInt("clicked_z", clickedZ);
         payload.put("pre_state", preState);
-        payload.put("initial_result_item", initialResultItem);
-        payload.put("final_result_item", finalResultItem);
+        payload.put("result_item", resultItem);
         return PaperPayloadNbtCodec.encode(payload);
     }
 

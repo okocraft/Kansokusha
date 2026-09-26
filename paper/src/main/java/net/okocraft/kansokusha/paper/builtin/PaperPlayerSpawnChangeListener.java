@@ -13,7 +13,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -33,8 +32,6 @@ public final class PaperPlayerSpawnChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<PlayerSetSpawnEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperPlayerSpawnChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -55,55 +52,29 @@ public final class PaperPlayerSpawnChangeListener implements Listener {
         return new PaperPlayerSpawnChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(PlayerSetSpawnEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(PlayerSetSpawnEvent event) {
         Objects.requireNonNull(event, "event");
+
         var player = event.getPlayer();
-        this.inFlight.put(event, new Snapshot(
-            this.clock.instant(),
-            new PlayerSubject(player.getUniqueId()),
-            PaperPlayerStatePayloadCodec.snapshotOptionalLocation(player.getRespawnLocation()),
-            PaperPlayerStatePayloadCodec.enumName(event.getCause())
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(PlayerSetSpawnEvent event) {
-        Objects.requireNonNull(event, "event");
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
+        var before = PaperPlayerStatePayloadCodec.snapshotOptionalLocation(player.getRespawnLocation());
         var after = PaperPlayerStatePayloadCodec.snapshotOptionalLocation(event.getLocation());
-        var common = after != null ? after : snapshot.before();
+        var common = after != null ? after : before;
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
             common == null ? null : common.worldKey(),
             common == null ? null : common.blockPosition(),
-            snapshot.subject(),
+            new PlayerSubject(player.getUniqueId()),
             PaperPlayerStatePayloadCodec.encodeSpawnChange(
-                snapshot.before(),
+                before,
                 after,
                 event.isForced(),
-                snapshot.cause(),
+                PaperPlayerStatePayloadCodec.enumName(event.getCause()),
                 "player_set_spawn"
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        PlayerSubject subject,
-        PaperPlayerStatePayloadCodec.LocationSnapshot before,
-        String cause
-    ) {
     }
 }

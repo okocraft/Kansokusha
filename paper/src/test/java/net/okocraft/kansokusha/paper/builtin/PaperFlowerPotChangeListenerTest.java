@@ -21,13 +21,10 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperFlowerPotChangeListenerTest {
 
@@ -50,12 +47,8 @@ class PaperFlowerPotChangeListenerTest {
         var removeItem = ItemStack.of(Material.DANDELION, 1);
         var remove = event(20, removeItem, false, false);
 
-        listener.capture(insert.event());
-        insertItem.setAmount(32);
-        listener.finalizeEvent(insert.event());
-        listener.capture(remove.event());
-        removeItem.setAmount(2);
-        listener.finalizeEvent(remove.event());
+        PaperListenerTestSupport.fire(listener, insert.event());
+        PaperListenerTestSupport.fire(listener, remove.event());
 
         var byX = submissionsByX(api);
         var insertPayload = PaperPayloadNbtCodec.decode(byX.get(10).payload());
@@ -86,7 +79,6 @@ class PaperFlowerPotChangeListenerTest {
                 removePayload.getCompoundOrEmpty("after")
             ).isEmpty()
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -95,53 +87,9 @@ class PaperFlowerPotChangeListenerTest {
         var listener = listener(api);
         var fixture = event(1, ItemStack.of(Material.POPPY, 1), true, true);
 
-        listener.capture(fixture.event());
-        listener.finalizeEvent(fixture.event());
+        PaperListenerTestSupport.fire(listener, fixture.event());
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testConcurrentFoliaStyleFlowerPotEventsDoNotCrossSnapshots() throws Exception {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixtures = new ArrayList<Fixture>();
-        for (int i = 0; i < 32; i++) {
-            fixtures.add(event(
-                1000 + i,
-                ItemStack.of((i & 1) == 0 ? Material.POPPY : Material.DANDELION, 1),
-                (i & 1) == 0,
-                false
-            ));
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.capture(f.event())))
-                .toList();
-            for (var task : captures) {
-                task.get();
-            }
-            var finalizers = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.finalizeEvent(f.event())))
-                .toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        var byX = submissionsByX(api);
-        Assertions.assertEquals(fixtures.size(), byX.size());
-        for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperPayloadNbtCodec.decode(byX.get(1000 + i).payload());
-            Assertions.assertEquals((i & 1) == 0 ? "insert" : "remove", string(payload, "action"));
-        }
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperFlowerPotChangeListener listener(RecordingApi api) {

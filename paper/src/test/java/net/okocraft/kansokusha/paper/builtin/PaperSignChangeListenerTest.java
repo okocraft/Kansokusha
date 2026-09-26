@@ -22,13 +22,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperSignChangeListenerTest {
 
@@ -38,7 +35,7 @@ class PaperSignChangeListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
 
     @Test
-    void testNonCancelledSignChangeUsesLowestBeforeAndMonitorFinalLines() throws Exception {
+    void testNonCancelledSignChangeSubmitsBeforeAndAfterLines() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
         var before = new ArrayList<Component>(List.of(
@@ -55,10 +52,7 @@ class PaperSignChangeListenerTest {
         ));
         var fixture = event(12, before, after, false);
 
-        listener.capture(fixture.event());
-        before.set(0, Component.text("mutated-live-sign"));
-        after.set(0, Component.text("final-plugin-value"));
-        listener.finalizeEvent(fixture.event());
+        PaperListenerTestSupport.fire(listener, fixture.event());
 
         var submission = onlySubmission(api);
         Assertions.assertEquals(PaperSignChangeListener.EVENT_TYPE, submission.eventType());
@@ -71,15 +65,13 @@ class PaperSignChangeListenerTest {
             decodedLine(payload, "before", 0)
         );
         Assertions.assertEquals(
-            Component.text("final-plugin-value"),
+            Component.text("draft-0"),
             decodedLine(payload, "after", 0)
         );
-        Assertions.assertEquals(0, listener.inFlightCount());
-        Mockito.verify(fixture.block(), Mockito.times(1)).getState();
     }
 
     @Test
-    void testCancelledSignChangeDropsSnapshot() {
+    void testCancelledSignChangeIsNotSubmitted() {
         var api = new RecordingApi();
         var listener = listener(api);
         var fixture = event(
@@ -89,61 +81,9 @@ class PaperSignChangeListenerTest {
             true
         );
 
-        listener.capture(fixture.event());
-        listener.finalizeEvent(fixture.event());
+        PaperListenerTestSupport.fire(listener, fixture.event());
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-    }
-
-    @Test
-    void testConcurrentFoliaStyleEventsDoNotCrossSnapshots() throws Exception {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixtures = new ArrayList<Fixture>();
-        for (int i = 0; i < 32; i++) {
-            fixtures.add(event(
-                1000 + i,
-                new ArrayList<>(fourLines("before-" + i)),
-                new ArrayList<>(fourLines("after-" + i)),
-                false
-            ));
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.capture(f.event())))
-                .toList();
-            for (var task : captures) {
-                task.get();
-            }
-            var finalizers = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.finalizeEvent(f.event())))
-                .toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        var byX = new HashMap<Integer, EventSubmission>();
-        for (var submission : api.submissions) {
-            Assertions.assertNull(byX.put(submission.position().x(), submission));
-        }
-        Assertions.assertEquals(fixtures.size(), byX.size());
-        for (int i = 0; i < fixtures.size(); i++) {
-            var payload = PaperPayloadNbtCodec.decode(
-                byX.get(1000 + i).payload()
-            );
-            Assertions.assertEquals(
-                Component.text("before-" + i + "-0"),
-                decodedLine(payload, "before", 0)
-            );
-        }
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperSignChangeListener listener(RecordingApi api) {

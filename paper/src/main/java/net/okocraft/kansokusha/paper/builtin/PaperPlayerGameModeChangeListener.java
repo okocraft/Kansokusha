@@ -5,7 +5,6 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import org.bukkit.GameMode;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -14,7 +13,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 /** Records an accepted old-to-new game-mode state transition. */
@@ -27,8 +25,6 @@ public final class PaperPlayerGameModeChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<PlayerGameModeChangeEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperPlayerGameModeChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -49,59 +45,31 @@ public final class PaperPlayerGameModeChangeListener implements Listener {
         return new PaperPlayerGameModeChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(PlayerGameModeChangeEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(PlayerGameModeChangeEvent event) {
         Objects.requireNonNull(event, "event");
+
         var player = event.getPlayer();
-        this.inFlight.put(event, new Snapshot(
-            this.clock.instant(),
-            new PlayerSubject(player.getUniqueId()),
-            PaperPlayerStatePayloadCodec.snapshotLocation(player.getLocation()),
-            player.getGameMode(),
-            event.getNewGameMode(),
-            PaperPlayerStatePayloadCodec.enumName(event.getCause())
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(PlayerGameModeChangeEvent event) {
-        Objects.requireNonNull(event, "event");
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
+        var oldMode = player.getGameMode();
+        var newMode = event.getNewGameMode();
+        if (oldMode == newMode) {
             return;
         }
 
-        var finalMode = event.getNewGameMode();
-        if (snapshot.oldMode() == finalMode) {
-            return;
-        }
+        var location = PaperPlayerStatePayloadCodec.snapshotLocation(player.getLocation());
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
-            snapshot.location().worldKey(),
-            snapshot.location().blockPosition(),
-            snapshot.subject(),
+            location.worldKey(),
+            location.blockPosition(),
+            new PlayerSubject(player.getUniqueId()),
             PaperPlayerStatePayloadCodec.encodeGameModeChange(
-                PaperPlayerStatePayloadCodec.enumName(snapshot.oldMode()),
-                PaperPlayerStatePayloadCodec.enumName(finalMode),
-                snapshot.cause()
+                PaperPlayerStatePayloadCodec.enumName(oldMode),
+                PaperPlayerStatePayloadCodec.enumName(newMode),
+                PaperPlayerStatePayloadCodec.enumName(event.getCause())
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        PlayerSubject subject,
-        PaperPlayerStatePayloadCodec.LocationSnapshot location,
-        GameMode oldMode,
-        GameMode initialNewMode,
-        String cause
-    ) {
     }
 }

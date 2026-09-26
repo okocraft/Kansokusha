@@ -12,10 +12,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 /** Records established Paper world difficulty state changes. */
@@ -28,8 +26,6 @@ public final class PaperWorldDifficultyChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<WorldDifficultyChangeEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperWorldDifficultyChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -50,60 +46,31 @@ public final class PaperWorldDifficultyChangeListener implements Listener {
         return new PaperWorldDifficultyChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(WorldDifficultyChangeEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(WorldDifficultyChangeEvent event) {
         Objects.requireNonNull(event, "event");
 
         var world = event.getWorld();
-        this.inFlight.put(event, new Snapshot(
-            this.clock.instant(),
-            PaperKansokusha.key(world.getKey()),
-            world.getDifficulty(),
-            world.isHardcore(),
-            PaperAdministrativeSource.snapshot(event.getCommandSource())
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(WorldDifficultyChangeEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null) {
+        var before = world.getDifficulty();
+        var after = world.isHardcore() ? Difficulty.HARD : event.getDifficulty();
+        if (before == after) {
             return;
         }
 
-        var after = snapshot.hardcore() ? Difficulty.HARD : event.getDifficulty();
-        if (snapshot.before() == after) {
-            return;
-        }
-
+        var source = PaperAdministrativeSource.snapshot(event.getCommandSource());
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
-            snapshot.worldKey(),
+            PaperKansokusha.key(world.getKey()),
             null,
-            PaperAdministrativeSource.subject(snapshot.source()),
+            PaperAdministrativeSource.subject(source),
             PaperAdministrativePayloadCodec.encodeDifficultyChange(
-                PaperAdministrativePayloadCodec.enumName(snapshot.before()),
+                PaperAdministrativePayloadCodec.enumName(before),
                 PaperAdministrativePayloadCodec.enumName(after),
-                snapshot.source()
+                source
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key worldKey,
-        Difficulty before,
-        boolean hardcore,
-        @Nullable PaperAdministrativeSource.Snapshot source
-    ) {
     }
 }

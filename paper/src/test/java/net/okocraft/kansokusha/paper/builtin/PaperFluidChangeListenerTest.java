@@ -45,11 +45,7 @@ class PaperFluidChangeListenerTest {
         Mockito.when(event.getBlock()).thenReturn(source);
         Mockito.when(event.getToBlock()).thenReturn(destination);
 
-        listener.capture(event);
-        Mockito.when(source.getBlockState()).thenReturn(Blocks.LAVA.defaultBlockState());
-        Mockito.when(source.getX()).thenReturn(1000);
-        Mockito.when(destination.getX()).thenReturn(2000);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperFluidChangeListener.EVENT_TYPE, submission.eventType());
@@ -95,8 +91,7 @@ class PaperFluidChangeListenerTest {
         Mockito.when(event.getBlock()).thenReturn(source);
         Mockito.when(event.getToBlock()).thenReturn(destination);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = api.submissions.remove();
         var payload = PaperPayloadNbtCodec.decode(submission.payload());
@@ -120,8 +115,7 @@ class PaperFluidChangeListenerTest {
         Mockito.when(event.getBlock()).thenReturn(source);
         Mockito.when(event.getToBlock()).thenReturn(destination);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
     }
@@ -142,19 +136,16 @@ class PaperFluidChangeListenerTest {
         Mockito.when(cancelled.getBlock()).thenReturn(cancelledSource);
         Mockito.when(cancelled.getToBlock()).thenReturn(cancelledDestination);
         Mockito.when(cancelled.isCancelled()).thenReturn(true);
-        listener.capture(cancelled);
-        listener.finalizeEvent(cancelled);
+        PaperListenerTestSupport.fire(listener, cancelled);
 
         var dragonEggBlock = craftBlock(
             world, 4, 5, 6, Blocks.DRAGON_EGG.defaultBlockState(), Material.DRAGON_EGG
         );
         var dragonEgg = Mockito.mock(BlockFromToEvent.class);
         Mockito.when(dragonEgg.getBlock()).thenReturn(dragonEggBlock);
-        listener.capture(dragonEgg);
-        listener.finalizeEvent(dragonEgg);
+        PaperListenerTestSupport.fire(listener, dragonEgg);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(dragonEgg, Mockito.never()).getToBlock();
     }
 

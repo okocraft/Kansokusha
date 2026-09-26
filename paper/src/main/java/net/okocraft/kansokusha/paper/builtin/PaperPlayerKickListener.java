@@ -56,10 +56,6 @@ public final class PaperPlayerKickListener implements Listener {
     public void record(PlayerKickEvent event) {
         Objects.requireNonNull(event, "event");
 
-        if (event.isCancelled()) {
-            return;
-        }
-
         var player = event.getPlayer();
         var location = player.getLocation();
         var world = Objects.requireNonNull(location.getWorld(), "player.location.world");

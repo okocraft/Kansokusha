@@ -63,8 +63,7 @@ class PaperPlayerStateListenerTest {
         var player = player(toWorld, 30.5, 80.25, 40.75);
 
         var teleportEvent = teleportEvent(player, from, to, Set.of());
-        teleport.capture(teleportEvent);
-        teleport.finalizeEvent(teleportEvent);
+        PaperListenerTestSupport.fire(teleport, teleportEvent);
 
         var worldEvent = Mockito.mock(PlayerChangedWorldEvent.class);
         Mockito.when(worldEvent.getPlayer()).thenReturn(player);
@@ -91,26 +90,22 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testTeleportSnapshotsSourceAndStoresFinalDestinationCauseAndRelativeFlags() throws Exception {
+    void testTeleportRecordsSourceDestinationCauseAndRelativeFlags() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = teleportListener(api);
         var from = new Location(world("from"), 1.125, 64.5, 2.875, 10, 20);
-        var initialTo = new Location(world("initial"), 5.25, 70.5, 6.75, 30, 40);
-        var finalTo = new Location(world("final"), -10.125, 90.875, 20.5, 50, 60);
+        var to = new Location(world("final"), -10.125, 90.875, 20.5, 50, 60);
         var flag = TeleportFlag.Relative.values()[0];
-        var player = player(initialTo.getWorld(), 5.25, 70.5, 6.75);
+        var player = player(from.getWorld(), 1.125, 64.5, 2.875);
         var event = Mockito.mock(PlayerTeleportEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
         Mockito.when(event.getFrom()).thenReturn(from);
-        Mockito.when(event.getTo()).thenReturn(initialTo, finalTo);
+        Mockito.when(event.getTo()).thenReturn(to);
         Mockito.when(event.getCause()).thenReturn(PlayerTeleportEvent.TeleportCause.COMMAND);
         Mockito.when(event.getRelativeTeleportationFlags()).thenReturn(Set.of(flag));
         Mockito.when(event.isCancelled()).thenReturn(false);
 
-        listener.capture(event);
-        from.setX(999);
-        initialTo.setX(999);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -128,7 +123,6 @@ class PaperPlayerStateListenerTest {
         flags.putBoolean(flag.name().toLowerCase(Locale.ROOT), true);
         expected.put("relative_flags", flags);
         Assertions.assertEquals(expected, PaperPayloadNbtCodec.decode(submission.payload()));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -144,11 +138,9 @@ class PaperPlayerStateListenerTest {
         );
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -157,14 +149,11 @@ class PaperPlayerStateListenerTest {
         var listener = teleportListener(api);
         var portal = Mockito.mock(PlayerPortalEvent.class);
 
-        listener.capture(portal);
-        listener.finalizeEvent(portal);
+        PaperListenerTestSupport.fire(listener, portal);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(portal, Mockito.never()).getPlayer();
         Mockito.verify(portal, Mockito.never()).getTo();
-        Mockito.verify(portal, Mockito.never()).isCancelled();
 
         var from = new Location(world("from"), 8.5, 64, 8.5);
         var destination = new Location(world("nether"), 1.5, 70, 1.5);
@@ -177,8 +166,7 @@ class PaperPlayerStateListenerTest {
         Mockito.when(finalTeleport.getCause())
             .thenReturn(PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
 
-        listener.capture(finalTeleport);
-        listener.finalizeEvent(finalTeleport);
+        PaperListenerTestSupport.fire(listener, finalTeleport);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -192,7 +180,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testGameModeRecordsEstablishedOldToFinalNewState() throws Exception {
+    void testGameModeRecordsOldAndNewState() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerGameModeChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -204,13 +192,11 @@ class PaperPlayerStateListenerTest {
         Mockito.when(player.getGameMode()).thenReturn(GameMode.SURVIVAL);
         var event = Mockito.mock(PlayerGameModeChangeEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getNewGameMode()).thenReturn(GameMode.CREATIVE, GameMode.SPECTATOR);
+        Mockito.when(event.getNewGameMode()).thenReturn(GameMode.SPECTATOR);
         Mockito.when(event.getCause()).thenReturn(PlayerGameModeChangeEvent.Cause.COMMAND);
         Mockito.when(event.isCancelled()).thenReturn(false);
 
-        listener.capture(event);
-        capturedLocation.setX(99);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -239,37 +225,29 @@ class PaperPlayerStateListenerTest {
         Mockito.when(event.getCause()).thenReturn(PlayerGameModeChangeEvent.Cause.PLUGIN);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
-    void testSpawnChangeUsesFinalPlayerSetSpawnValuesBeforeStateApplication() throws Exception {
+    void testSpawnChangeRecordsCurrentAndNewRespawnLocation() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
         );
         var oldSpawn = new Location(world("old_spawn"), 10.5, 65, 20.5, 15, 0);
-        var initialSpawn = new Location(world("initial_spawn"), 30.25, 70, 40.75, 45, 0);
         var finalSpawn = new Location(world("final_spawn"), 50.5, 80.25, 60.125, 90, 0);
         var player = player(world("current"), 0, 64, 0);
         Mockito.when(player.getRespawnLocation()).thenReturn(oldSpawn);
         var setEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(setEvent.getPlayer()).thenReturn(player);
-        Mockito.when(setEvent.getLocation()).thenReturn(initialSpawn);
-        Mockito.when(setEvent.isForced()).thenReturn(false);
+        Mockito.when(setEvent.getLocation()).thenReturn(finalSpawn);
+        Mockito.when(setEvent.isForced()).thenReturn(true);
         Mockito.when(setEvent.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.BED);
         Mockito.when(setEvent.isCancelled()).thenReturn(false);
 
-        listener.capture(setEvent);
-        oldSpawn.setX(999);
-        initialSpawn.setX(999);
-        Mockito.when(setEvent.getLocation()).thenReturn(finalSpawn);
-        Mockito.when(setEvent.isForced()).thenReturn(true);
-        listener.finalizeEvent(setEvent);
+        PaperListenerTestSupport.fire(listener, setEvent);
 
         var setSubmission = onlySubmission(api);
         assertCommon(
@@ -302,8 +280,7 @@ class PaperPlayerStateListenerTest {
         Mockito.when(clearEvent.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
         Mockito.when(clearEvent.isCancelled()).thenReturn(false);
 
-        listener.capture(clearEvent);
-        listener.finalizeEvent(clearEvent);
+        PaperListenerTestSupport.fire(listener, clearEvent);
 
         var clearSubmission = onlySubmission(api);
         Assertions.assertEquals(Key.key("example", "final_spawn"), clearSubmission.worldKey());
@@ -313,7 +290,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledFinalPlayerSetSpawnIsNotRecorded() throws Exception {
+    void testCancelledPlayerSetSpawnIsNotRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -328,11 +305,9 @@ class PaperPlayerStateListenerTest {
         Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -367,9 +342,7 @@ class PaperPlayerStateListenerTest {
         Mockito.when(event.getKeepInventory()).thenReturn(true);
         Mockito.when(event.getKeepLevel()).thenReturn(false);
 
-        listener.capture(event);
-        location.setX(999);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         var submission = onlySubmission(api);
         assertCommon(
@@ -391,7 +364,6 @@ class PaperPlayerStateListenerTest {
         );
         Assertions.assertEquals("fall", payload.getString("last_damage_cause").orElseThrow());
         Mockito.verify(event, Mockito.never()).getDrops();
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -407,11 +379,9 @@ class PaperPlayerStateListenerTest {
         Mockito.when(event.getDamageSource()).thenReturn(source);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperPlayerTeleportListener teleportListener(

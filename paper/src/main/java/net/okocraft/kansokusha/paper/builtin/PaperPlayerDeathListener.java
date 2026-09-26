@@ -11,10 +11,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -29,7 +27,6 @@ public final class PaperPlayerDeathListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<PlayerDeathEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperPlayerDeathListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -46,44 +43,29 @@ public final class PaperPlayerDeathListener implements Listener {
         return new PaperPlayerDeathListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(PlayerDeathEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(PlayerDeathEvent event) {
         Objects.requireNonNull(event, "event");
+
         var player = event.getPlayer();
+        var location = PaperPlayerStatePayloadCodec.snapshotLocation(player.getLocation());
         var damageEvent = player.getLastDamageCause();
-        this.inFlight.put(event, new Snapshot(
-            this.clock.instant(),
-            new PlayerSubject(player.getUniqueId()),
-            PaperPlayerStatePayloadCodec.snapshotLocation(player.getLocation()),
-            PaperPlayerStatePayloadCodec.snapshotKiller(
-                event.getDamageSource().getCausingEntity()
-            ),
-            damageEvent == null
-                ? null
-                : PaperPlayerStatePayloadCodec.enumName(damageEvent.getCause())
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(PlayerDeathEvent event) {
-        Objects.requireNonNull(event, "event");
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
-            snapshot.location().worldKey(),
-            snapshot.location().blockPosition(),
-            snapshot.subject(),
+            location.worldKey(),
+            location.blockPosition(),
+            new PlayerSubject(player.getUniqueId()),
             PaperPlayerStatePayloadCodec.encodeDeath(
                 event.deathMessage(),
-                snapshot.killer(),
-                snapshot.lastDamageCause(),
+                PaperPlayerStatePayloadCodec.snapshotKiller(
+                    event.getDamageSource().getCausingEntity()
+                ),
+                damageEvent == null
+                    ? null
+                    : PaperPlayerStatePayloadCodec.enumName(damageEvent.getCause()),
                 event.getDroppedExp(),
                 event.getNewExp(),
                 event.getNewTotalExp(),
@@ -92,18 +74,5 @@ public final class PaperPlayerDeathListener implements Listener {
                 event.getKeepLevel()
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        PlayerSubject subject,
-        PaperPlayerStatePayloadCodec.LocationSnapshot location,
-        @Nullable PaperPlayerStatePayloadCodec.KillerSnapshot killer,
-        @Nullable String lastDamageCause
-    ) {
     }
 }

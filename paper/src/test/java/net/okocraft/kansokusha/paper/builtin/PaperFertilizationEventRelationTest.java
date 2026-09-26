@@ -115,15 +115,13 @@ class PaperFertilizationEventRelationTest {
         Mockito.when(fertilize.getBlocks()).thenReturn(changedStates);
 
         natural.capture(fertilize);
-        fertilizeListener.capture(fertilize);
         changedStates.remove(grownState);
         natural.discardFertilizedChanges(fertilize);
-        fertilizeListener.finalizeEvent(fertilize);
+        PaperListenerTestSupport.fire(fertilizeListener, fertilize);
         deferred.remove().run();
 
         Assertions.assertTrue(api.submissions.isEmpty());
         Assertions.assertEquals(0, natural.inFlightCount());
-        Assertions.assertEquals(0, fertilizeListener.inFlightCount());
     }
 
     @Test

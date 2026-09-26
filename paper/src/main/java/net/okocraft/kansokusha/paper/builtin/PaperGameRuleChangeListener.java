@@ -6,16 +6,13 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
-import org.bukkit.GameRule;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 /** Records accepted Paper world gamerule state changes. */
@@ -28,8 +25,6 @@ public final class PaperGameRuleChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<WorldGameRuleChangeEvent, Snapshot> inFlight =
-        new PaperInFlightMap<>();
 
     private PaperGameRuleChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -50,56 +45,35 @@ public final class PaperGameRuleChangeListener implements Listener {
         return new PaperGameRuleChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(WorldGameRuleChangeEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(WorldGameRuleChangeEvent event) {
         Objects.requireNonNull(event, "event");
 
         var world = event.getWorld();
         var gameRule = event.getGameRule();
         var valueType = gameRule.getType();
-        this.inFlight.put(event, new Snapshot(
-            this.clock.instant(),
-            PaperKansokusha.key(world.getKey()),
-            PaperKansokusha.key(gameRule.getKey()).asString(),
-            valueType,
-            currentValue(valueType, world.getGameRuleValue(gameRule)),
-            PaperAdministrativeSource.snapshot(event.getCommandSender())
-        ));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(WorldGameRuleChangeEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
+        var before = currentValue(valueType, world.getGameRuleValue(gameRule));
+        var after = canonicalValue(valueType, event.getValue());
+        if (before.equals(after)) {
             return;
         }
 
-        var after = canonicalValue(snapshot.valueType(), event.getValue());
-        if (snapshot.before().equals(after)) {
-            return;
-        }
-
+        var source = PaperAdministrativeSource.snapshot(event.getCommandSender());
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
-            snapshot.worldKey(),
+            PaperKansokusha.key(world.getKey()),
             null,
-            PaperAdministrativeSource.subject(snapshot.source()),
+            PaperAdministrativeSource.subject(source),
             PaperAdministrativePayloadCodec.encodeGameRuleChange(
-                snapshot.gameRule(),
-                snapshot.before(),
+                PaperKansokusha.key(gameRule.getKey()).asString(),
+                before,
                 after,
-                snapshot.source()
+                source
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
     }
 
     private static String currentValue(Class<?> valueType, Object value) {
@@ -126,15 +100,5 @@ public final class PaperGameRuleChangeListener implements Listener {
             return Integer.toString(Integer.parseInt(value));
         }
         throw new IllegalArgumentException("Unsupported game rule value type: " + valueType.getName());
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key worldKey,
-        String gameRule,
-        Class<?> valueType,
-        String before,
-        @Nullable PaperAdministrativeSource.Snapshot source
-    ) {
     }
 }

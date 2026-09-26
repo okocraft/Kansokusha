@@ -31,8 +31,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 class PaperBlockPlaceListenerTest {
 
@@ -49,7 +47,7 @@ class PaperBlockPlaceListenerTest {
     }
 
     @Test
-    void testSinglePlaceUsesLowestImmutableSnapshot() throws Exception {
+    void testSinglePlaceSubmitsReplacedAndPlacedStates() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
         var fixture = single(
@@ -58,12 +56,7 @@ class PaperBlockPlaceListenerTest {
             12, 64, -7, false, true
         );
 
-        listener.capture(fixture.event());
-        Mockito.when(fixture.replacedState().getBlockData())
-            .thenReturn(Blocks.LAVA.defaultBlockState().asBlockData());
-        Mockito.when(fixture.placedBlock().getBlockData())
-            .thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-        listener.finalizeEvent(fixture.event());
+        PaperListenerTestSupport.fire(listener, fixture.event());
 
         var submission = Assertions.assertDoesNotThrow(() -> api.submissions.remove());
         Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
@@ -73,9 +66,6 @@ class PaperBlockPlaceListenerTest {
             PaperPayloadNbtCodec.decode(submission.payload())
         );
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
-        Mockito.verify(fixture.replacedState(), Mockito.times(1)).getBlockData();
-        Mockito.verify(fixture.placedBlock(), Mockito.times(1)).getBlockData();
     }
 
     @Test
@@ -91,14 +81,10 @@ class PaperBlockPlaceListenerTest {
             2, 64, 2, false, false
         );
 
-        listener.capture(cancelled.event());
-        listener.capture(cannotBuild.event());
-        Assertions.assertEquals(2, listener.inFlightCount());
-        listener.finalizeEvent(cancelled.event());
-        listener.finalizeEvent(cannotBuild.event());
+        PaperListenerTestSupport.fire(listener, cancelled.event());
+        PaperListenerTestSupport.fire(listener, cannotBuild.event());
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -123,8 +109,7 @@ class PaperBlockPlaceListenerTest {
         );
 
         var event = multi(replaced, placed);
-        listener.capture(event);
-        listener.finalizeEvent(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(3, api.submissions.size());
         Assertions.assertEquals(List.of(true, false, true), api.returnedOutcomes);
@@ -139,56 +124,7 @@ class PaperBlockPlaceListenerTest {
                 PaperPayloadNbtCodec.decode(submission.payload())
             );
         }
-        Assertions.assertEquals(0, listener.inFlightCount());
         Mockito.verify(clock, Mockito.times(1)).instant();
-    }
-
-    @Test
-    void testConcurrentFoliaStyleEventsDoNotCrossSnapshots() throws Exception {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixtures = new ArrayList<SingleFixture>();
-        for (int i = 0; i < 32; i++) {
-            fixtures.add(single(
-                (i & 1) == 0 ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState(),
-                (i & 1) == 0 ? Blocks.OAK_LOG.defaultBlockState() : Blocks.DIAMOND_BLOCK.defaultBlockState(),
-                1000 + i, 80, -i, false, true
-            ));
-        }
-
-        var executor = Executors.newFixedThreadPool(8);
-        try {
-            var captures = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.capture(f.event())))
-                .toList();
-            for (var task : captures) {
-                task.get();
-            }
-            Assertions.assertEquals(fixtures.size(), listener.inFlightCount());
-
-            var finalizers = fixtures.stream()
-                .map(f -> executor.submit(() -> listener.finalizeEvent(f.event())))
-                .toList();
-            for (var task : finalizers) {
-                task.get();
-            }
-        } finally {
-            executor.shutdown();
-            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-        }
-
-        var byX = submissionsByX(api.submissions);
-        Assertions.assertEquals(fixtures.size(), byX.size());
-        Assertions.assertEquals(0, listener.inFlightCount());
-        for (int i = 0; i < fixtures.size(); i++) {
-            var fixture = fixtures.get(i);
-            var submission = byX.get(1000 + i);
-            Assertions.assertNotNull(submission);
-            Assertions.assertEquals(
-                placePayload(fixture.replaced(), fixture.placed()),
-                PaperPayloadNbtCodec.decode(submission.payload())
-            );
-        }
     }
 
     private static PaperBlockPlaceListener listener(RecordingApi api) {
@@ -215,7 +151,7 @@ class PaperBlockPlaceListenerTest {
         Mockito.when(event.getBlockReplacedState()).thenReturn(replacedState);
         Mockito.when(event.isCancelled()).thenReturn(cancelled);
         Mockito.when(event.canBuild()).thenReturn(canBuild);
-        return new SingleFixture(event, replacedState, placedBlock, replaced, placed);
+        return new SingleFixture(event, replaced, placed);
     }
 
     private static BlockMultiPlaceEvent multi(
@@ -295,8 +231,6 @@ class PaperBlockPlaceListenerTest {
 
     private record SingleFixture(
         BlockPlaceEvent event,
-        org.bukkit.block.BlockState replacedState,
-        Block placedBlock,
         BlockState replaced,
         BlockState placed
     ) {

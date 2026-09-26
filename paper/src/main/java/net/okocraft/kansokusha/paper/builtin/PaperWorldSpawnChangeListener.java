@@ -49,7 +49,7 @@ public final class PaperWorldSpawnChangeListener implements Listener {
         return new PaperWorldSpawnChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void record(SpawnChangeEvent event) {
         Objects.requireNonNull(event, "event");
 

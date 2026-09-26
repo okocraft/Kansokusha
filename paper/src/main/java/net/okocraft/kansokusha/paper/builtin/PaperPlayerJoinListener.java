@@ -45,7 +45,7 @@ public final class PaperPlayerJoinListener implements Listener {
         return new PaperPlayerJoinListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void record(PlayerJoinEvent event) {
         Objects.requireNonNull(event, "event");
 

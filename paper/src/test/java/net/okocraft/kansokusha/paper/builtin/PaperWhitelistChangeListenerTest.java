@@ -34,9 +34,7 @@ class PaperWhitelistChangeListenerTest {
 
         var toggle = Mockito.mock(WhitelistToggleEvent.class);
         Mockito.when(toggle.isEnabled()).thenReturn(true);
-        listener.captureToggle(toggle);
-        enabled.set(true);
-        listener.finalizeToggle(toggle);
+        PaperListenerTestSupport.fire(listener, toggle);
 
         var toggleSubmission = onlySubmission(api);
         Assertions.assertEquals(PaperWhitelistChangeListener.EVENT_TYPE, toggleSubmission.eventType());
@@ -48,12 +46,11 @@ class PaperWhitelistChangeListenerTest {
         Assertions.assertFalse(togglePayload.getBooleanOr("before_enabled", true));
         Assertions.assertTrue(togglePayload.getBooleanOr("after_enabled", false));
         Assertions.assertEquals("whitelist_toggle", string(togglePayload, "source_event"));
+        enabled.set(true);
 
         var disable = Mockito.mock(WhitelistToggleEvent.class);
         Mockito.when(disable.isEnabled()).thenReturn(false);
-        listener.captureToggle(disable);
-        enabled.set(false);
-        listener.finalizeToggle(disable);
+        PaperListenerTestSupport.fire(listener, disable);
 
         var disablePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals("global_toggle", string(disablePayload, "action"));
@@ -73,8 +70,7 @@ class PaperWhitelistChangeListenerTest {
             .thenReturn(WhitelistStateUpdateEvent.WhitelistStatus.ADDED);
         Mockito.when(profileEvent.isCancelled()).thenReturn(false);
 
-        listener.captureProfile(profileEvent);
-        listener.finalizeProfile(profileEvent);
+        PaperListenerTestSupport.fire(listener, profileEvent);
 
         var profileSubmission = onlySubmission(api);
         Assertions.assertEquals(PaperWhitelistChangeListener.EVENT_TYPE, profileSubmission.eventType());
@@ -96,13 +92,11 @@ class PaperWhitelistChangeListenerTest {
             true,
             WhitelistStateUpdateEvent.WhitelistStatus.REMOVED
         );
-        listener.captureProfile(remove);
-        listener.finalizeProfile(remove);
+        PaperListenerTestSupport.fire(listener, remove);
         var removePayload = PaperPayloadNbtCodec.decode(onlySubmission(api).payload());
         Assertions.assertEquals("profile_remove", string(removePayload, "action"));
         Assertions.assertTrue(removePayload.getBooleanOr("before_whitelisted", false));
         Assertions.assertFalse(removePayload.getBooleanOr("after_whitelisted", true));
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -112,11 +106,9 @@ class PaperWhitelistChangeListenerTest {
         var event = profileEvent(false, WhitelistStateUpdateEvent.WhitelistStatus.ADDED);
         Mockito.when(event.isCancelled()).thenReturn(true);
 
-        listener.captureProfile(event);
-        listener.finalizeProfile(event);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -128,18 +120,15 @@ class PaperWhitelistChangeListenerTest {
             true,
             WhitelistStateUpdateEvent.WhitelistStatus.ADDED
         );
-        listener.captureProfile(alreadyAdded);
-        listener.finalizeProfile(alreadyAdded);
+        PaperListenerTestSupport.fire(listener, alreadyAdded);
 
         var alreadyRemoved = profileEvent(
             false,
             WhitelistStateUpdateEvent.WhitelistStatus.REMOVED
         );
-        listener.captureProfile(alreadyRemoved);
-        listener.finalizeProfile(alreadyRemoved);
+        PaperListenerTestSupport.fire(listener, alreadyRemoved);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     @Test
@@ -149,11 +138,9 @@ class PaperWhitelistChangeListenerTest {
         var toggle = Mockito.mock(WhitelistToggleEvent.class);
         Mockito.when(toggle.isEnabled()).thenReturn(true);
 
-        listener.captureToggle(toggle);
-        listener.finalizeToggle(toggle);
+        PaperListenerTestSupport.fire(listener, toggle);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Assertions.assertEquals(0, listener.inFlightCount());
     }
 
     private static PaperWhitelistChangeListener listener(

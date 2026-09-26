@@ -14,9 +14,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Records successful teleport operations, independently of world-change state transitions. */
@@ -29,7 +27,6 @@ public final class PaperPlayerTeleportListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<PlayerTeleportEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperPlayerTeleportListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -46,71 +43,30 @@ public final class PaperPlayerTeleportListener implements Listener {
         return new PaperPlayerTeleportListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(PlayerTeleportEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(PlayerTeleportEvent event) {
         Objects.requireNonNull(event, "event");
         if (event instanceof PlayerPortalEvent) {
             return;
         }
-        var player = event.getPlayer();
-        var initialTo = event.getTo();
-        var snapshot = new Snapshot(
-            this.clock.instant(),
-            new PlayerSubject(player.getUniqueId()),
-            PaperPlayerStatePayloadCodec.snapshotLocation(event.getFrom()),
-            PaperPlayerStatePayloadCodec.snapshotOptionalLocation(initialTo),
-            PaperPlayerStatePayloadCodec.enumName(event.getCause()),
-            event.getRelativeTeleportationFlags().stream()
-                .map(PaperPlayerStatePayloadCodec::enumName)
-                .collect(Collectors.toUnmodifiableSet())
-        );
-        this.inFlight.put(event, snapshot);
-    }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(PlayerTeleportEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event instanceof PlayerPortalEvent) {
-            return;
-        }
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
-        var finalTo = event.getTo();
-        if (finalTo == null) {
-            return;
-        }
-        var destination = PaperPlayerStatePayloadCodec.snapshotLocation(finalTo);
+        var destination = PaperPlayerStatePayloadCodec.snapshotLocation(event.getTo());
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
+            this.clock.instant(),
             this.serverKey,
             destination.worldKey(),
             destination.blockPosition(),
-            snapshot.subject(),
+            new PlayerSubject(event.getPlayer().getUniqueId()),
             PaperPlayerStatePayloadCodec.encodeTeleport(
-                snapshot.from(),
+                PaperPlayerStatePayloadCodec.snapshotLocation(event.getFrom()),
                 destination,
-                snapshot.cause(),
-                snapshot.relativeFlags()
+                PaperPlayerStatePayloadCodec.enumName(event.getCause()),
+                event.getRelativeTeleportationFlags().stream()
+                    .map(PaperPlayerStatePayloadCodec::enumName)
+                    .collect(Collectors.toUnmodifiableSet())
             )
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        PlayerSubject subject,
-        PaperPlayerStatePayloadCodec.LocationSnapshot from,
-        PaperPlayerStatePayloadCodec.LocationSnapshot initialTo,
-        String cause,
-        Set<String> relativeFlags
-    ) {
     }
 }

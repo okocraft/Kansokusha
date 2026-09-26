@@ -3,10 +3,8 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.tags.FluidTags;
 import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.block.CraftBlock;
@@ -19,7 +17,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 
 import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
@@ -33,7 +30,6 @@ public final class PaperFluidChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<BlockFromToEvent, Snapshot> inFlight = new PaperInFlightMap<>();
 
     private PaperFluidChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -50,9 +46,10 @@ public final class PaperFluidChangeListener implements Listener {
         return new PaperFluidChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void capture(BlockFromToEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(BlockFromToEvent event) {
         Objects.requireNonNull(event, "event");
+
         var source = event.getBlock();
         var fluidKind = fluidKind(source);
         if (fluidKind == null) {
@@ -60,43 +57,21 @@ public final class PaperFluidChangeListener implements Listener {
         }
 
         var destination = event.getToBlock();
-        var sourcePosition = position(source);
         var destinationPosition = position(destination);
-        var snapshot = new Snapshot(
+        this.api.submit(new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
             this.clock.instant(),
             this.serverKey,
             PaperKansokusha.key(destination.getWorld().getKey()),
             destinationPosition,
+            null,
             PaperBlockEventPayloadCodec.encodeFluidChange(
                 fluidKind,
-                sourcePosition,
+                position(source),
                 destinationPosition
             )
-        );
-        this.inFlight.put(event, snapshot);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeEvent(BlockFromToEvent event) {
-        Objects.requireNonNull(event, "event");
-        var snapshot = this.inFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-        this.api.submit(new EventSubmission(
-            EVENT_TYPE,
-            PayloadGeneration.FIRST,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
-            snapshot.worldKey(),
-            snapshot.position(),
-            null,
-            snapshot.payload()
         ));
-    }
-
-    int inFlightCount() {
-        return this.inFlight.size();
     }
 
     private static @Nullable String fluidKind(Block block) {
@@ -112,14 +87,5 @@ public final class PaperFluidChangeListener implements Listener {
             return "lava";
         }
         return null;
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        Key worldKey,
-        BlockPosition position,
-        EventPayload payload
-    ) {
     }
 }

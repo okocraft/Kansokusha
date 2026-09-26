@@ -133,8 +133,7 @@ final class PaperContainerPayloadCodec {
         InventorySnapshot destination,
         InventorySnapshot initiator,
         String initiatorRole,
-        CompoundTag initialItem,
-        CompoundTag finalItem
+        CompoundTag item
     ) {
         var payload = new CompoundTag();
         payload.putString("semantics", "non_cancelled_automated_transfer_attempt");
@@ -150,8 +149,7 @@ final class PaperContainerPayloadCodec {
                 default -> "unknown";
             }
         );
-        payload.put("initial_item", initialItem);
-        payload.put("item", finalItem);
+        payload.put("item", item);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
@@ -178,8 +176,7 @@ final class PaperContainerPayloadCodec {
         ListTag inputItems,
         CompoundTag ingredient,
         CompoundTag fuel,
-        ListTag initialResults,
-        ListTag finalResults
+        ListTag results
     ) {
         var payload = new CompoundTag();
         payload.putString("semantics", "non_cancelled_container_process_event");
@@ -189,8 +186,7 @@ final class PaperContainerPayloadCodec {
         payload.put("input_items", inputItems);
         payload.put("ingredient", ingredient);
         payload.put("fuel", fuel);
-        payload.put("initial_event_result_items", initialResults);
-        payload.put("event_result_items", finalResults);
+        payload.put("event_result_items", results);
         return PaperPayloadNbtCodec.encode(payload);
     }
 

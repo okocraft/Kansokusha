@@ -11,7 +11,6 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
-import org.bukkit.Rotation;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -21,14 +20,12 @@ import org.bukkit.event.entity.EntityTameEvent;
 import org.bukkit.event.entity.PlayerLeashEntityEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerUnleashEntityEvent;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -50,18 +47,6 @@ public final class PaperEntityStateChangeListener implements Listener {
     private final KansokushaApi api;
     private final Key serverKey;
     private final Clock clock;
-    private final PaperInFlightMap<PlayerArmorStandManipulateEvent, Snapshot> armorStandInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerLeashEntityEvent, Snapshot> leashInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerUnleashEntityEvent, UnleashSnapshot> unleashInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerItemFrameChangeEvent, ItemFrameSnapshot> itemFrameInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<EntityTameEvent, Snapshot> tameInFlight =
-        new PaperInFlightMap<>();
-    private final PaperInFlightMap<PlayerNameEntityEvent, NameSnapshot> nameInFlight =
-        new PaperInFlightMap<>();
 
     private PaperEntityStateChangeListener(KansokushaApi api, Key serverKey, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
@@ -89,8 +74,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         return new PaperEntityStateChangeListener(api, serverKey, clock);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
         Objects.requireNonNull(event, "event");
 
         var playerItem = event.getPlayerItem();
@@ -100,224 +85,113 @@ public final class PaperEntityStateChangeListener implements Listener {
         }
 
         var target = PaperEntityEventPayloadCodec.snapshotEntity(event.getRightClicked());
-        this.armorStandInFlight.put(
-            event,
-            this.snapshot(
+        this.submit(
+            ARMOR_STAND_MANIPULATE_EVENT_TYPE,
+            target,
+            new PlayerSubject(event.getPlayer().getUniqueId()),
+            PaperEntityStateChangePayloadCodec.encodeArmorStandManipulate(
                 target,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
-                PaperEntityStateChangePayloadCodec.encodeArmorStandManipulate(
-                    target,
-                    event.getSlot(),
-                    event.getHand(),
-                    PaperItemStackPayloadCodec.encode(playerItem),
-                    PaperItemStackPayloadCodec.encode(armorStandItem)
-                )
+                event.getSlot(),
+                event.getHand(),
+                PaperItemStackPayloadCodec.encode(playerItem),
+                PaperItemStackPayloadCodec.encode(armorStandItem)
             )
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
-        Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
-            ARMOR_STAND_MANIPULATE_EVENT_TYPE,
-            event.isCancelled(),
-            this.armorStandInFlight.remove(event)
-        );
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureLeash(PlayerLeashEntityEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordLeash(PlayerLeashEntityEvent event) {
         Objects.requireNonNull(event, "event");
 
         var target = PaperEntityEventPayloadCodec.snapshotEntity(event.getEntity());
-        var holder = PaperEntityEventPayloadCodec.snapshotEntity(event.getLeashHolder());
-        this.leashInFlight.put(
-            event,
-            this.snapshot(
+        this.submit(
+            ENTITY_LEASH_CHANGE_EVENT_TYPE,
+            target,
+            new PlayerSubject(event.getPlayer().getUniqueId()),
+            PaperEntityStateChangePayloadCodec.encodeLeashChange(
+                "leash",
                 target,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
-                PaperEntityStateChangePayloadCodec.encodeLeashChange(
-                    "leash",
-                    target,
-                    holder,
-                    "player_leash",
-                    event.getHand(),
-                    false
-                )
+                PaperEntityEventPayloadCodec.snapshotEntity(event.getLeashHolder()),
+                "player_leash",
+                event.getHand(),
+                false
             )
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeLeash(PlayerLeashEntityEvent event) {
-        Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
-            ENTITY_LEASH_CHANGE_EVENT_TYPE,
-            event.isCancelled(),
-            this.leashInFlight.remove(event)
-        );
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureUnleash(PlayerUnleashEntityEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordUnleash(PlayerUnleashEntityEvent event) {
         Objects.requireNonNull(event, "event");
 
         var targetEntity = event.getEntity();
         var target = PaperEntityEventPayloadCodec.snapshotEntity(targetEntity);
-        this.unleashInFlight.put(
-            event,
-            new UnleashSnapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+        this.submit(
+            ENTITY_LEASH_CHANGE_EVENT_TYPE,
+            target,
+            new PlayerSubject(event.getPlayer().getUniqueId()),
+            PaperEntityStateChangePayloadCodec.encodeLeashChange(
+                "unleash",
                 target,
                 snapshotLeashHolder(targetEntity),
                 enumName(event.getReason()),
-                event.getHand()
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeUnleash(PlayerUnleashEntityEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.unleashInFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
-        this.submit(
-            ENTITY_LEASH_CHANGE_EVENT_TYPE,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
-            snapshot.target(),
-            snapshot.subject(),
-            PaperEntityStateChangePayloadCodec.encodeLeashChange(
-                "unleash",
-                snapshot.target(),
-                snapshot.holder(),
-                snapshot.reason(),
-                snapshot.hand(),
+                event.getHand(),
                 event.isDropLeash()
             )
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureItemFrameChange(PlayerItemFrameChangeEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordItemFrameChange(PlayerItemFrameChangeEvent event) {
         Objects.requireNonNull(event, "event");
 
         var frame = event.getItemFrame();
         var target = PaperEntityEventPayloadCodec.snapshotEntity(frame);
-        this.itemFrameInFlight.put(
-            event,
-            new ItemFrameSnapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                new PlayerSubject(event.getPlayer().getUniqueId()),
+        var action = event.getAction();
+        var rotationBefore = frame.getRotation();
+        var rotationAfter = action == PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE
+            ? rotationBefore.rotateClockwise()
+            : rotationBefore;
+        this.submit(
+            ITEM_FRAME_CHANGE_EVENT_TYPE,
+            target,
+            new PlayerSubject(event.getPlayer().getUniqueId()),
+            PaperEntityStateChangePayloadCodec.encodeItemFrameChange(
                 target,
-                event.getAction(),
+                enumName(action),
                 PaperItemStackPayloadCodec.encode(frame.getItem()),
-                frame.getRotation(),
+                snapshotItemFrameResult(action, event.getItemStack()),
+                rotationBefore,
+                rotationAfter,
+                frame.isFixed(),
                 frame.isFixed()
             )
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeItemFrameChange(PlayerItemFrameChangeEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.itemFrameInFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
-
-        var rotationAfter =
-            snapshot.action() == PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE
-                ? snapshot.rotationBefore().rotateClockwise()
-                : snapshot.rotationBefore();
-        this.submit(
-            ITEM_FRAME_CHANGE_EVENT_TYPE,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
-            snapshot.target(),
-            snapshot.subject(),
-            PaperEntityStateChangePayloadCodec.encodeItemFrameChange(
-                snapshot.target(),
-                enumName(snapshot.action()),
-                snapshot.itemBefore(),
-                snapshotItemFrameResult(snapshot.action(), event.getItemStack()),
-                snapshot.rotationBefore(),
-                rotationAfter,
-                snapshot.fixedBefore(),
-                snapshot.fixedBefore()
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureTame(EntityTameEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordTame(EntityTameEvent event) {
         Objects.requireNonNull(event, "event");
 
         var target = PaperEntityEventPayloadCodec.snapshotEntity(event.getEntity());
         var owner = event.getOwner();
-        var subject = owner instanceof Player player
-            ? new PlayerSubject(player.getUniqueId())
-            : null;
-        this.tameInFlight.put(
-            event,
-            this.snapshot(
-                target,
-                subject,
-                PaperEntityStateChangePayloadCodec.encodeTame(target, owner)
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeTame(EntityTameEvent event) {
-        Objects.requireNonNull(event, "event");
-        this.finalizeEvent(
+        this.submit(
             ENTITY_TAME_EVENT_TYPE,
-            event.isCancelled(),
-            this.tameInFlight.remove(event)
+            target,
+            owner instanceof Player player ? new PlayerSubject(player.getUniqueId()) : null,
+            PaperEntityStateChangePayloadCodec.encodeTame(target, owner)
         );
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void captureNameChange(PlayerNameEntityEvent event) {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordNameChange(PlayerNameEntityEvent event) {
         Objects.requireNonNull(event, "event");
-
-        this.nameInFlight.put(
-            event,
-            new NameSnapshot(
-                Instant.now(this.clock),
-                this.serverKey,
-                new PlayerSubject(event.getPlayer().getUniqueId())
-            )
-        );
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void finalizeNameChange(PlayerNameEntityEvent event) {
-        Objects.requireNonNull(event, "event");
-
-        var snapshot = this.nameInFlight.remove(event);
-        if (snapshot == null || event.isCancelled()) {
-            return;
-        }
 
         var entity = event.getEntity();
         var target = PaperEntityEventPayloadCodec.snapshotEntity(entity);
         this.submit(
             ENTITY_NAME_CHANGE_EVENT_TYPE,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
             target,
-            snapshot.subject(),
+            new PlayerSubject(event.getPlayer().getUniqueId()),
             PaperEntityStateChangePayloadCodec.encodeNameChange(
                 target,
                 entity.customName(),
@@ -327,48 +201,8 @@ public final class PaperEntityStateChangeListener implements Listener {
         );
     }
 
-    int inFlightCount() {
-        return this.armorStandInFlight.size()
-            + this.leashInFlight.size()
-            + this.unleashInFlight.size()
-            + this.itemFrameInFlight.size()
-            + this.tameInFlight.size()
-            + this.nameInFlight.size();
-    }
-
-    private Snapshot snapshot(
-        PaperEntityEventPayloadCodec.EntitySnapshot target,
-        @Nullable PlayerSubject subject,
-        EventPayload payload
-    ) {
-        return new Snapshot(
-            Instant.now(this.clock),
-            this.serverKey,
-            target,
-            subject,
-            payload
-        );
-    }
-
-    private void finalizeEvent(Key eventType, boolean cancelled, @Nullable Snapshot snapshot) {
-        if (snapshot == null || cancelled) {
-            return;
-        }
-
-        this.submit(
-            eventType,
-            snapshot.occurredAt(),
-            snapshot.serverKey(),
-            snapshot.target(),
-            snapshot.subject(),
-            snapshot.payload()
-        );
-    }
-
     private void submit(
         Key eventType,
-        Instant occurredAt,
-        Key serverKey,
         PaperEntityEventPayloadCodec.EntitySnapshot target,
         @Nullable PlayerSubject subject,
         EventPayload payload
@@ -377,8 +211,8 @@ public final class PaperEntityStateChangeListener implements Listener {
             new EventSubmission(
                 eventType,
                 PayloadGeneration.FIRST,
-                occurredAt,
-                serverKey,
+                this.clock.instant(),
+                this.serverKey,
                 target.worldKey(),
                 new BlockPosition(
                     (int) Math.floor(target.x()),
@@ -418,44 +252,5 @@ public final class PaperEntityStateChangeListener implements Listener {
 
     private static String enumName(Enum<?> value) {
         return Objects.requireNonNull(value, "value").name().toLowerCase(Locale.ROOT);
-    }
-
-    private record Snapshot(
-        Instant occurredAt,
-        Key serverKey,
-        PaperEntityEventPayloadCodec.EntitySnapshot target,
-        @Nullable PlayerSubject subject,
-        EventPayload payload
-    ) {
-    }
-
-    private record UnleashSnapshot(
-        Instant occurredAt,
-        Key serverKey,
-        PlayerSubject subject,
-        PaperEntityEventPayloadCodec.EntitySnapshot target,
-        PaperEntityEventPayloadCodec.EntitySnapshot holder,
-        String reason,
-        EquipmentSlot hand
-    ) {
-    }
-
-    private record ItemFrameSnapshot(
-        Instant occurredAt,
-        Key serverKey,
-        PlayerSubject subject,
-        PaperEntityEventPayloadCodec.EntitySnapshot target,
-        PlayerItemFrameChangeEvent.ItemFrameChangeAction action,
-        CompoundTag itemBefore,
-        Rotation rotationBefore,
-        boolean fixedBefore
-    ) {
-    }
-
-    private record NameSnapshot(
-        Instant occurredAt,
-        Key serverKey,
-        PlayerSubject subject
-    ) {
     }
 }

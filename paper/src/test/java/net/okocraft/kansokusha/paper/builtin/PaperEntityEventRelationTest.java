@@ -55,10 +55,8 @@ class PaperEntityEventRelationTest {
         var genericEvent = Mockito.mock(EntityPlaceEvent.class);
         Mockito.when(genericEvent.getEntity()).thenReturn(hanging);
 
-        listener.captureHanging(hangingEvent);
-        listener.captureGeneric(genericEvent);
-        listener.finalizeHanging(hangingEvent);
-        listener.finalizeGeneric(genericEvent);
+        PaperListenerTestSupport.fire(listener, hangingEvent);
+        PaperListenerTestSupport.fire(listener, genericEvent);
 
         Assertions.assertEquals(1, api.submissions.size());
         var payload = PaperPayloadNbtCodec.decode(api.submissions.remove().payload());
@@ -73,14 +71,14 @@ class PaperEntityEventRelationTest {
     void testNaturalHangingBreakHasNoListenerEntryPoint() {
         Assertions.assertDoesNotThrow(() ->
             PaperEntityBreakListener.class.getMethod(
-                "captureHanging",
+                "recordHanging",
                 HangingBreakByEntityEvent.class
             )
         );
         Assertions.assertThrows(
             NoSuchMethodException.class,
             () -> PaperEntityBreakListener.class.getMethod(
-                "captureHanging",
+                "recordHanging",
                 HangingBreakEvent.class
             )
         );
