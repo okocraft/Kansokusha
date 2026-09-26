@@ -27,8 +27,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 
 /**
@@ -43,6 +41,8 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
+    private static final int CLOSED_MASK = 1 << 31;
+
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
     private final DuckDbStorage storage;
@@ -54,9 +54,9 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final ScheduledExecutorService storageThread;
-    // Guarantees that no event enters the queue after close() has drained it.
-    private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
-    private boolean closed;
+    // The sign bit marks the runtime closed; the remaining value counts in-flight submissions.
+    private final AtomicInteger submissionState = new AtomicInteger();
+    private final Object closeMonitor = new Object();
 
     private KansokushaRuntime(
         @Nullable Key localServerKey,
@@ -125,10 +125,11 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         // Validate here so that one invalid event cannot make the whole batch fail to write.
         var queued = this.toQueuedEvent(submission);
 
-        var lock = this.closeLock.readLock();
-        lock.lock();
+        if (!this.beginSubmission()) {
+            return false;
+        }
         try {
-            if (this.closed || !this.queue.offer(queued)) {
+            if (!this.queue.offer(queued)) {
                 return false;
             }
             var queuedEvents = this.queuedEvents.incrementAndGet();
@@ -137,7 +138,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
             }
             return true;
         } finally {
-            lock.unlock();
+            this.endSubmission();
         }
     }
 
@@ -163,21 +164,35 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
         return millis;
     }
 
+    private boolean beginSubmission() {
+        while (true) {
+            var state = this.submissionState.get();
+            if ((state & CLOSED_MASK) != 0) {
+                return false;
+            }
+            if (this.submissionState.compareAndSet(state, state + 1)) {
+                return true;
+            }
+        }
+    }
+
+    private void endSubmission() {
+        if (this.submissionState.decrementAndGet() == CLOSED_MASK) {
+            synchronized (this.closeMonitor) {
+                this.closeMonitor.notifyAll();
+            }
+        }
+    }
+
     /**
      * Stops accepting events, writes the queued ones, and closes the database.
      */
     @Override
     public void close() {
-        var lock = this.closeLock.writeLock();
-        lock.lock();
-        try {
-            if (this.closed) {
-                return;
-            }
-            this.closed = true;
-        } finally {
-            lock.unlock();
+        if (!this.beginClose()) {
+            return;
         }
+        this.awaitSubmissions();
 
         // Waits for a running flush or cleanup so that the connection is never used concurrently.
         this.storageThread.close();
@@ -186,6 +201,34 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
             this.storage.close();
         } catch (SQLException e) {
             this.errorReporter.accept("Failed to close the Kansokusha database.", e);
+        }
+    }
+
+    private boolean beginClose() {
+        while (true) {
+            var state = this.submissionState.get();
+            if ((state & CLOSED_MASK) != 0) {
+                return false;
+            }
+            if (this.submissionState.compareAndSet(state, state | CLOSED_MASK)) {
+                return true;
+            }
+        }
+    }
+
+    private void awaitSubmissions() {
+        var interrupted = false;
+        synchronized (this.closeMonitor) {
+            while (this.submissionState.get() != CLOSED_MASK) {
+                try {
+                    this.closeMonitor.wait();
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 

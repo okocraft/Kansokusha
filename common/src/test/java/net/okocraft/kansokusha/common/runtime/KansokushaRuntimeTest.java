@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class KansokushaRuntimeTest {
 
@@ -151,6 +152,43 @@ class KansokushaRuntimeTest {
             }
             Assertions.assertEquals(batchSize, countEvents(dir));
         }
+    }
+
+    @Test
+    void testClosePersistsAllAcceptedConcurrentSubmissions(@TempDir Path dir) throws Exception {
+        var runtime = start(dir, 100_000, 100_001);
+        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+        var accepted = new AtomicInteger();
+        var start = new CountDownLatch(1);
+        var now = Instant.now();
+
+        try (var submitters = Executors.newFixedThreadPool(8)) {
+            var futures = new ArrayList<java.util.concurrent.Future<?>>();
+            for (var thread = 0; thread < 8; thread++) {
+                futures.add(submitters.submit(() -> {
+                    start.await();
+                    while (runtime.submit(event(now))) {
+                        accepted.incrementAndGet();
+                    }
+                    return null;
+                }));
+            }
+
+            start.countDown();
+            var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (accepted.get() < 100 && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
+            Assertions.assertTrue(accepted.get() >= 100, "Concurrent submissions did not start.");
+
+            runtime.close();
+            for (var future : futures) {
+                future.get();
+            }
+        }
+
+        Assertions.assertEquals(accepted.get(), countEvents(dir));
+        Assertions.assertFalse(runtime.submit(event(now)));
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity) throws Exception {
