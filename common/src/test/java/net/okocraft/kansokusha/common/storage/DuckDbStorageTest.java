@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 class DuckDbStorageTest {
@@ -100,6 +101,30 @@ class DuckDbStorageTest {
              var rows = connection.createStatement().executeQuery("SELECT count(*) FROM events")) {
             Assertions.assertTrue(rows.next());
             Assertions.assertEquals(2, rows.getLong(1));
+        }
+    }
+
+    @Test
+    void testManyDistinctKeysArePersisted(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var worlds = 3000;
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            for (int round = 0; round < 2; round++) {
+                storage.append(IntStream.range(0, worlds).mapToObj(i -> queued(new EventSubmission(
+                    SHORT, PayloadGeneration.FIRST, NOW, Key.key("example", "server"), Key.key("w", "world_" + i),
+                    new BlockPosition(i, 0, 0), null, EventPayload.copyOf(new byte[0])
+                ))).toList());
+            }
+        }
+
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT count(*), count(DISTINCT world), count(*) FILTER (WHERE world = 'w:world_' || x) FROM events"
+             )) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(worlds * 2, rows.getLong(1));
+            Assertions.assertEquals(worlds, rows.getLong(2));
+            Assertions.assertEquals(worlds * 2, rows.getLong(3));
         }
     }
 
