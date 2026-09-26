@@ -376,9 +376,9 @@ merchant が Entity の場合は UUID/type を保存し、standalone merchant �
 
 ## Player login name observation / `kansokusha:player_name_change`
 
-Paper `kansokusha:paper_join` と Velocity `kansokusha:velocity_post_login` は、login 時点の player username を payload に保持する。Paper generation 1 payload は NBT field `username` を持つ。Velocity generation 1 payload は既存の先頭 `username` field を維持する。
+Paper `kansokusha:paper_join` と Velocity `kansokusha:velocity_post_login` は、login 時点の player username を payload に保持する。Paper は payload generation 1 を維持し、`username` を optional field として append する。T2 より前に generation 1 で保存された空 compound も有効であり、`username` 欠落は「その row では名前を capture していない」ことを表す。T2 以降の Paper join は常に `username` を保存する。Velocity generation 1 payload は既存の先頭 `username` field を維持する。
 
-accepted login は common の internal `PlayerNameDirectory` boundary に username とともに渡される。public `KansokushaApi` には名前解決 API を追加しない。storage writer は login event と同一 transaction で derived `player_name_history` projection を更新し、同じ UUID の直前観測名と exact string が異なる場合だけ `kansokusha:player_name_change` を1件追加する。初回観測と同一名での再 login では生成しない。Paper / Velocity の source による意味の差は持たない。
+accepted login は common の internal `PlayerNameDirectory` boundary に username とともに渡される。public `KansokushaApi` には名前解決 API を追加しない。storage writer は login event と同一 transaction で derived `player_name_history` projection を更新する。UUID ごとの current name は `(occurred_at, event_id)` が最大の観測で定義し、その current observation より新しい login で exact username が変化した場合だけ `kansokusha:player_name_change` を1件追加する。初回観測、同一名での再 login、current observation より古い stale observation では生成しない。stale observation も historical first/last seen には反映するが、より新しい `last_seen/last_event_id` を巻き戻さない。Paper / Velocity の source による意味の差は持たない。
 
 `player_name_change` common fields:
 
