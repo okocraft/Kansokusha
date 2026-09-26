@@ -33,8 +33,6 @@ public final class VelocityPlayerSessionListener {
         Key.key("kansokusha", "velocity_disconnect");
     static final Key BACKEND_KICK_EVENT_TYPE =
         Key.key("kansokusha", "backend_kick");
-    static final Key PROXY_SERVER_KEY =
-        Key.key("kansokusha", "velocity-proxy");
 
     private static final List<EventTypeDefinition> DEFINITIONS = List.of(
         new EventTypeDefinition(POST_LOGIN_EVENT_TYPE, PayloadGeneration.FIRST),
@@ -94,7 +92,7 @@ public final class VelocityPlayerSessionListener {
                 POST_LOGIN_EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 this.clock.instant(),
-                PROXY_SERVER_KEY,
+                null,
                 null,
                 null,
                 new PlayerSubject(player.getUniqueId()),
@@ -124,7 +122,7 @@ public final class VelocityPlayerSessionListener {
                 DISCONNECT_EVENT_TYPE,
                 PayloadGeneration.FIRST,
                 this.clock.instant(),
-                PROXY_SERVER_KEY,
+                null,
                 null,
                 null,
                 new PlayerSubject(player.getUniqueId()),

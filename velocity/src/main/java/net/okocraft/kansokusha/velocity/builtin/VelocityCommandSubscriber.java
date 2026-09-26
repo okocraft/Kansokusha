@@ -44,7 +44,7 @@ public final class VelocityCommandSubscriber {
         return new VelocityCommandSubscriber(api, clock);
     }
 
-    @Subscribe
+    @Subscribe(async = false)
     public void record(CommandExecuteEvent event) {
         Objects.requireNonNull(event, "event");
 

@@ -29,17 +29,18 @@ class VelocityCommunicationSubscriberTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174006");
 
     @Test
-    void testSubscribersExposeVelocitySubscribeHandlers() throws Exception {
-        Assertions.assertNotNull(
-            VelocityChatSubscriber.class
-                .getMethod("record", PlayerChatEvent.class)
-                .getAnnotation(Subscribe.class)
-        );
-        Assertions.assertNotNull(
-            VelocityCommandSubscriber.class
-                .getMethod("record", CommandExecuteEvent.class)
-                .getAnnotation(Subscribe.class)
-        );
+    void testSubscribersDoNotForceAsyncDispatch() throws Exception {
+        var chat = VelocityChatSubscriber.class
+            .getMethod("record", PlayerChatEvent.class)
+            .getAnnotation(Subscribe.class);
+        var command = VelocityCommandSubscriber.class
+            .getMethod("record", CommandExecuteEvent.class)
+            .getAnnotation(Subscribe.class);
+
+        Assertions.assertNotNull(chat);
+        Assertions.assertFalse(chat.async());
+        Assertions.assertNotNull(command);
+        Assertions.assertFalse(command.async());
     }
 
     @Test

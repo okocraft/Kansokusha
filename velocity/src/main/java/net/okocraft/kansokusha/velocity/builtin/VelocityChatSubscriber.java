@@ -39,7 +39,7 @@ public final class VelocityChatSubscriber {
         return new VelocityChatSubscriber(api, clock);
     }
 
-    @Subscribe
+    @Subscribe(async = false)
     public void record(PlayerChatEvent event) {
         Objects.requireNonNull(event, "event");
 
