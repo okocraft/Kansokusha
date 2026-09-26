@@ -30,7 +30,7 @@ public final class PaperPayloadNbtCodec {
         } catch (IOException e) {
             throw new AssertionError("Unexpected in-memory NBT encoding failure.", e);
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     static CompoundTag position(BlockPosition position) {
@@ -45,7 +45,7 @@ public final class PaperPayloadNbtCodec {
     public static CompoundTag decode(EventPayload payload) throws IOException {
         try (
             var input = new DataInputStream(
-                new ByteArrayInputStream(Objects.requireNonNull(payload, "payload").copyBytes())
+                Objects.requireNonNull(payload, "payload").openStream()
             )
         ) {
             return NbtIo.read(input);
