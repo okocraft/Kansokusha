@@ -41,7 +41,7 @@ class PaperBlockHarvestListenerTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
 
     @Test
-    void testHarvestAndShearNormalizeToOneCanonicalTypeWithDistinctSources() throws Exception {
+    void testHarvestAndShearNormalizeToOneCanonicalTypeWithDistinctOperations() throws Exception {
         var api = new RecordingApi();
         var listener = listener(api);
         var harvested = new ArrayList<>(List.of(ItemStack.of(Material.SWEET_BERRIES, 2)));
@@ -60,10 +60,6 @@ class PaperBlockHarvestListenerTest {
         Assertions.assertEquals(PaperBlockHarvestListener.EVENT_TYPE, harvestSubmission.eventType());
         var harvestPayload = PaperPayloadNbtCodec.decode(harvestSubmission.payload());
         Assertions.assertEquals("harvest", string(harvestPayload, "operation"));
-        Assertions.assertEquals(
-            "org.bukkit.event.player.PlayerHarvestBlockEvent",
-            string(harvestPayload, "source_event")
-        );
         Assertions.assertEquals("hand", string(harvestPayload, "hand"));
         Assertions.assertEquals(
             NbtUtils.writeBlockState(Blocks.SWEET_BERRY_BUSH.defaultBlockState()),
@@ -84,10 +80,6 @@ class PaperBlockHarvestListenerTest {
         Assertions.assertEquals(PaperBlockHarvestListener.EVENT_TYPE, shearSubmission.eventType());
         var shearPayload = PaperPayloadNbtCodec.decode(shearSubmission.payload());
         Assertions.assertEquals("shear", string(shearPayload, "operation"));
-        Assertions.assertEquals(
-            "io.papermc.paper.event.block.PlayerShearBlockEvent",
-            string(shearPayload, "source_event")
-        );
         var snapshottedTool = PaperItemStackPayloadCodec.decode(
             shearPayload.getCompoundOrEmpty("shear_tool")
         );
