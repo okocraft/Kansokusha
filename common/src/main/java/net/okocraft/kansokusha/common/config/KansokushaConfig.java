@@ -125,7 +125,7 @@ public class KansokushaConfig {
         @Comment("Retention policy definitions. Keys are namespace-qualified Adventure keys.")
         private List<Policy> policies = List.of();
 
-        @Comment("Exact event-type to retention-policy mappings.")
+        @Comment("Event-type to retention-policy mappings; optional qualifier refines one event type.")
         private List<EventTypeMapping> eventTypeMappings = List.of();
 
         @Comment("Fallback retention policy key for event types without an exact mapping.")
