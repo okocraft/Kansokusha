@@ -449,7 +449,9 @@ class PaperPlayerStateListenerTest {
         float pitch
     ) {
         var tag = new CompoundTag();
-        tag.putString("world", world);
+        if (world != null) {
+            tag.putString("world", world);
+        }
         tag.putDouble("x", x);
         tag.putDouble("y", y);
         tag.putDouble("z", z);
