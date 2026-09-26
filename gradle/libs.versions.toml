@@ -26,7 +26,9 @@ gradle-plugins = "1.8.6"
 
 # libraries
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
+adventure-api = { module = "net.kyori:adventure-api", version.ref = "adventure" }
 adventure-key = { module = "net.kyori:adventure-key", version.ref = "adventure" }
+adventure-minimessage = { module = "net.kyori:adventure-text-minimessage", version.ref = "adventure" }
 configurate-yaml = { module = "org.spongepowered:configurate-yaml", version.ref = "configurate" }
 duckdb-jdbc = { module = "org.duckdb:duckdb_jdbc", version.ref = "duckdb" }
 mcmsgdef = { module = "dev.siroshun.mcmsgdef:mcmsgdef", version.ref = "mcmsgdef" }
