@@ -96,13 +96,11 @@ final class PaperBlockEventPayloadCodec {
     static EventPayload encodeFertilize(
         BlockData preState,
         BlockData postState,
-        String sourceEvent,
         BlockPosition sourcePosition
     ) {
         var payload = new CompoundTag();
         payload.put("pre_state", PaperBlockStatePayloadCodec.blockState(preState));
         payload.put("post_state", PaperBlockStatePayloadCodec.blockState(postState));
-        payload.putString("source_event", Objects.requireNonNull(sourceEvent, "sourceEvent"));
         payload.put("source", PaperPayloadNbtCodec.position(sourcePosition));
         return PaperPayloadNbtCodec.encode(payload);
     }
