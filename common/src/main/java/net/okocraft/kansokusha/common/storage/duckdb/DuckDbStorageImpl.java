@@ -100,6 +100,18 @@ public final class DuckDbStorageImpl implements Storage {
         "last_event_id"
     );
 
+    private static final String CREATE_EVENT_SEARCH_TEXT_TABLE = """
+        CREATE TABLE IF NOT EXISTS event_search_text (
+            event_id UUID NOT NULL,
+            search_text VARCHAR NOT NULL
+        )
+        """;
+
+    private static final List<String> EVENT_SEARCH_TEXT_COLUMNS = List.of(
+        "event_id",
+        "search_text"
+    );
+
     private static final byte[] PLAYER_ACTOR_KIND = "player".getBytes(StandardCharsets.UTF_8);
     private static final byte[] ENTITY_ACTOR_KIND = "entity".getBytes(StandardCharsets.UTF_8);
     private static final byte[] BLOCK_ACTOR_KIND = "block".getBytes(StandardCharsets.UTF_8);
@@ -130,6 +142,12 @@ public final class DuckDbStorageImpl implements Storage {
             verifyColumns(statement, "events", EVENTS_COLUMNS);
             statement.execute(CREATE_PLAYER_NAME_HISTORY_TABLE);
             verifyColumns(statement, "player_name_history", PLAYER_NAME_HISTORY_COLUMNS);
+            statement.execute(CREATE_EVENT_SEARCH_TEXT_TABLE);
+            verifyColumns(statement, "event_search_text", EVENT_SEARCH_TEXT_COLUMNS);
+            statement.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS event_search_text_event_id
+                ON event_search_text(event_id)
+                """);
             statement.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS player_name_history_uuid_name
                 ON player_name_history(player_uuid, name)
@@ -159,6 +177,7 @@ public final class DuckDbStorageImpl implements Storage {
                 this.appendEvent(appender, stored);
             }
             appender.flush();
+            this.appendSearchText(storedEvents);
             this.connection.commit();
         } catch (SQLException | RuntimeException e) {
             this.discardAppender(e);
@@ -209,6 +228,7 @@ public final class DuckDbStorageImpl implements Storage {
                         nameChange,
                         queued.occurredAtMillis(),
                         observation.nameChangeExpiresAtMillis(),
+                        null,
                         null
                     ),
                     TimeBasedUUID.generate()
@@ -249,6 +269,27 @@ public final class DuckDbStorageImpl implements Storage {
         appender.appendEpochMillis(queued.expiresAtMillis())
             .append(event.payload().unsafeBytes())
             .endRow();
+    }
+
+    private void appendSearchText(List<StoredEvent> storedEvents) throws SQLException {
+        try (var statement = this.connection.prepareStatement(
+            "INSERT INTO event_search_text (event_id, search_text) VALUES (?, ?)"
+        )) {
+            var hasRows = false;
+            for (var stored : storedEvents) {
+                var searchText = stored.queued().searchText();
+                if (searchText == null) {
+                    continue;
+                }
+                statement.setObject(1, stored.eventId());
+                statement.setString(2, searchText);
+                statement.addBatch();
+                hasRows = true;
+            }
+            if (hasRows) {
+                statement.executeBatch();
+            }
+        }
     }
 
     private Optional<PlayerNameState> latestPlayerName(UUID playerId) throws SQLException {
@@ -400,12 +441,46 @@ public final class DuckDbStorageImpl implements Storage {
     }
 
     @Override
+    public List<UUID> findEventIdsContaining(String literal) throws SQLException {
+        Objects.requireNonNull(literal, "literal");
+        var eventIds = new ArrayList<UUID>();
+        try (var statement = this.connection.prepareStatement("""
+            SELECT event_id
+            FROM event_search_text
+            WHERE contains(lower(search_text), lower(?))
+            ORDER BY event_id
+            """)) {
+            statement.setString(1, literal);
+            try (var rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    eventIds.add(rows.getObject(1, UUID.class));
+                }
+            }
+        }
+        return List.copyOf(eventIds);
+    }
+
+    @Override
     public int deleteExpired(Instant now) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
-            "DELETE FROM events WHERE expires_at <= epoch_ms(?)"
-        )) {
-            statement.setLong(1, now.toEpochMilli());
-            var deleted = statement.executeUpdate();
+        try (
+            var deleteSearchText = this.connection.prepareStatement("""
+                DELETE FROM event_search_text
+                WHERE event_id IN (
+                    SELECT event_id
+                    FROM events
+                    WHERE expires_at <= epoch_ms(?)
+                )
+                """);
+            var deleteEvents = this.connection.prepareStatement(
+                "DELETE FROM events WHERE expires_at <= epoch_ms(?)"
+            )
+        ) {
+            var nowMillis = now.toEpochMilli();
+            deleteSearchText.setLong(1, nowMillis);
+            deleteSearchText.executeUpdate();
+
+            deleteEvents.setLong(1, nowMillis);
+            var deleted = deleteEvents.executeUpdate();
             this.connection.commit();
             return deleted;
         } catch (SQLException | RuntimeException e) {
