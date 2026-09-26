@@ -125,7 +125,7 @@ public class KansokushaConfig {
         @Comment("Retention policy definitions. Keys are namespace-qualified Adventure keys.")
         private List<Policy> policies = List.of();
 
-        @Comment("Exact event-type to retention-policy mappings.")
+        @Comment("Event-type to retention-policy mappings; optional qualifier refines one event type.")
         private List<EventTypeMapping> eventTypeMappings = List.of();
 
         @Comment("Fallback retention policy key for event types without an exact mapping.")
@@ -156,27 +156,33 @@ public class KansokushaConfig {
             }
 
             var mappingsByEventType = new LinkedHashMap<Key, Key>();
+            var qualifiedMappings = new LinkedHashMap<QualifiedEventType, Key>();
             var configuredMappings = requireList(
                 this.eventTypeMappings,
                 "retention.event-type-mappings"
             );
 
             for (int index = 0; index < configuredMappings.size(); index++) {
-                var mapping = requireEntry(
-                    configuredMappings.get(index),
-                    "retention.event-type-mappings[" + index + "]"
-                );
-                var eventType = parseKey(
-                    mapping.eventType,
-                    "retention.event-type-mappings[" + index + "].event-type"
-                );
-                var policyKey = parseKey(
-                    mapping.policy,
-                    "retention.event-type-mappings[" + index + "].policy"
-                );
+                var path = "retention.event-type-mappings[" + index + "]";
+                var mapping = requireEntry(configuredMappings.get(index), path);
+                var eventType = parseKey(mapping.eventType, path + ".event-type");
+                var policyKey = parseKey(mapping.policy, path + ".policy");
 
-                if (mappingsByEventType.putIfAbsent(eventType, policyKey) != null) {
-                    throw invalid("duplicate event type mapping: " + eventType.asString());
+                if (mapping.qualifier == null || mapping.qualifier.isBlank()) {
+                    if (mappingsByEventType.putIfAbsent(eventType, policyKey) != null) {
+                        throw invalid("duplicate event type mapping: " + eventType.asString());
+                    }
+                } else {
+                    var qualifier = parseKey(mapping.qualifier, path + ".qualifier");
+                    var qualifiedEventType = new QualifiedEventType(eventType, qualifier);
+                    if (qualifiedMappings.putIfAbsent(qualifiedEventType, policyKey) != null) {
+                        throw invalid(
+                            "duplicate qualified event type mapping: "
+                                + eventType.asString()
+                                + " / "
+                                + qualifier.asString()
+                        );
+                    }
                 }
                 requireKnownPolicy(policiesByKey, policyKey, "event type " + eventType.asString());
             }
@@ -190,7 +196,12 @@ public class KansokushaConfig {
             }
 
             return new ValidatedRetention(
-                new RetentionSettings(policiesByKey, mappingsByEventType, fallback),
+                new RetentionSettings(
+                    policiesByKey,
+                    mappingsByEventType,
+                    qualifiedMappings,
+                    fallback
+                ),
                 new RetentionCleanupSettings(interval, this.maxRowsPerPass)
             );
         }
@@ -281,6 +292,7 @@ public class KansokushaConfig {
     public static final class EventTypeMapping {
 
         private String eventType = "";
+        private String qualifier = "";
         private String policy = "";
     }
 
@@ -297,15 +309,40 @@ public class KansokushaConfig {
     ) {
     }
 
+    public record QualifiedEventType(Key eventType, Key qualifier) {
+
+        public QualifiedEventType {
+            Objects.requireNonNull(eventType, "eventType");
+            Objects.requireNonNull(qualifier, "qualifier");
+        }
+    }
+
     public record RetentionSettings(
         Map<Key, Duration> policies,
         Map<Key, Key> eventTypeMappings,
+        Map<QualifiedEventType, Key> qualifiedEventTypeMappings,
         Key fallbackPolicy
     ) {
 
+        public RetentionSettings(
+            Map<Key, Duration> policies,
+            Map<Key, Key> eventTypeMappings,
+            Key fallbackPolicy
+        ) {
+            this(policies, eventTypeMappings, Map.of(), fallbackPolicy);
+        }
+
         public RetentionSettings {
             policies = Map.copyOf(Objects.requireNonNull(policies, "policies"));
-            eventTypeMappings = Map.copyOf(Objects.requireNonNull(eventTypeMappings, "eventTypeMappings"));
+            eventTypeMappings = Map.copyOf(
+                Objects.requireNonNull(eventTypeMappings, "eventTypeMappings")
+            );
+            qualifiedEventTypeMappings = Map.copyOf(
+                Objects.requireNonNull(
+                    qualifiedEventTypeMappings,
+                    "qualifiedEventTypeMappings"
+                )
+            );
             Objects.requireNonNull(fallbackPolicy, "fallbackPolicy");
         }
     }

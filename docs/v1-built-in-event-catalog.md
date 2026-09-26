@@ -1,7 +1,7 @@
 # Kansokusha v1 built-in event catalog
 
-- 日付: 2026-09-25
-- 関連 Issue: #10, #37, #129, #130, #131, #132, #133
+- 日付: 2026-09-26
+- 関連 Issue: #10, #37, #101, #102, #103, #104, #105, #106
 - 前提: ADR-0001, ADR-0003, ADR-0004
 
 ## 目的
@@ -28,7 +28,7 @@ Kansokusha v1 の記録基盤を実イベントで検証するため、組み込
 | Paper / Folia | `kansokusha:player_trade` | successful merchant transaction confirmed after `PlayerPurchaseEvent` by Paper's successful-trade statistic event | `kansokusha:audit` | none |
 | Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` | none |
 
-chat、command、player inventory slot mutation、login/logout、上表にない general inventory / entity / container event 等は v1 minimum built-in catalog に含めない。item drop/pickup は inventory slot 差分ではなく、player と world item entity の ownership transfer を canonical operation として記録する。
+上表は foundation 検証時の original minimum catalog である。#101〜#106 で採用された追加 built-in event は current catalog に含み、retention mapping は下記の current mapping を使用する。close 済みの duplicate / 対象外 event type は current mapping に含めない。item drop/pickup は inventory slot 差分ではなく、player と world item entity の ownership transfer を canonical operation として記録する。
 
 ## 共通 rules
 
@@ -66,33 +66,41 @@ LOWEST snapshot は「Kansokusha が取得できた earliest-available state」�
 
 ## Retention mapping
 
-catalog が提示する retention configuration example は次のとおり。
+current built-in catalog の operator-facing retention は次の4 policy とする。
 
 | Policy key | Duration | 用途 |
 | --- | --- | --- |
-| `kansokusha:audit` | `P180D` | player-driven world changes |
-| `kansokusha:session` | `P30D` | proxy/backend transition events |
-| `kansokusha:default` | `P30D` | explicit fallback |
+| `kansokusha:audit` | `P180D` | command/admin/player-driven audit と長期調査価値の高い state change |
+| `kansokusha:session` | `P30D` | proxy/backend/session transition |
+| `kansokusha:default` | `P30D` | chat と explicit fallback |
+| `kansokusha:short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
 
-| Event type | Policy |
-| --- | --- |
-| `kansokusha:block_break` | `kansokusha:audit` |
-| `kansokusha:block_place` | `kansokusha:audit` |
-| `kansokusha:sign_change` | `kansokusha:audit` |
-| `kansokusha:bucket_empty` | `kansokusha:audit` |
-| `kansokusha:bucket_fill` | `kansokusha:audit` |
-| `kansokusha:block_harvest` | `kansokusha:audit` |
-| `kansokusha:flower_pot_change` | `kansokusha:audit` |
-| `kansokusha:item_drop` | `kansokusha:audit` |
-| `kansokusha:item_pickup` | `kansokusha:audit` |
-| `kansokusha:book_edit` | `kansokusha:audit` |
-| `kansokusha:lectern_change` | `kansokusha:audit` |
-| `kansokusha:player_trade` | `kansokusha:audit` |
-| `kansokusha:server_connected` | `kansokusha:session` |
+exact event-type mapping は以下とする。
 
-fallback policy は `kansokusha:default` とする。
+- `kansokusha:audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `kansokusha:short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`.
+- `kansokusha:session`: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`.
+- `kansokusha:default`: `paper_chat`, `velocity_chat`.
 
-これらは operator-facing example であり、initial config skeleton へ自動投入しない。runtime retention semantics は ADR-0003 に従う。
+fallback policy は `kansokusha:default` とする。chat は fallback に依存させず `default` へ明示 mapping する。communication 専用 policy は追加しない。
+
+### Qualified retention mapping
+
+通常の exact mapping は従来どおり event type だけで解決する。payload producer が transient な retention qualifier を付与した場合だけ、`(event type, qualifier)` mapping を exact mapping より先に評価する。qualifier は opaque payload bytes の一部ではなく永続化もしない。また qualifier 自体は policy 名ではなく、operator configuration が最終 policy を決定する。
+
+`kansokusha:cauldron_level_change` は fail-safe として exact mapping を `kansokusha:audit` に置き、Paper payload codec が actor なしの `NATURAL_FILL` / `EVAPORATE` を `kansokusha:natural` qualifier として分類した場合だけ、次の qualified mapping で `kansokusha:short` を選択する。
+
+```yaml
+- event-type: kansokusha:cauldron_level_change
+  policy: kansokusha:audit
+- event-type: kansokusha:cauldron_level_change
+  qualifier: kansokusha:natural
+  policy: kansokusha:short
+```
+
+player/entity actor がある場合、および actor なしでも `UNKNOWN` 等の未知・分類不能 reason は qualifier を付けず `audit` に残す。これにより unknown cause を短期 expiry へ落とさない。
+
+full configuration example は `docs/examples/v1-built-in-retention.yml` を authoritative fixture とし、initial config skeleton へ built-in policy を自動投入しない。reload / expiry semantics は ADR-0003 に従う。
 
 ## `kansokusha:block_break`
 

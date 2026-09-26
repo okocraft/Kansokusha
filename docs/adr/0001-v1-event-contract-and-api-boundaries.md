@@ -71,7 +71,9 @@ world identifier は server-scoped なので、world を指定する event で�
 
 payload は byte sequence とし、Kansokusha は内容を解釈しない。
 
-common 内部の `AcceptedEvent` は、検証済み submission に Kansokusha が解決した retention policy key を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、対応付け、expiry 情報は retention ADR で決定する。
+同一 event type 内で event-specific retention classification が必要な場合に限り、`EventPayload` は opaque bytes とは別の transient retention qualifier を持てる。external provider を含む event provider は provider API の `EventPayload#withRetentionQualifier(Key)` で qualifier を付与できる。qualifier は payload format / persisted payload の一部ではなく、policy key や duration でもない。Kansokusha は qualifier の意味を解釈せず、operator-configured mapping の lookup key として acceptance boundary でのみ使用する。
+
+common 内部の `AcceptedEvent` は、検証済み submission に Kansokusha が解決した retention policy key を加えたものとする。外部 provider は event ごとの retention policy を直接指定しない。retention policy の identity、qualifier mapping、対応付け、expiry 情報は retention ADR で決定する。
 
 ### 5. runtime registration と persistent identity を分離する
 

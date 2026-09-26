@@ -37,17 +37,22 @@ millisecond alignment は `occurred_at TIMESTAMP_MS` と persisted expiry の pr
 
 built-in policy name、built-in duration、hard-coded fallback duration は定義しない。
 
-### 2. exact mapping、次に explicit fallback policy の順で解決する
+### 2. qualified mapping、exact mapping、explicit fallback policy の順で解決する
 
 retention configuration は logical に次を持つ。
 
 - `policies: Key -> Duration`
 - `event type mappings: event type Key -> policy Key`
+- optional な `qualified event type mappings: (event type Key, qualifier Key) -> policy Key`
 - operator が明示する `fallback policy Key`
 
-event type に exact mapping があればそれを使用し、なければ fallback policy を使用する。mapping と fallback が参照する policy は、同じ validated configuration に存在しなければならない。
+通常の event は従来どおり event type の exact mapping、なければ fallback policy の順で解決する。
 
-duplicate definition、不正な key / duration、unknown policy reference、fallback の欠落は configuration validation failure とする。
+event-specific な内容により同じ event type 内で retention を分ける必要がある場合、payload producer は acceptance 前の transient metadata として retention qualifier を付与できる。qualifier は policy identity ではなく semantic classification key であり、opaque payload bytes には含めず永続化もしない。外部 provider / built-in producer が policy key や duration を直接選ぶことはなく、operator configuration が `(event type, qualifier)` を policy へ対応付ける。
+
+qualifier が存在して対応する qualified mapping がある場合はそれを exact mapping より先に使用する。qualified mapping がない場合は exact mapping、さらにそれもなければ fallback policy を使用する。mapping と fallback が参照する policy は、同じ validated configuration に存在しなければならない。
+
+duplicate definition、不正な key / duration / qualifier、unknown policy reference、fallback の欠落は configuration validation failure とする。
 
 retention configuration が valid でなければ runtime を active にしない。初回起動用の config skeleton を生成することは許可するが、implicit policy / duration は生成しない。
 
@@ -150,7 +155,7 @@ cleanup scan は速くなり得るが、append-heavy write に index maintenance
 
 ## 結果
 
-- event ごとの expiry は記録時に absolute timestamp として確定し、後から policy 変更で書き換えない。
+- event ごとの policy は acceptance 時に qualified mapping → exact mapping → fallback の順で解決し、expiry は absolute timestamp として確定して後から policy 変更で書き換えない。
 - retention cleanup のための durable event identity / index は導入せず、bounded pass 内だけ `rowid` を利用する。
 - cleanup work は1 pass単位で bounded とし、startup immediate pass と fixed-delay retry で自動実行する。
 - concrete policy values と operational bounds は configuration / catalog の責務として残る。
