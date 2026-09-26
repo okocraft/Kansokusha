@@ -149,6 +149,22 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testCheckpointAndHealthReportStorageState(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
+            storage.checkpoint();
+
+            var health = storage.health();
+            Assertions.assertEquals(2, health.eventCount());
+            Assertions.assertFalse(health.databaseSize().isBlank());
+            Assertions.assertTrue(health.blockSize() > 0);
+            Assertions.assertTrue(health.totalBlocks() >= health.usedBlocks());
+            Assertions.assertTrue(health.freeBlocks() >= 0);
+            Assertions.assertFalse(health.walSize().isBlank());
+        }
+    }
+
+    @Test
     void testAppenderCanBeReusedAcrossTransactions(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         try (var storage = DuckDbStorageImpl.open(file)) {
