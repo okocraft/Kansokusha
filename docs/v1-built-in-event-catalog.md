@@ -35,7 +35,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:fluid_change` | `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
-| `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason` and `actor_kind` |
+| `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason`, while actor identity stays in the common actor columns |
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
@@ -255,12 +255,12 @@ common fields:
 - actor: placing player
 - target type: placed block type
 
-payload generation 1 は Paper module で生成する binary NBT compound とし、次の2 child compounds を持つ。
+payload generation 1 の logical payload は次の2 child compounds を持ち、Paper compact binary codec で保存する。
 
 1. `replaced`: event の replaced Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
 2. `placed`: MONITOR 時点で world に仮設置されている Minecraft `BlockState` を `NbtUtils.writeBlockState` した value
 
-outer compound は `NbtIo.write` で payload bytes にする。block entity NBT は generation 1 payload に含めない。
+outer compound の field name / primitive value は compact binary codec で保存する。block entity NBT は generation 1 payload に含めない。
 
 ### Multi-place granularity
 
