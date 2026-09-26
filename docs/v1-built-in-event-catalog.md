@@ -6,29 +6,79 @@
 
 ## 目的
 
-Kansokusha v1 の記録基盤を実イベントで検証するため、組み込み event の最小集合と、その意味・保証範囲を固定する。
+Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終選定を含む current runtime の event type、source API、retention、意味・保証範囲を固定する。
 
 本 catalog は Minecraft の網羅的な監査ログを定義しない。外部 plugin は public API から独自 event type を登録・記録できる。
 
-## v1 catalog
+## Current catalog
 
-| Platform | Event type key | Capture | Retention | Coalescing |
-| --- | --- | --- | --- | --- |
-| Paper / Folia | `kansokusha:block_break` | non-cancelled `BlockBreakEvent` with earliest-available pre-state | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:block_place` | non-cancelled/buildable `BlockPlaceEvent` / `BlockMultiPlaceEvent` with earliest-available snapshots | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:sign_change` | non-cancelled `SignChangeEvent`, before-side snapshot + final event lines | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:bucket_empty` | non-cancelled block-changing `PlayerBucketEmptyEvent` | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:bucket_fill` | non-cancelled block-changing `PlayerBucketFillEvent`; non-block fills are excluded | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:block_harvest` | non-cancelled harvest/shear source event normalized to one canonical event | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:flower_pot_change` | non-cancelled flower-pot insert/remove with canonical before/after contents | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:item_drop` | non-cancelled player drop with item-entity UUID, detached stack, and drop position | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:item_pickup` | non-cancelled `EntityPickupItemEvent` when the actor is a Player, with item-entity UUID, detached stack, position, and remaining count | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:book_edit` | non-cancelled `PlayerEditBookEvent` with recoverable previous/final BookMeta and final signing flag | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:lectern_change` | non-cancelled lectern book insert/take only; page navigation is excluded | `kansokusha:audit` | none |
-| Paper / Folia | `kansokusha:player_trade` | successful merchant transaction confirmed after `PlayerPurchaseEvent` by Paper's successful-trade statistic event | `kansokusha:audit` | none |
-| Velocity | `kansokusha:server_connected` | successful `ServerConnectedEvent` | `kansokusha:session` | none |
+以下は current runtime で register / wire される全56 event type と platform API source の対応である。source event は同一 Kansokusha event type へ canonicalize される場合がある。表にない close 済み対象外 event を built-in listener source として追加しない。
 
-上表は foundation 検証時の original minimum catalog である。#101〜#106 で採用された追加 built-in event は current catalog に含み、retention mapping は下記の current mapping を使用する。close 済みの duplicate / 対象外 event type は current mapping に含めない。item drop/pickup は inventory slot 差分ではなく、player と world item entity の ownership transfer を canonical operation として記録する。
+### Paper / Folia
+
+| Kansokusha event type | Paper / Bukkit source event | Retention | Boundary |
+| --- | --- | --- | --- |
+| `kansokusha:block_break` | `BlockBreakEvent` | `audit` | non-cancelled break attempt; later vanilla destruction success is not asserted |
+| `kansokusha:block_place` | `BlockPlaceEvent` / `BlockMultiPlaceEvent` | `audit` | non-cancelled + buildable placement attempt; final post-processing state is not asserted |
+| `kansokusha:sign_change` | `SignChangeEvent` | `audit` | before snapshot + final event lines |
+| `kansokusha:bucket_empty` | `PlayerBucketEmptyEvent` | `audit` | block-changing bucket operation |
+| `kansokusha:bucket_fill` | `PlayerBucketFillEvent` | `audit` | block-changing fill only; non-block `BlockFace.SELF` paths are excluded |
+| `kansokusha:block_harvest` | `PlayerHarvestBlockEvent` / `PlayerShearBlockEvent` | `audit` | #110 shear is canonicalized into #109 harvest |
+| `kansokusha:flower_pot_change` | `PlayerFlowerPotManipulateEvent` | `audit` | insert/remove |
+| `kansokusha:block_ignite` | `BlockIgniteEvent` | `audit` | ignition origin/cause; `SPREAD` is excluded and owned by `natural_block_change` |
+| `kansokusha:block_burn` | `BlockBurnEvent` | `short` | fire-caused destruction; TNT fire-prime correlation prevents duplicate ownership |
+| `kansokusha:tnt_prime` | `TNTPrimeEvent` | `audit` | accepted TNT prime |
+| `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block |
+| `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement |
+| `kansokusha:entity_block_change` | `EntityChangeBlockEvent` | `audit` | entity-caused block mutation |
+| `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent` | `short` | natural/environmental change; `EntityBlockFormEvent` is excluded |
+| `kansokusha:fluid_change` | `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
+| `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
+| `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | fertilization owns matching grow/spread/structure changes |
+| `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit`; qualified natural → `short` | actorless `NATURAL_FILL` / `EVAPORATE` use `kansokusha:natural` qualifier |
+| `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
+| `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
+| `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
+| `kansokusha:item_drop` | `PlayerDropItemEvent` | `audit` | player → world item ownership transfer |
+| `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
+| `kansokusha:book_edit` | `PlayerEditBookEvent` | `audit` | previous/final book state |
+| `kansokusha:lectern_change` | `PlayerInsertLecternBookEvent` / `PlayerTakeLecternBookEvent` | `audit` | insert/take only; page navigation is excluded |
+| `kansokusha:player_trade` | `PlayerPurchaseEvent` (including `PlayerTradeEvent` subclass) + `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` success confirmation | `audit` | submit only after trade success confirmation |
+| `kansokusha:paper_join` | `PlayerJoinEvent` | `session` | successful backend join |
+| `kansokusha:paper_quit` | `PlayerQuitEvent` | `session` | completed backend session end |
+| `kansokusha:paper_kick` | `PlayerKickEvent` | `session` | accepted kick decision; a subsequent quit is intentionally separate |
+| `kansokusha:player_world_change` | `PlayerChangedWorldEvent` | `session` | completed world state transition |
+| `kansokusha:player_teleport` | `PlayerTeleportEvent` excluding `PlayerPortalEvent` preflight | `session` | accepted teleport operation; intentionally coexists with world change |
+| `kansokusha:player_gamemode_change` | `PlayerGameModeChangeEvent` | `audit` | accepted old → final-new transition |
+| `kansokusha:player_spawn_change` | `PlayerSetSpawnEvent` | `audit` | effective player respawn-point set/clear boundary |
+| `kansokusha:player_death` | `PlayerDeathEvent` | `audit` | death context; full drops are not persisted |
+| `kansokusha:paper_chat` | `AsyncChatEvent` | `default` | original raw message only |
+| `kansokusha:paper_player_command` | `PlayerCommandPreprocessEvent` | `audit` | original raw command line only |
+| `kansokusha:paper_server_command` | `ServerCommandEvent` / `RemoteServerCommandEvent` | `audit` | source descriptor + original raw command only |
+| `kansokusha:entity_place` | `EntityPlaceEvent` / `HangingPlaceEvent` | `audit` | #156 hanging place is canonicalized into #155 |
+| `kansokusha:entity_break` | Paper 26.3+ `EntityBreakByEntityEvent` when available; otherwise `HangingBreakByEntityEvent` on the 26.2 baseline | `audit` | #157 hanging break is canonicalized into #164 without double registration |
+| `kansokusha:armor_stand_manipulate` | `PlayerArmorStandManipulateEvent` | `audit` | player armor-stand state change |
+| `kansokusha:entity_leash_change` | `PlayerLeashEntityEvent` / `PlayerUnleashEntityEvent` | `audit` | player leash/unleash |
+| `kansokusha:item_frame_change` | `PlayerItemFrameChangeEvent` | `audit` | existing frame content/rotation/fixed-state change |
+| `kansokusha:entity_tame` | `EntityTameEvent` | `audit` | tame owner transition |
+| `kansokusha:entity_name_change` | `PlayerNameEntityEvent` | `audit` | player-driven entity rename |
+| `kansokusha:gamerule_change` | `WorldGameRuleChangeEvent` | `audit` | effective gamerule state change |
+| `kansokusha:world_difficulty_change` | `WorldDifficultyChangeEvent` | `audit` | effective world difficulty change |
+| `kansokusha:world_border_change` | `WorldBorderCenterChangeEvent` / `WorldBorderBoundsChangeEvent` | `audit` | transition start/state request; finish notification is excluded |
+| `kansokusha:world_spawn_change` | `SpawnChangeEvent` | `audit` | world-global spawn change |
+| `kansokusha:whitelist_change` | `WhitelistToggleEvent` / `WhitelistStateUpdateEvent` | `audit` | global toggle and profile add/remove |
+
+### Velocity
+
+| Kansokusha event type | Velocity source event | Retention | Boundary |
+| --- | --- | --- | --- |
+| `kansokusha:server_connected` | `ServerConnectedEvent` | `session` | successful backend connection |
+| `kansokusha:velocity_post_login` | `PostLoginEvent` | `session` | successful proxy login |
+| `kansokusha:velocity_disconnect` | `DisconnectEvent` | `session` | proxy session end |
+| `kansokusha:backend_kick` | `KickedFromServerEvent` | `session` | backend kick plus Velocity final action |
+| `kansokusha:velocity_chat` | `PlayerChatEvent` | `default` | original raw message only |
+| `kansokusha:velocity_command` | `CommandExecuteEvent` | `audit` | source descriptor + original raw command only |
+| `kansokusha:backend_registry_change` | `ServerRegisteredEvent` / `ServerUnregisteredEvent` | `audit` | runtime/reload-induced backend map changes after plugin initialization |
 
 ## 共通 rules
 
@@ -63,6 +113,41 @@ Paper / Folia の block event は二段階で扱う。
 LOWEST snapshot は「Kansokusha が取得できた earliest-available state」であり、同じ `LOWEST` priority で Kansokusha より先に実行された listener より前の state は保証しない。
 
 また MONITOR 後の Paper / vanilla processing が実際に完了・成功したことまでは原則保証しない。例外として `kansokusha:player_trade` は、Paper 26.2 が `MerchantOffer#take` 成功後に発火する `PlayerStatisticIncrementEvent(TRADED_WITH_VILLAGER)` と pending purchase を相関し、実取引成立後にのみ submission する。
+
+## Canonical integration / duplicate semantics
+
+Canonicalization and intentional coexistence are part of the event contract, not generic repeated-log suppression.
+
+- fire: `block_ignite` does not accept `BlockIgniteEvent.IgniteCause.SPREAD`; propagation is `natural_block_change` via `BlockSpreadEvent`; destruction is `block_burn`.
+- grow/fertilize: natural `BlockGrowEvent` / `BlockSpreadEvent` / non-bonemeal `StructureGrowEvent` candidates are deferred so a matching `BlockFertilizeEvent` can own the same change as `block_fertilize`.
+- harvest/shear/break: `PlayerHarvestBlockEvent` and `PlayerShearBlockEvent` both map to `block_harvest`; normal `BlockBreakEvent` remains `block_break`, and the real Paper fixture verifies representative vanilla actions are not double-owned.
+- entity placement: generic `EntityPlaceEvent` skips `Hanging`; `HangingPlaceEvent` supplies the hanging path into the same `entity_place` type.
+- entity break: when generic `EntityBreakByEntityEvent` callbacks are available they own both generic/hanging paths; the fallback `HangingBreakByEntityEvent` handler is suppressed. On the Paper 26.2 baseline only the hanging API exists.
+- trade: only the `PlayerPurchaseEvent` handler is registered for purchase/trade dispatch; `PlayerTradeEvent` is identified as its subclass in payload metadata, and submit waits for the post-take trade statistic signal.
+- kick/quit: an accepted `paper_kick` and the subsequent `paper_quit` with kicked quit reason are intentionally both recorded because they represent the kick decision and completed session end.
+- world change/teleport: `player_world_change` and `player_teleport` intentionally coexist because they represent state transition and operation history respectively.
+
+Generic coalescing, rate-based repeated-log suppression, or automatic-machine aggregation is not implemented by this catalog expansion and remains separate scope. Event-specific ownership/canonicalization above does not imply a general coalescing facility.
+
+## Raw activity and success boundaries
+
+Chat and command event types persist only the original raw activity observed at their platform pre-execution/pre-routing boundary. They do not persist rewritten/final content, cancellation/allow/deny decisions, command result objects, or execution success/failure.
+
+Most cancellable Paper events are submitted after MONITOR confirms the event is not cancelled, but that does not generally prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, and `container_transfer` are event/attempt observations within the documented boundary. `player_trade` is an explicit exception: it is submitted only after Paper reaches the successful trade-take statistic boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
+
+## Explicit exclusions
+
+The final catalog intentionally has no built-in listener for the following reviewed API events/semantics:
+
+- generic player inventory slot mutation (#126)
+- Paper/Velocity login decision or deny events (#134 / #143)
+- Velocity server pre-connect/routing decision (#147)
+- cross-host transfer (#148)
+- post-command execution/result (#154)
+- lectern page navigation (`PlayerLecternPageChangeEvent`)
+- world-border finish notification (`WorldBorderBoundsChangeFinishEvent`)
+- fluid level-only change (`FluidLevelChangeEvent`); #119 is water/lava `BlockFromToEvent` arrival only
+- proxy reload event itself (#171 / `ProxyReloadEvent`); actual backend registry deltas remain observable through register/unregister events
 
 ## Retention mapping
 
@@ -304,16 +389,18 @@ payload は nullable `previousServerKey` 1 field を持つ Velocity-specific bin
 
 target backend name は common `server` field から復元可能なため payload に重複保存しない。
 
-## 要件への対応
+## 最終 integration invariants
 
-| 要件 | Catalog decision |
+| Area | Current contract |
 | --- | --- |
-| §5 | v1 minimum built-in event を13 event type に固定 |
-| §6 | 選定 built-in event では coalescing しない |
-| §8 | common fields と generation 1 payload fields を event ごとに固定 |
-| §9 | retention policy example、event mapping、fallback を固定 |
-| §11 | platform callback は storage I/O / flush completion を待たず bounded submission を使用 |
-| §14 | chat / command は v1 minimum built-in 対象外 |
+| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 adopted built-ins are registered through the platform lifecycle collections |
+| closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
+| canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
+| retention | every adopted event type has an exact mapping; cauldron natural causes additionally use the qualified mapping |
+| lifecycle | disable unregisters listeners before runtime close; Paper clears all `PaperInFlightListener` state; registration failure rolls back partial wiring |
+| ingestion | platform callbacks call the bounded `KansokushaApi.submit` boundary and do not wait for storage completion |
+| Folia | LOWEST→MONITOR snapshots use event-identity correlation with synchronized/shared-state guards; deferred multi-event correlation is explicitly synchronized/thread-scoped |
+| coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
 
 ## 参照
 
