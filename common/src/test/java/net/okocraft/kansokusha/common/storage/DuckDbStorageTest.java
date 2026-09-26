@@ -17,6 +17,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -127,11 +129,63 @@ class DuckDbStorageTest {
     }
 
     @Test
-    void testOpenRejectsIncompatibleEventsTable(@TempDir Path dir) throws Exception {
+    void testAppendAssignsUniqueUuidV7IdsAndStableOrderForSameOccurredAt(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var eventCount = 128;
+
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(IntStream.range(0, eventCount)
+                .mapToObj(index -> queued(event(SHORT)))
+                .toList());
+        }
+
+        var eventIds = new ArrayList<UUID>(eventCount);
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT event_id, epoch_ms(occurred_at) FROM events ORDER BY occurred_at, event_id"
+             )) {
+            while (rows.next()) {
+                var eventId = rows.getObject(1, UUID.class);
+                Assertions.assertNotNull(eventId);
+                Assertions.assertEquals(7, eventId.version());
+                Assertions.assertEquals(NOW.toEpochMilli(), rows.getLong(2));
+                eventIds.add(eventId);
+            }
+        }
+
+        Assertions.assertEquals(eventCount, eventIds.size());
+        Assertions.assertEquals(eventCount, new HashSet<>(eventIds).size());
+        for (var index = 1; index < eventIds.size(); index++) {
+            Assertions.assertTrue(
+                eventIds.get(index - 1).compareTo(eventIds.get(index)) < 0,
+                "event_id must provide a stable tie-break for equal occurred_at values"
+            );
+        }
+    }
+
+    @Test
+    void testOpenRejectsEventsTableWithoutEventId(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
              var statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE events (event_type VARCHAR NOT NULL, player UUID)");
+            statement.execute("""
+                CREATE TABLE events (
+                    event_type VARCHAR NOT NULL,
+                    payload_generation INTEGER NOT NULL,
+                    occurred_at TIMESTAMP_MS NOT NULL,
+                    server VARCHAR,
+                    world VARCHAR,
+                    x INTEGER,
+                    y INTEGER,
+                    z INTEGER,
+                    actor_kind VARCHAR,
+                    actor_uuid UUID,
+                    actor_type VARCHAR,
+                    target_type VARCHAR,
+                    expires_at TIMESTAMP_MS NOT NULL,
+                    payload BLOB NOT NULL
+                )
+                """);
         }
 
         Assertions.assertThrows(java.sql.SQLException.class, () -> DuckDbStorageImpl.open(file).close());

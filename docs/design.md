@@ -51,6 +51,7 @@ submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと / b
 
 ```sql
 CREATE TABLE events (
+    event_id UUID NOT NULL,
     event_type VARCHAR NOT NULL,
     payload_generation INTEGER NOT NULL,
     occurred_at TIMESTAMP_MS NOT NULL,
@@ -68,10 +69,11 @@ CREATE TABLE events (
 );
 ```
 
+- `event_id` は保存時に生成する UUIDv7 で、event identity、同一 `occurred_at` 内の tie-break、将来の cursor pagination / inspect に使う。安定した時系列順は `(occurred_at, event_id)` とする。UUIDv7 に含まれる生成時刻は event の発生時刻として扱わず、`occurred_at` は引き続き `EventSubmission.occurredAt()` を正とする。
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
 - actor は `actor_kind`（`player` / `entity` / `block`）、`actor_uuid`（player と entity）、`actor_type`（entity type または block type の key。player では NULL）の 3 列に保存する。種類ごとの列にせず 1 組の列にまとめることで、「このプレイヤー / このエンティティ個体（`actor_uuid`）」「クリーパー全般 / ピストン全般（`actor_type`）」のどちらも 1 列の条件で検索できる。
 - `target_type` と `actor_type` も key 文字列のまま保存する。
-- 起動時に `CREATE TABLE IF NOT EXISTS` でテーブルを作り、列構成が期待と一致しなければ起動を失敗させる。actor / target 列の導入時は運用データが存在しなかったため migration を用意せず、旧スキーマ（`player` 列）の DB は拒否する。以後スキーマを変更する必要が生じた時点で、バージョン管理と migration を導入する（要件 §15）。
+- 起動時に `CREATE TABLE IF NOT EXISTS` でテーブルを作り、列構成が期待と一致しなければ起動を失敗させる。本番運用前のため `event_id` 追加を含む旧スキーマからの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
 
 ## 保持期間
 
