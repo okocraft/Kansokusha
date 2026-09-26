@@ -142,19 +142,12 @@ final class PaperContainerPayloadCodec {
         CompoundTag item
     ) {
         var payload = new CompoundTag();
-        payload.putString("semantics", "non_cancelled_automated_transfer_attempt");
         payload.put("source_inventory", source.payload());
         payload.put("destination_inventory", destination.payload());
-        payload.put("initiator_inventory", initiator.payload());
+        if (!initiatorRole.equals("source") && !initiatorRole.equals("destination")) {
+            payload.put("initiator_inventory", initiator.payload());
+        }
         payload.putString("initiator_role", initiatorRole);
-        payload.putString(
-            "transfer_direction",
-            switch (initiatorRole) {
-                case "source" -> "push";
-                case "destination" -> "pull";
-                default -> "unknown";
-            }
-        );
         payload.put("item", item);
         return PaperPayloadNbtCodec.encode(payload);
     }
@@ -166,8 +159,6 @@ final class PaperContainerPayloadCodec {
         LocationSnapshot itemOrigin
     ) {
         var payload = new CompoundTag();
-        payload.putString("semantics", "non_cancelled_container_pickup_attempt");
-        payload.putString("source_kind", "world_item");
         payload.put("inventory", inventory.payload());
         payload.putString("item_entity_uuid", itemEntityId);
         payload.put("source_item", item);
@@ -185,7 +176,6 @@ final class PaperContainerPayloadCodec {
         ListTag results
     ) {
         var payload = new CompoundTag();
-        payload.putString("semantics", "non_cancelled_container_process_event");
         payload.putString("process_kind", processKind);
         payload.putString("source_event", sourceEvent);
         payload.put("container", container.payload());
