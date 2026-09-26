@@ -56,7 +56,7 @@ final class PaperPlayerStatePayloadCodec {
         Objects.requireNonNull(relativeFlags, "relativeFlags");
         var payload = new CompoundTag();
         payload.put("from", encodeLocation(Objects.requireNonNull(from, "from"), true));
-        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to")));
+        payload.put("to", encodeLocation(Objects.requireNonNull(to, "to"), false));
         payload.putString("cause", Objects.requireNonNull(cause, "cause"));
 
         var flags = new CompoundTag();
