@@ -2,9 +2,9 @@ package net.okocraft.kansokusha.common.storage;
 
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.subject.PlayerSubject;
+import org.duckdb.DuckDBAppender;
 import org.duckdb.DuckDBConnection;
 import org.duckdb.DuckDBDriver;
-import org.duckdb.DuckDBAppender;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,6 +41,7 @@ public final class DuckDbStorage implements AutoCloseable {
         """;
 
     private final DuckDBConnection connection;
+    private @Nullable DuckDBAppender appender;
 
     private DuckDbStorage(DuckDBConnection connection) {
         this.connection = connection;
@@ -63,7 +64,8 @@ public final class DuckDbStorage implements AutoCloseable {
     }
 
     public void append(List<QueuedEvent> events) throws SQLException {
-        try (var appender = this.connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, "events")) {
+        try {
+            var appender = this.appender();
             for (var queued : events) {
                 var event = queued.submission();
                 appender.beginRow()
@@ -93,6 +95,9 @@ public final class DuckDbStorage implements AutoCloseable {
             appender.flush();
             this.connection.commit();
         } catch (SQLException | RuntimeException e) {
+            // Closing can flush buffered rows, so discard the appender before rolling back the transaction.
+            // A fresh appender will be created for the next batch.
+            this.discardAppender(e);
             this.rollback(e);
             throw e;
         }
@@ -110,11 +115,34 @@ public final class DuckDbStorage implements AutoCloseable {
         }
     }
 
+    private DuckDBAppender appender() throws SQLException {
+        var appender = this.appender;
+        if (appender == null) {
+            appender = this.connection.createAppender(DuckDBConnection.DEFAULT_SCHEMA, "events");
+            this.appender = appender;
+        }
+        return appender;
+    }
+
     private static void appendNullable(DuckDBAppender appender, @Nullable String value) throws SQLException {
         if (value == null) {
             appender.appendNull();
         } else {
             appender.append(value);
+        }
+    }
+
+    private void discardAppender(Exception failure) {
+        var appender = this.appender;
+        this.appender = null;
+        if (appender == null) {
+            return;
+        }
+
+        try {
+            appender.close();
+        } catch (SQLException e) {
+            failure.addSuppressed(e);
         }
     }
 
@@ -128,6 +156,30 @@ public final class DuckDbStorage implements AutoCloseable {
 
     @Override
     public void close() throws SQLException {
-        this.connection.close();
+        SQLException failure = null;
+        var appender = this.appender;
+        this.appender = null;
+
+        if (appender != null) {
+            try {
+                appender.close();
+            } catch (SQLException e) {
+                failure = e;
+            }
+        }
+
+        try {
+            this.connection.close();
+        } catch (SQLException e) {
+            if (failure == null) {
+                failure = e;
+            } else {
+                failure.addSuppressed(e);
+            }
+        }
+
+        if (failure != null) {
+            throw failure;
+        }
     }
 }
