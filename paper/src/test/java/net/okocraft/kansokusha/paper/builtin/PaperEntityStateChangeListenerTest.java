@@ -587,7 +587,6 @@ class PaperEntityStateChangeListenerTest {
         Mockito.when(frameEvent.getPlayer()).thenReturn(player);
         Mockito.when(frameEvent.getAction())
             .thenReturn(PlayerItemFrameChangeEvent.ItemFrameChangeAction.PLACE);
-        Mockito.when(frameEvent.getItemStack()).thenReturn(ItemStack.of(Material.STICK, 1));
         Mockito.when(frameEvent.isCancelled()).thenReturn(true);
         listener.captureItemFrameChange(frameEvent);
         listener.finalizeItemFrameChange(frameEvent);
@@ -609,19 +608,8 @@ class PaperEntityStateChangeListenerTest {
         listener.captureTame(tame);
         listener.finalizeTame(tame);
 
-        var nameTarget = stubEntity(
-            Mockito.mock(LivingEntity.class),
-            world,
-            EntityType.VILLAGER,
-            TARGET_ID,
-            1,
-            2,
-            3
-        );
         var name = Mockito.mock(PlayerNameEntityEvent.class);
-        Mockito.when(name.getEntity()).thenReturn(nameTarget);
         Mockito.when(name.getPlayer()).thenReturn(player);
-        Mockito.when(name.getName()).thenReturn(Component.text("new"));
         Mockito.when(name.isCancelled()).thenReturn(true);
         listener.captureNameChange(name);
         listener.finalizeNameChange(name);
