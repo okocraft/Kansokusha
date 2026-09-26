@@ -48,7 +48,7 @@ public final class VelocityBackendRegistryChangePayloadCodec {
         } catch (IOException e) {
             throw new AssertionError("Unexpected in-memory Velocity payload encoding failure.", e);
         }
-        return EventPayload.copyOf(bytes.toByteArray());
+        return EventPayload.takeOwnership(bytes.toByteArray());
     }
 
     static Decoded decode(EventPayload payload) throws IOException {
@@ -56,7 +56,7 @@ public final class VelocityBackendRegistryChangePayloadCodec {
 
         try (
             var input = new DataInputStream(
-                new ByteArrayInputStream(payload.copyBytes())
+                payload.openStream()
             )
         ) {
             var action = Action.fromSerializedName(readString(input));
