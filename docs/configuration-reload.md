@@ -14,7 +14,7 @@ Only submissions accepted after the replacement use the new policy mappings and
 durations.
 
 The live reload scope is intentionally limited to retention policy definitions,
-event-type mappings, and the fallback policy. Ingestion queue capacity, writer batch
+event-type mappings (including qualified mappings), and the fallback policy. Ingestion queue capacity, writer batch
 settings, cleanup interval, cleanup pass size, debug mode, and platform identity are
 startup settings and require a restart to take effect.
 
