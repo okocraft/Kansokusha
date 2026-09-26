@@ -285,6 +285,44 @@ class SearchQueryParserTest {
     }
 
     @Test
+    void testIncludedTimeRangeFullyCoveredByExcludedRangeIsRejected() {
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> parse("time 1h exclude time 2h")
+        );
+    }
+
+    @Test
+    void testIncludedTimeRangePartiallyCoveredByExcludedRangeRemainsValid() {
+        var query = parse("time 2h exclude time 1h");
+
+        Assertions.assertEquals(
+            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(2)), NOW)),
+            query.conditions().timeRanges()
+        );
+        Assertions.assertEquals(
+            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(1)), NOW)),
+            query.exclusions().timeRanges()
+        );
+    }
+
+    @Test
+    void testExcludedTimeRangeUnionCanFullyCoverIncludedRange() {
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> parse("time 1h-3h exclude time 1h-2h exclude time 2h-3h")
+        );
+    }
+
+    @Test
+    void testOneUncoveredIncludedTimeAlternativePreventsContradiction() {
+        var query = parse("time 1h time 3h-4h exclude time 2h");
+
+        Assertions.assertEquals(2, query.conditions().timeRanges().size());
+        Assertions.assertEquals(1, query.exclusions().timeRanges().size());
+    }
+
+    @Test
     void testTimeAndExplicitBoundsConflict() {
         Assertions.assertThrows(
             SearchQueryParseException.class,
