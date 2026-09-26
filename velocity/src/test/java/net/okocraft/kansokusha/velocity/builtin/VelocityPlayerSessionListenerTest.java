@@ -417,7 +417,8 @@ class VelocityPlayerSessionListenerTest {
 
     private static ServerConnection connection(String serverName) {
         var connection = Mockito.mock(ServerConnection.class);
-        Mockito.when(connection.getServer()).thenReturn(server(serverName));
+        var server = server(serverName);
+        Mockito.when(connection.getServer()).thenReturn(server);
         return connection;
     }
 
