@@ -130,6 +130,26 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testCloseFlushesRemainingEventsOnStorageThread(@TempDir Path dir) throws Exception {
+        var runtime = start(dir, 10);
+        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+
+        runtime.submit(event(Instant.now()));
+        runtime.submit(event(Instant.now()));
+
+        var deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (countEvents(dir) != BATCH_SIZE && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(BATCH_SIZE, countEvents(dir));
+
+        Assertions.assertTrue(runtime.submit(event(Instant.now())));
+        runtime.close();
+
+        Assertions.assertEquals(BATCH_SIZE + 1, countEvents(dir));
+    }
+
+    @Test
     void testConcurrentFullBatchIsWrittenBeforeFlushInterval(@TempDir Path dir) throws Exception {
         var batchSize = 32;
         try (
