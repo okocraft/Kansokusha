@@ -26,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
@@ -50,6 +51,7 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private final int batchSize;
     private final BlockingQueue<QueuedEvent> queue;
     private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
+    private final AtomicInteger queuedEvents = new AtomicInteger();
     private final ScheduledExecutorService storageThread;
     // Guarantees that no event enters the queue after close() has drained it.
     private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
@@ -128,7 +130,8 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
             if (this.closed || !this.queue.offer(queued)) {
                 return false;
             }
-            if (this.queue.size() >= this.batchSize && this.earlyFlushScheduled.compareAndSet(false, true)) {
+            var queuedEvents = this.queuedEvents.incrementAndGet();
+            if (queuedEvents >= this.batchSize && this.earlyFlushScheduled.compareAndSet(false, true)) {
                 this.storageThread.execute(this::flush);
             }
             return true;
@@ -188,7 +191,9 @@ public final class KansokushaRuntime implements KansokushaApi, AutoCloseable {
     private void flush() {
         this.earlyFlushScheduled.set(false);
         var batch = new ArrayList<QueuedEvent>(this.batchSize);
-        while (this.queue.drainTo(batch, this.batchSize) > 0) {
+        int drained;
+        while ((drained = this.queue.drainTo(batch, this.batchSize)) > 0) {
+            this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
             } catch (SQLException | RuntimeException e) {
