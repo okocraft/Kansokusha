@@ -72,9 +72,7 @@ public final class PaperEntityBlockChangeListener implements Listener {
             PaperBuiltInSupport.changedBlockType(block.getBlockData(), to),
             PaperWorldMutationPayloadCodec.encodeEntityBlockChange(
                 block.getBlockData(),
-                to,
-                actor.getUniqueId(),
-                actor.getType().name()
+                to
             )
         ));
     }
