@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -65,28 +66,33 @@ public final class VelocityPlayerSessionListener {
         Objects.requireNonNull(event, "event");
 
         var player = event.getPlayer();
+        var username = player.getUsername();
+        var occurredAt = this.clock.instant();
         var remoteAddress = player.getRemoteAddress();
         var virtualHost = player.getVirtualHost().orElse(null);
         var rawVirtualHost = player.getRawVirtualHost().orElse(null);
 
-        this.api.submit(
-            new EventSubmission(
-                POST_LOGIN_EVENT_TYPE,
-                PayloadGeneration.FIRST,
-                this.clock.instant(),
-                null,
-                null,
-                null,
-                new PlayerActor(player.getUniqueId()),
-                null,
-                VelocityPlayerSessionPayloadCodec.encodePostLogin(
-                    player.getUsername(),
-                    remoteAddress,
-                    virtualHost,
-                    rawVirtualHost
-                )
+        var submission = new EventSubmission(
+            POST_LOGIN_EVENT_TYPE,
+            PayloadGeneration.FIRST,
+            occurredAt,
+            null,
+            null,
+            null,
+            new PlayerActor(player.getUniqueId()),
+            null,
+            VelocityPlayerSessionPayloadCodec.encodePostLogin(
+                username,
+                remoteAddress,
+                virtualHost,
+                rawVirtualHost
             )
         );
+        if (this.api instanceof PlayerNameDirectory playerNames) {
+            playerNames.submitPlayerLogin(submission, username);
+        } else {
+            this.api.submit(submission);
+        }
     }
 
     @Subscribe
