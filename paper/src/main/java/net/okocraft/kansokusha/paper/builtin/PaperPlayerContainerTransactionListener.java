@@ -1,9 +1,17 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import com.mojang.authlib.GameProfile;
 import net.kyori.adventure.key.Key;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.network.HashedStack;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.ContainerSynchronizer;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.RemoteSlot;
+import net.minecraft.world.inventory.SmithingMenu;
+import net.minecraft.world.item.Items;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
