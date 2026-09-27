@@ -31,6 +31,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -472,37 +473,65 @@ public final class DuckDbStorageImpl implements Storage {
     @Override
     public SearchMetadata searchMetadata() throws SQLException {
         var eventTypes = new LinkedHashSet<Key>();
-        var worlds = new LinkedHashSet<Key>();
-        var actorTypes = new LinkedHashSet<Key>();
-        var targetTypes = new LinkedHashSet<Key>();
+        var worlds = new LinkedHashMap<Key, LinkedHashSet<Key>>();
+        var actorTypes = new LinkedHashMap<Key, LinkedHashSet<Key>>();
+        var targetTypes = new LinkedHashMap<Key, LinkedHashSet<Key>>();
 
         try (var statement = this.connection.createStatement();
              var rows = statement.executeQuery("""
-                 SELECT category, value
+                 SELECT event_type, category, value
                  FROM (
-                     SELECT 'event' AS category, event_type AS value FROM events
+                     SELECT DISTINCT event_type, 'event' AS category, NULL AS value FROM events
                      UNION
-                     SELECT 'world', world FROM events WHERE world IS NOT NULL
+                     SELECT DISTINCT event_type, 'world', world
+                     FROM events
+                     WHERE world IS NOT NULL
                      UNION
-                     SELECT 'actor', actor_type FROM events WHERE actor_type IS NOT NULL
+                     SELECT DISTINCT event_type, 'actor', actor_type
+                     FROM events
+                     WHERE actor_type IS NOT NULL
                      UNION
-                     SELECT 'target', target_type FROM events WHERE target_type IS NOT NULL
+                     SELECT DISTINCT event_type, 'target', target_type
+                     FROM events
+                     WHERE target_type IS NOT NULL
                  )
-                 ORDER BY category, value
+                 ORDER BY event_type, category, value
                  """)) {
             while (rows.next()) {
-                var value = Key.key(rows.getString("value"));
+                var eventType = Key.key(rows.getString("event_type"));
+                eventTypes.add(eventType);
+                var value = rows.getString("value");
                 switch (rows.getString("category")) {
-                    case "event" -> eventTypes.add(value);
-                    case "world" -> worlds.add(value);
-                    case "actor" -> actorTypes.add(value);
-                    case "target" -> targetTypes.add(value);
+                    case "event" -> {
+                        // The event row keeps types with no world/actor/target metadata visible.
+                    }
+                    case "world" -> metadataValues(worlds, eventType).add(Key.key(value));
+                    case "actor" -> metadataValues(actorTypes, eventType).add(Key.key(value));
+                    case "target" -> metadataValues(targetTypes, eventType).add(Key.key(value));
                     default -> throw new SQLException("Unexpected search metadata category.");
                 }
             }
         }
 
-        return new SearchMetadata(eventTypes, worlds, actorTypes, targetTypes);
+        var events = new LinkedHashMap<Key, SearchMetadata.EventValues>();
+        for (var eventType : eventTypes) {
+            events.put(
+                eventType,
+                new SearchMetadata.EventValues(
+                    Set.copyOf(worlds.getOrDefault(eventType, new LinkedHashSet<>())),
+                    Set.copyOf(actorTypes.getOrDefault(eventType, new LinkedHashSet<>())),
+                    Set.copyOf(targetTypes.getOrDefault(eventType, new LinkedHashSet<>()))
+                )
+            );
+        }
+        return new SearchMetadata(events);
+    }
+
+    private static LinkedHashSet<Key> metadataValues(
+        Map<Key, LinkedHashSet<Key>> values,
+        Key eventType
+    ) {
+        return values.computeIfAbsent(eventType, ignored -> new LinkedHashSet<>());
     }
 
     @Override
