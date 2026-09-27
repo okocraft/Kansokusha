@@ -32,6 +32,17 @@ Platform-specific jars such as `Kansokusha-Paper-x.x.x.jar` and
 ./gradlew runVelocity
 ```
 
+### Verify the packaged Paper plugin
+
+```shell
+./gradlew :kansokusha-paper:paperExternalApiIntegrationTest
+```
+
+This starts a real Paper server with the packaged Kansokusha jar and verifies plugin
+startup, inspection listener wiring, Folia-support metadata, external API lifecycle,
+DuckDB dependency loading, and persistence. Connected-player interaction checks are
+documented in `docs/verification/paper-folia-packaged-smoke.md`.
+
 ### Verify the packaged Velocity plugin
 
 ```shell
@@ -86,6 +97,9 @@ If more than 10 results exist and the player has `kansokusha.command.search`, in
 shows a clickable `[View full history]` link that opens the existing exact-position
 search and its normal pagination. Rapid clicks use latest-request-wins behavior, so a
 slower older lookup is not displayed after a newer target.
+
+The packaged Paper verification and the manual Paper/Folia interaction checklist are in
+`docs/verification/paper-folia-packaged-smoke.md`.
 
 ## Search
 
