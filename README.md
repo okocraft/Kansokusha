@@ -50,6 +50,13 @@ retention periods recommended by `docs/v1-built-in-event-catalog.md`. Restart th
 or proxy to apply changes. See `docs/design.md` for the recording pipeline and storage
 layout.
 
+## Commands
+
+- `/kansokusha search ...` searches multiple persisted events by conditions.
+- `/kansokusha event <event-id>` displays one persisted event by its UUIDv7 event ID.
+- `inspect` is reserved for a future Paper block-click inspection mode and is not an event-detail
+  subcommand.
+
 ## License
 
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.

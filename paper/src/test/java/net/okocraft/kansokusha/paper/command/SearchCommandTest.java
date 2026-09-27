@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
@@ -339,6 +340,7 @@ class SearchCommandTest {
         this.api.metadata = metadata(Set.of(BREAK));
         this.api.page = new SearchPage(List.of(event), Optional.empty(), Optional.empty());
         ConsoleCommandSender console = console(BREAK);
+        TestSources.grant(console, EventCommand.PERMISSION);
 
         Assertions.assertEquals(
             1,
@@ -363,9 +365,32 @@ class SearchCommandTest {
             .append(Component.text(" | "))
             .append(Component.text("@ minecraft:overworld 1 64 -2"))
             .append(Component.text(" | "))
-            .append(Component.text("\"/say hello world\""));
+            .append(Component.text("\"/say hello world\""))
+            .clickEvent(ClickEvent.runCommand("/kansokusha event " + event().eventId()))
+            .hoverEvent(HoverEvent.showText(Component.text(event().eventId().toString())));
 
         Mockito.verify(console).sendMessage(SearchCommandMessages.RESULT.apply(expected));
+    }
+
+    @Test
+    void testResultIsNotClickableWithoutEventCommandPermission() throws Exception {
+        var event = event();
+        this.api.metadata = metadata(Set.of(BREAK));
+        this.api.page = new SearchPage(List.of(event), Optional.empty(), Optional.empty());
+        ConsoleCommandSender console = console(BREAK);
+
+        Assertions.assertEquals(
+            1,
+            this.tester.execute(
+                TestSources.ofSenderOnly(console),
+                "search action block_break"
+            )
+        );
+
+        Mockito.verify(console).sendMessage(
+            SearchCommandMessages.RESULT.apply(SearchCommand.formatEvent(event, false))
+        );
+        Mockito.verify(console).hasPermission(EventCommand.PERMISSION);
     }
 
     @Test
@@ -482,6 +507,11 @@ class SearchCommandTest {
         Assertions.assertTrue(
             properties.stringPropertyNames().containsAll(
                 SearchCommandMessages.DEFINER.getCollectedMessages().keySet()
+            )
+        );
+        Assertions.assertTrue(
+            properties.stringPropertyNames().containsAll(
+                EventCommandMessages.DEFINER.getCollectedMessages().keySet()
             )
         );
     }

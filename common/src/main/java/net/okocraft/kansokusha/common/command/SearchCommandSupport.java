@@ -156,7 +156,7 @@ public final class SearchCommandSupport {
         return value.regionMatches(true, 0, prefix, 0, prefix.length());
     }
 
-    public static Component formatEvent(SearchPage.Event event) {
+    public static Component formatEvent(SearchPage.Event event, boolean eventDetailsPermitted) {
         Objects.requireNonNull(event, "event");
         var parts = new ArrayList<Component>();
         parts.add(Component.text(event.occurredAt().toString()));
@@ -199,7 +199,10 @@ public final class SearchCommandSupport {
             }
             result = result.append(parts.get(index));
         }
-        return result;
+        result = result.hoverEvent(HoverEvent.showText(Component.text(event.eventId().toString())));
+        return eventDetailsPermitted
+            ? result.clickEvent(ClickEvent.runCommand("/kansokusha event " + event.eventId()))
+            : result;
     }
 
     public static @Nullable Component paginationComponent(String query, SearchPage page) {

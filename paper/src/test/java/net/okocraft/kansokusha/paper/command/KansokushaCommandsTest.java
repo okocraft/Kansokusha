@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
@@ -31,7 +32,11 @@ class KansokushaCommandsTest {
     @Test
     void testCommandDefinersAreExposedForLanguageLoading() {
         Assertions.assertEquals(
-            List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER),
+            List.of(
+                CommandMessages.DEFINER,
+                SearchCommandMessages.DEFINER,
+                EventCommandMessages.DEFINER
+            ),
             KansokushaCommands.getDefiners()
         );
     }
@@ -46,6 +51,11 @@ class KansokushaCommandsTest {
             this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
         );
         Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
+    }
+
+    @Test
+    void testEventCommandIsWiredUnderKansokushaRoot() {
+        Assertions.assertNotNull(KansokushaCommands.createCommand().getChild("event"));
     }
 
     @Test
