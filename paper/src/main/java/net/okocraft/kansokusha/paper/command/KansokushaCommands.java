@@ -13,7 +13,7 @@ import java.util.List;
 public final class KansokushaCommands {
 
     public static List<DefaultMessageDefiner> getDefiners() {
-        return List.of(CommandMessages.DEFINER);
+        return List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER);
     }
 
     public static void register(Commands commands) {
@@ -24,6 +24,7 @@ public final class KansokushaCommands {
         return Commands.literal("kansokusha")
             .requires(source -> source.getSender().hasPermission("kansokusha.command"))
             .then(VersionCommand.createVersionCommand())
+            .then(SearchCommand.createSearchCommand())
             .build();
     }
 
