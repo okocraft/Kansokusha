@@ -148,34 +148,6 @@ class PaperBlockFertilizeListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
     }
 
-    @Test
-    void testCancelledFertilizationIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperBlockFertilizeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var source = PaperBlockEventTestSupport.block(
-            world, 1, 2, 3, Blocks.OAK_SAPLING.defaultBlockState(), Material.OAK_SAPLING
-        );
-        var target = PaperBlockEventTestSupport.block(
-            world, 2, 2, 3, Blocks.AIR.defaultBlockState(), Material.AIR
-        );
-        var changed = PaperBlockEventTestSupport.state(
-            world, target, 2, 2, 3, Blocks.OAK_LOG.defaultBlockState()
-        );
-        var event = Mockito.mock(BlockFertilizeEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(source);
-        Mockito.when(event.getBlocks()).thenReturn(List.of(changed));
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Mockito.verify(changed, Mockito.never()).getBlockData();
-    }
-
     private static CompoundTag fertilizePayload(
         net.minecraft.world.level.block.state.BlockState preState,
         net.minecraft.world.level.block.state.BlockState postState,

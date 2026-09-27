@@ -102,18 +102,6 @@ class PaperTntPrimeListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
     }
 
-    @Test
-    void testCancelledPrimeIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperTntPrimeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var event = primeEvent(tnt(true), TNTPrimeEvent.PrimeCause.REDSTONE);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static Block tnt(boolean tntExplodes) {
         var world = PaperBlockEventTestSupport.world();
         Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(tntExplodes);

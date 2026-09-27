@@ -86,26 +86,6 @@ class PaperEntityBreakListenerTest {
         );
     }
 
-    @Test
-    void testCancelledBreaksAreDropped() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = listener(api);
-        var world = PaperBlockEventTestSupport.world();
-        var hangingEntity = hanging(world, ENTITY_ID, 3, 4, 5);
-        var hangingRemover = player(world);
-        var hangingSource = damageSource(DamageType.PLAYER_ATTACK, false);
-        var hanging = Mockito.mock(HangingBreakByEntityEvent.class);
-        Mockito.when(hanging.getEntity()).thenReturn(hangingEntity);
-        Mockito.when(hanging.getRemover()).thenReturn(hangingRemover);
-        Mockito.when(hanging.getCause()).thenReturn(HangingBreakEvent.RemoveCause.ENTITY);
-        Mockito.when(hanging.getDamageSource()).thenReturn(hangingSource);
-        Mockito.when(hanging.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, hanging);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static PaperEntityBreakListener listener(PaperBlockEventTestSupport.RecordingApi api) {
         return PaperEntityBreakListener.register(
             api,

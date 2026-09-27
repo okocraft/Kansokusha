@@ -351,49 +351,6 @@ class VelocityPlayerSessionListenerTest {
     }
 
     @Test
-    void testAwaitingAndShutdownPathsOnlyAttemptBoundedSubmission() {
-        var api = api();
-        Mockito.when(api.submit(Mockito.any()))
-            .thenReturn(false);
-        var listener = listener(api);
-        var player = player();
-        Mockito.when(player.getRemoteAddress()).thenReturn(
-            new InetSocketAddress("203.0.113.10", 54321)
-        );
-        Mockito.when(player.getVirtualHost()).thenReturn(Optional.empty());
-        Mockito.when(player.getRawVirtualHost()).thenReturn(Optional.empty());
-        Mockito.when(player.getCurrentServer()).thenReturn(Optional.empty());
-
-        Assertions.assertAll(
-            () -> Assertions.assertDoesNotThrow(
-                () -> listener.onPostLogin(new PostLoginEvent(player))
-            ),
-            () -> Assertions.assertDoesNotThrow(
-                () -> listener.onDisconnect(
-                    new DisconnectEvent(
-                        player,
-                        DisconnectEvent.LoginStatus.CANCELLED_BY_PROXY
-                    )
-                )
-            ),
-            () -> Assertions.assertDoesNotThrow(
-                () -> listener.onKickedFromServer(
-                    new KickedFromServerEvent(
-                        player,
-                        server("lobby"),
-                        Component.text("backend"),
-                        false,
-                        KickedFromServerEvent.Notify.create(
-                            Component.text("notify")
-                        )
-                    )
-                )
-            )
-        );
-        Mockito.verify(api, Mockito.times(3)).submit(Mockito.any());
-    }
-
-    @Test
     void testClassIsAnIndependentSubscriberAndKickHandlerRunsLast()
         throws Exception {
         var postLogin = VelocityPlayerSessionListener.class

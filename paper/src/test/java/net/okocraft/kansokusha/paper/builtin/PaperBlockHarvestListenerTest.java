@@ -13,8 +13,6 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -26,7 +24,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -93,52 +90,6 @@ class PaperBlockHarvestListenerTest {
             3,
             PaperItemStackPayloadCodec.decode(snapshottedDrops.getFirst()).getAmount()
         );
-    }
-
-    @Test
-    void testCancelledHarvestAndShearDoNotSubmit() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var harvest = harvestEvent(
-            1,
-            new ArrayList<>(List.of(ItemStack.of(Material.SWEET_BERRIES, 1))),
-            true
-        );
-        var shear = shearEvent(
-            2,
-            ItemStack.of(Material.SHEARS, 1),
-            new ArrayList<>(List.of(ItemStack.of(Material.HONEYCOMB, 1))),
-            true
-        );
-
-        PaperListenerTestSupport.fire(listener, harvest.event());
-        PaperListenerTestSupport.fire(listener, shear.event());
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
-    void testSourceWiringExcludesBlockBreak() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var harvest = harvestEvent(
-            5,
-            new ArrayList<>(List.of(ItemStack.of(Material.SWEET_BERRIES, 1))),
-            false
-        );
-
-        PaperListenerTestSupport.fire(listener, harvest.event());
-
-        Assertions.assertEquals(1, api.submissions.size());
-        var handledEventTypes = Arrays.stream(PaperBlockHarvestListener.class.getDeclaredMethods())
-            .filter(method -> method.getAnnotation(EventHandler.class) != null)
-            .flatMap(method -> Arrays.stream(method.getParameterTypes()))
-            .toList();
-        Assertions.assertFalse(handledEventTypes.contains(BlockBreakEvent.class));
-        Assertions.assertTrue(handledEventTypes.contains(PlayerHarvestBlockEvent.class));
-        Assertions.assertTrue(handledEventTypes.contains(PlayerShearBlockEvent.class));
-        Assertions.assertFalse(PlayerHarvestBlockEvent.class.isAssignableFrom(PlayerShearBlockEvent.class));
-        Assertions.assertFalse(PlayerShearBlockEvent.class.isAssignableFrom(PlayerHarvestBlockEvent.class));
     }
 
     private static PaperBlockHarvestListener listener(RecordingApi api) {

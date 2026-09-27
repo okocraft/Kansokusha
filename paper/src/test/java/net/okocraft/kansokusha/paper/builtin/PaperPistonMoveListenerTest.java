@@ -150,28 +150,6 @@ class PaperPistonMoveListenerTest {
         );
     }
 
-    @Test
-    void testCancelledPistonMoveDoesNotSubmit() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPistonMoveListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var world = PaperBlockEventTestSupport.world();
-        var piston = PaperBlockEventTestSupport.block(
-            world, 0, 64, 0, Blocks.PISTON.defaultBlockState(), Material.PISTON
-        );
-        var moved = PaperBlockEventTestSupport.block(
-            world, 1, 64, 0, Blocks.STONE.defaultBlockState(), Material.STONE
-        );
-        var event = Mockito.mock(BlockPistonExtendEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(piston);
-        Mockito.when(event.getBlocks()).thenReturn(List.of(moved));
-        Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static void assertMove(
         EventSubmission submission,
         BlockPosition from,

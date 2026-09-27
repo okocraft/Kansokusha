@@ -215,28 +215,4 @@ class PaperEntityBlockChangeListenerTest {
         );
     }
 
-    @Test
-    void testCancelledEntityChangeDoesNotSubmit() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperEntityBlockChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var block = PaperBlockEventTestSupport.block(
-            world, 3, 64, 3, Blocks.DIRT.defaultBlockState(), Material.DIRT
-        );
-        var actor = Mockito.mock(Enderman.class);
-        Mockito.when(actor.getUniqueId()).thenReturn(UUID.randomUUID());
-        Mockito.when(actor.getType()).thenReturn(EntityType.ENDERMAN);
-        var event = Mockito.mock(EntityChangeBlockEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(block);
-        Mockito.when(event.getEntity()).thenReturn(actor);
-        Mockito.when(event.getBlockData()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
 }

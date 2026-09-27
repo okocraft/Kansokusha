@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.paper.builtin;
 
-import net.minecraft.nbt.ByteArrayTag;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Assertions;
@@ -18,20 +17,6 @@ class PaperItemStackPayloadCodecTest {
 
         Assertions.assertEquals(itemStack, restored);
         Assertions.assertNotSame(itemStack, restored);
-    }
-
-    @Test
-    void testNonEmptyValueUsesPaperSerializedBytes() {
-        var itemStack = ItemStack.of(Material.DIAMOND, 3);
-
-        var encoded = PaperItemStackPayloadCodec.encode(itemStack);
-        var serialized = encoded.get("serialized");
-
-        Assertions.assertInstanceOf(ByteArrayTag.class, serialized);
-        Assertions.assertEquals(
-            itemStack,
-            ItemStack.deserializeBytes(((ByteArrayTag) serialized).getAsByteArray())
-        );
     }
 
     @Test

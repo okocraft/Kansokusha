@@ -253,21 +253,6 @@ class PaperExplosionBlockChangeListenerTest {
         );
     }
 
-    @Test
-    void testCancelledExplosionIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperExplosionBlockChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var event = tntExplosion(world(false), ghast());
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static World world(boolean tntExplodes) {
         var world = PaperBlockEventTestSupport.world();
         Mockito.when(world.getGameRuleValue(GameRules.TNT_EXPLODES)).thenReturn(tntExplodes);

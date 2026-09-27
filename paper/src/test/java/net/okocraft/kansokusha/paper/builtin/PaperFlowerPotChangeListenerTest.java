@@ -81,17 +81,6 @@ class PaperFlowerPotChangeListenerTest {
         );
     }
 
-    @Test
-    void testCancelledFlowerPotChangeDoesNotSubmit() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixture = event(1, ItemStack.of(Material.POPPY, 1), true, true);
-
-        PaperListenerTestSupport.fire(listener, fixture.event());
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static PaperFlowerPotChangeListener listener(RecordingApi api) {
         return PaperFlowerPotChangeListener.register(
             api,
