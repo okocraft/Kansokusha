@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.paper.command;
 
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -51,7 +52,7 @@ public final class KansokushaCommands {
     }
 
     static LiteralCommandNode<CommandSourceStack> createCommand(Clock clock, ZoneId searchTimeZone) {
-        return createCommand(clock, searchTimeZone, new InspectionSessionManager());
+        return createBaseCommand(clock, searchTimeZone).build();
     }
 
     static LiteralCommandNode<CommandSourceStack> createCommand(
@@ -59,14 +60,21 @@ public final class KansokushaCommands {
         ZoneId searchTimeZone,
         InspectionSessionManager inspectionSessions
     ) {
+        return createBaseCommand(clock, searchTimeZone)
+            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
+            .then(InspectCommand.createInspectCommand("i", inspectionSessions))
+            .build();
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> createBaseCommand(
+        Clock clock,
+        ZoneId searchTimeZone
+    ) {
         return Commands.literal("kansokusha")
             .requires(source -> source.getSender().hasPermission("kansokusha.command"))
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand(clock, searchTimeZone))
-            .then(EventCommand.createEventCommand())
-            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
-            .then(InspectCommand.createInspectCommand("i", inspectionSessions))
-            .build();
+            .then(EventCommand.createEventCommand());
     }
 
     private KansokushaCommands() {
