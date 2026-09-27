@@ -183,7 +183,6 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         if (
             action == InventoryAction.SWAP_WITH_CURSOR
                 || action == InventoryAction.HOTBAR_SWAP
-                || action == InventoryAction.HOTBAR_MOVE_AND_READD
         ) {
             return "exchange";
         }
@@ -192,10 +191,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
 
     private static @Nullable ItemStack exchangeItem(InventoryClickEvent event, Player player) {
         var action = event.getAction();
-        if (
-            action != InventoryAction.HOTBAR_SWAP
-                && action != InventoryAction.HOTBAR_MOVE_AND_READD
-        ) {
+        if (action != InventoryAction.HOTBAR_SWAP) {
             return null;
         }
 
