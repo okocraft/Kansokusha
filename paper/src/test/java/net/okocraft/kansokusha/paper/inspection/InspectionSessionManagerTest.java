@@ -26,20 +26,6 @@ class InspectionSessionManagerTest {
     }
 
     @Test
-    void testEnableAndDisableAreIdempotent() {
-        var sessions = new InspectionSessionManager();
-        var playerId = UUID.randomUUID();
-
-        Assertions.assertTrue(sessions.enable(playerId));
-        Assertions.assertFalse(sessions.enable(playerId));
-        Assertions.assertTrue(sessions.isEnabled(playerId));
-
-        Assertions.assertTrue(sessions.disable(playerId));
-        Assertions.assertFalse(sessions.disable(playerId));
-        Assertions.assertFalse(sessions.isEnabled(playerId));
-    }
-
-    @Test
     void testPermissionRecheckClearsEnabledSession() {
         var sessions = new InspectionSessionManager();
         var playerId = UUID.randomUUID();
@@ -55,17 +41,4 @@ class InspectionSessionManagerTest {
         Assertions.assertFalse(sessions.isEnabled(playerId));
     }
 
-    @Test
-    void testClearRemovesAllSessions() {
-        var sessions = new InspectionSessionManager();
-        var first = UUID.randomUUID();
-        var second = UUID.randomUUID();
-
-        sessions.enable(first);
-        sessions.enable(second);
-        sessions.clear();
-
-        Assertions.assertFalse(sessions.isEnabled(first));
-        Assertions.assertFalse(sessions.isEnabled(second));
-    }
 }

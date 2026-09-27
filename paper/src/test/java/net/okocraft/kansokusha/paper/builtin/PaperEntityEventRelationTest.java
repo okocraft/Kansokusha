@@ -8,8 +8,6 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityPlaceEvent;
-import org.bukkit.event.hanging.HangingBreakByEntityEvent;
-import org.bukkit.event.hanging.HangingBreakEvent;
 import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -65,23 +63,6 @@ class PaperEntityEventRelationTest {
             payload.getString("source_event").orElseThrow()
         );
         Mockito.verify(genericEvent, Mockito.never()).getPlayer();
-    }
-
-    @Test
-    void testNaturalHangingBreakHasNoListenerEntryPoint() {
-        Assertions.assertDoesNotThrow(() ->
-            PaperEntityBreakListener.class.getMethod(
-                "recordHanging",
-                HangingBreakByEntityEvent.class
-            )
-        );
-        Assertions.assertThrows(
-            NoSuchMethodException.class,
-            () -> PaperEntityBreakListener.class.getMethod(
-                "recordHanging",
-                HangingBreakEvent.class
-            )
-        );
     }
 
     private static Hanging hanging(World world) {

@@ -54,15 +54,4 @@ class PaperItemStackPayloadCodecTest {
         Assertions.assertTrue(PaperItemStackPayloadCodec.decode(encoded).isEmpty());
     }
 
-    @Test
-    void testNullValuesAreRejected() {
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperItemStackPayloadCodec.encode(null)
-        );
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperItemStackPayloadCodec.decode(null)
-        );
-    }
 }

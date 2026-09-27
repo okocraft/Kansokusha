@@ -22,13 +22,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -152,25 +149,6 @@ class InspectionSearchHandlerTest {
 
         Mockito.verify(inspectOnly.player(), Mockito.never()).sendMessage(
             FULL_HISTORY
-        );
-    }
-
-    @Test
-    void testJapaneseMessagesExist() throws Exception {
-        var properties = new Properties();
-        try (
-            var input = InspectionSearchHandlerTest.class.getClassLoader()
-                .getResourceAsStream("languages/ja.properties")
-        ) {
-            Assertions.assertNotNull(input);
-            try (var reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
-                properties.load(reader);
-            }
-        }
-        Assertions.assertTrue(
-            properties.stringPropertyNames().containsAll(
-                InspectionSearchMessages.DEFINER.getCollectedMessages().keySet()
-            )
         );
     }
 

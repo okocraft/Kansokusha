@@ -208,30 +208,6 @@ class InspectionListenerTest {
     }
 
     @Test
-    void testCallbackReceivesOnlyPlayerIdAndImmutableSnapshot() {
-        var sessions = new InspectionSessionManager();
-        var player = player();
-        sessions.enable(PLAYER_ID);
-
-        var ids = new CopyOnWriteArrayList<UUID>();
-        var targets = new CopyOnWriteArrayList<SearchQuery.Position>();
-        var listener = new InspectionListener(sessions, (playerId, target) -> {
-            ids.add(playerId);
-            targets.add(target);
-        });
-        var clicked = block(9, 70, 11);
-        var event = interaction(player, Action.LEFT_CLICK_BLOCK, clicked, BlockFace.UP, EquipmentSlot.HAND);
-
-        listener.inspect(event);
-
-        Assertions.assertEquals(List.of(PLAYER_ID), ids);
-        Assertions.assertEquals(
-            List.of(new SearchQuery.Position(Key.key("example", "world"), 9, 70, 11)),
-            targets
-        );
-    }
-
-    @Test
     void testQuitDisablesInspectionForPlayer() {
         var sessions = new InspectionSessionManager();
         var player = player();

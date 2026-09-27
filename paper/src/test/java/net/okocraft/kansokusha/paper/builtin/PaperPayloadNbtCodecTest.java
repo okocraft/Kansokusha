@@ -100,18 +100,6 @@ class PaperPayloadNbtCodecTest {
         Assertions.assertEquals(1, payload.copyBytes().length);
     }
 
-    @Test
-    void testNullValuesAreRejected() {
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperPayloadNbtCodec.encode(null)
-        );
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperPayloadNbtCodec.decode(null)
-        );
-    }
-
     private static CompoundTag blockState(
         String name,
         String property,

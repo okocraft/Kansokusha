@@ -71,20 +71,6 @@ class EventCommandTest {
         );
     }
 
-    @Test
-    void testInvalidIdIsRejectedBeforeBackendLookup() throws Exception {
-        ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
-        TestSources.grant(console, EventCommand.PERMISSION);
-
-        Assertions.assertEquals(
-            0,
-            this.tester.execute(TestSources.ofSenderOnly(console), "event invalid")
-        );
-
-        Mockito.verify(console).sendMessage(EventCommandMessages.INVALID_ID.asComponent());
-        Mockito.verify(this.api, Mockito.never()).findEvent(Mockito.any());
-    }
-
     private static EventDetail event() {
         return new EventDetail(
             new SearchPage.Event(

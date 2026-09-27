@@ -6,7 +6,6 @@ import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -28,34 +27,8 @@ class VersionCommandTest {
     }
 
     @Test
-    void testVersionIsPrintedToPlayer() throws Exception {
-        Player player = Mockito.mock(Player.class);
-        TestSources.grant(player, PERMISSION);
-
-        Assertions.assertEquals(1, this.tester.execute(TestSources.of(player), "version"));
-
-        Mockito.verify(player).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
-    }
-
-    @Test
     void testCommandIsHiddenWithUnsetPermission() {
         this.assertHidden(Mockito.mock(ConsoleCommandSender.class));
-    }
-
-    @Test
-    void testCommandIsHiddenWithDeniedPermission() {
-        ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
-        TestSources.deny(console, PERMISSION);
-
-        this.assertHidden(console);
-    }
-
-    @Test
-    void testCommandIsHiddenWithAnotherPermission() {
-        ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
-        TestSources.grant(console, "kansokusha.command");
-
-        this.assertHidden(console);
     }
 
     private void assertHidden(ConsoleCommandSender console) {

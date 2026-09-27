@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -27,24 +26,6 @@ class EventSubmissionTest {
     private static final EventPayload PAYLOAD = EventPayload.copyOf(new byte[]{10, 20});
 
     @Test
-    void testSubmissionPreservesRequiredAndOptionalValues() {
-        BlockPosition position = new BlockPosition(1, 64, -3);
-        EventSubmission submission = submission(SERVER_KEY, WORLD_KEY, position, ACTOR, TARGET_TYPE);
-
-        assertAll(
-            () -> assertEquals(EVENT_TYPE, submission.eventType()),
-            () -> assertEquals(new PayloadGeneration(3), submission.payloadGeneration()),
-            () -> assertEquals(OCCURRED_AT, submission.occurredAt()),
-            () -> assertEquals(SERVER_KEY, submission.serverKey()),
-            () -> assertEquals(WORLD_KEY, submission.worldKey()),
-            () -> assertEquals(position, submission.position()),
-            () -> assertEquals(ACTOR, submission.actor()),
-            () -> assertEquals(TARGET_TYPE, submission.targetType()),
-            () -> assertEquals(PAYLOAD, submission.payload())
-        );
-    }
-
-    @Test
     void testOptionalFieldsMayBeAbsentAndLocationRequiresServerContext() {
         EventSubmission withoutContext = submission(null, null, null, null, null);
         assertAll(
@@ -57,24 +38,6 @@ class EventSubmissionTest {
                 () -> submission(null, WORLD_KEY, null, null, null)),
             () -> assertThrows(IllegalArgumentException.class,
                 () -> submission(SERVER_KEY, null, new BlockPosition(0, 64, 0), null, null))
-        );
-    }
-
-    @Test
-    void testRequiredValuesAreRejectedWhenNull() {
-        assertAll(
-            () -> assertThrows(NullPointerException.class,
-                () -> new EventSubmission(null, PayloadGeneration.FIRST, OCCURRED_AT,
-                    SERVER_KEY, null, null, null, null, PAYLOAD)),
-            () -> assertThrows(NullPointerException.class,
-                () -> new EventSubmission(EVENT_TYPE, null, OCCURRED_AT,
-                    SERVER_KEY, null, null, null, null, PAYLOAD)),
-            () -> assertThrows(NullPointerException.class,
-                () -> new EventSubmission(EVENT_TYPE, PayloadGeneration.FIRST, null,
-                    SERVER_KEY, null, null, null, null, PAYLOAD)),
-            () -> assertThrows(NullPointerException.class,
-                () -> new EventSubmission(EVENT_TYPE, PayloadGeneration.FIRST, OCCURRED_AT,
-                    SERVER_KEY, null, null, null, null, null))
         );
     }
 

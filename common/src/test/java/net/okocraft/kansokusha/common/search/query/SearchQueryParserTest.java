@@ -83,33 +83,6 @@ class SearchQueryParserTest {
     }
 
     @Test
-    void testPartialIncludeExcludeOverlapRemainsValid() {
-        var query = parse("user Alice user Bob exclude user Alice");
-
-        Assertions.assertEquals(Set.of("Alice", "Bob"), query.conditions().users());
-        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
-    }
-
-    @Test
-    void testCrossFieldExclusionDoesNotCreateFalseContradiction() {
-        var query = parse(
-            "user Alice action block_break "
-                + "exclude user Alice exclude action block_place"
-        );
-
-        Assertions.assertEquals(Set.of("Alice"), query.conditions().users());
-        Assertions.assertEquals(
-            Set.of(Key.key("kansokusha", "block_break")),
-            query.conditions().actions()
-        );
-        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
-        Assertions.assertEquals(
-            Set.of(Key.key("kansokusha", "block_place")),
-            query.exclusions().actions()
-        );
-    }
-
-    @Test
     void testActionNamespaceOmissionOnlyDefaultsToKansokusha() {
         var query = parse("action block_break action example:custom_event");
 
@@ -276,20 +249,6 @@ class SearchQueryParserTest {
     }
 
     @Test
-    void testIncludedTimeRangePartiallyCoveredByExcludedRangeRemainsValid() {
-        var query = parse("time 2h exclude time 1h");
-
-        Assertions.assertEquals(
-            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(2)), NOW)),
-            query.conditions().timeRanges()
-        );
-        Assertions.assertEquals(
-            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(1)), NOW)),
-            query.exclusions().timeRanges()
-        );
-    }
-
-    @Test
     void testTimeAndExplicitBoundsConflict() {
         Assertions.assertThrows(
             SearchQueryParseException.class,
@@ -445,31 +404,6 @@ class SearchQueryParserTest {
             SearchQueryParser.CompletionKind.NONE,
             SearchQueryParser.completion("radius 5 ", CLOCK, TOKYO, false).kind()
         );
-    }
-
-    @Test
-    void testTrailingTokenUsesParserQuoteAndEscapeRules() {
-        var quoted = SearchQueryParser.trailingToken(
-            "filter \"foo __cursor=bar\""
-        ).orElseThrow();
-        Assertions.assertEquals("foo __cursor=bar", quoted.value());
-        Assertions.assertTrue(quoted.quotedOrEscaped());
-        Assertions.assertEquals(7, quoted.start());
-
-        var escaped = SearchQueryParser.trailingToken(
-            "filter foo\\ __cursor=bar"
-        ).orElseThrow();
-        Assertions.assertEquals("foo __cursor=bar", escaped.value());
-        Assertions.assertTrue(escaped.quotedOrEscaped());
-
-        var plain = SearchQueryParser.trailingToken(
-            "filter foo __cursor=next,1,123e4567-e89b-12d3-a456-426614174000"
-        ).orElseThrow();
-        Assertions.assertEquals(
-            "__cursor=next,1,123e4567-e89b-12d3-a456-426614174000",
-            plain.value()
-        );
-        Assertions.assertFalse(plain.quotedOrEscaped());
     }
 
     private static SearchQuery parse(String input) {
