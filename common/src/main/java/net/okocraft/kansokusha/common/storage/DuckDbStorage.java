@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -374,6 +375,11 @@ public final class DuckDbStorage {
         @Override
         public SearchPage search(SearchRequest request) throws SQLException {
             return this.delegate.search(request);
+        }
+
+        @Override
+        public SearchMetadata searchMetadata() throws SQLException {
+            return this.delegate.searchMetadata();
         }
 
         @Override
