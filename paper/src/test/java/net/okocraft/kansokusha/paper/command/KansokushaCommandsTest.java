@@ -29,7 +29,28 @@ class KansokushaCommandsTest {
 
     @Test
     void testCommandDefinersAreExposedForLanguageLoading() {
-        Assertions.assertEquals(List.of(CommandMessages.DEFINER), KansokushaCommands.getDefiners());
+        Assertions.assertEquals(
+            List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER),
+            KansokushaCommands.getDefiners()
+        );
+    }
+
+    @Test
+    void testSearchCommandIsWiredUnderKansokushaRoot() throws Exception {
+        ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
+        TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
+
+        net.okocraft.kansokusha.api.Kansokusha.setApi(
+            new SearchCommandTest.SearchApiForWiring()
+        );
+        try {
+            Assertions.assertEquals(
+                1,
+                this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
+            );
+        } finally {
+            net.okocraft.kansokusha.api.Kansokusha.setApi(null);
+        }
     }
 
     @Test
