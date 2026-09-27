@@ -57,6 +57,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         InventoryType.DROPPER,
         InventoryType.FURNACE,
         InventoryType.BREWING,
+        InventoryType.ENDER_CHEST,
         InventoryType.HOPPER,
         InventoryType.SHULKER_BOX,
         InventoryType.BARREL,
@@ -309,8 +310,12 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
 
     static boolean isStorageContainer(Inventory inventory) {
         Objects.requireNonNull(inventory, "inventory");
-        return !(inventory.getHolder() instanceof Player)
-            && STORAGE_CONTAINER_TYPES.contains(inventory.getType());
+        var type = inventory.getType();
+        return STORAGE_CONTAINER_TYPES.contains(type)
+            && (
+                type == InventoryType.ENDER_CHEST
+                    || !(inventory.getHolder() instanceof Player)
+            );
     }
 
     private static boolean isPostVanillaContainerClick() {
