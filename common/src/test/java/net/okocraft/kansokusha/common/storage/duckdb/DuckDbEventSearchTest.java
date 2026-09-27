@@ -11,8 +11,8 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
+import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
-import net.okocraft.kansokusha.common.storage.PlayerNameObservation;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -188,10 +188,8 @@ class DuckDbEventSearchTest {
             Assertions.assertEquals(NOW, result.occurredAt());
             Assertions.assertEquals(Optional.of(SERVER), result.server());
             Assertions.assertEquals(Optional.of(OVERWORLD), result.world());
-            Assertions.assertEquals(10, result.x().orElseThrow());
-            Assertions.assertEquals(64, result.y().orElseThrow());
-            Assertions.assertEquals(20, result.z().orElseThrow());
-            Assertions.assertEquals(Optional.of(PLAYER_ONE), result.actorUuid());
+            Assertions.assertEquals(Optional.of(new BlockPosition(10, 64, 20)), result.position());
+            Assertions.assertEquals(Optional.of(new PlayerActor(PLAYER_ONE)), result.actor());
             Assertions.assertEquals(Optional.of(STONE), result.targetType());
             Assertions.assertEquals(Optional.of("Hello BAN%_* world"), result.searchText());
 
@@ -227,7 +225,7 @@ class DuckDbEventSearchTest {
                 20
             ));
             Assertions.assertEquals(1, shared.events().size());
-            Assertions.assertEquals(PLAYER_TWO, shared.events().getFirst().actorUuid().orElseThrow());
+            Assertions.assertEquals(PLAYER_TWO, actorUuid(shared.events().getFirst()));
             Assertions.assertEquals(Optional.of("SharedName"), shared.events().getFirst().actorName());
 
             storage.append(List.of(queuedLogin(
@@ -249,7 +247,7 @@ class DuckDbEventSearchTest {
             ));
             Assertions.assertEquals(2, reassigned.events().size());
             Assertions.assertTrue(reassigned.events().stream().allMatch(
-                result -> result.actorUuid().orElseThrow().equals(PLAYER_ONE)
+                result -> actorUuid(result).equals(PLAYER_ONE)
             ));
 
             var direct = storage.search(request(
@@ -260,7 +258,7 @@ class DuckDbEventSearchTest {
                 20
             ));
             Assertions.assertEquals(1, direct.events().size());
-            Assertions.assertEquals(PLAYER_TWO, direct.events().getFirst().actorUuid().orElseThrow());
+            Assertions.assertEquals(PLAYER_TWO, actorUuid(direct.events().getFirst()));
         }
     }
 
@@ -294,7 +292,7 @@ class DuckDbEventSearchTest {
                 ), null)
             ));
 
-            var center = new SearchRequest.RadiusCenter(OVERWORLD, 10, 20);
+            var center = new SearchQuery.Position(OVERWORLD, 10, 64, 20);
             var radius = storage.search(request(
                 "radius 2",
                 Set.of(AUDIT),
@@ -303,7 +301,7 @@ class DuckDbEventSearchTest {
                 20
             ));
             Assertions.assertEquals(1, radius.events().size());
-            Assertions.assertEquals(300, radius.events().getFirst().y().orElseThrow());
+            Assertions.assertEquals(300, radius.events().getFirst().position().orElseThrow().y());
 
             var around = storage.search(request(
                 "around minecraft:overworld 10 20 2",
@@ -370,7 +368,7 @@ class DuckDbEventSearchTest {
 
             Assertions.assertEquals(2, page.events().size());
             Assertions.assertTrue(page.events().stream().noneMatch(
-                result -> result.actorUuid().orElseThrow().equals(ENTITY)
+                result -> actorUuid(result).equals(ENTITY)
             ));
         }
     }
@@ -554,7 +552,7 @@ class DuckDbEventSearchTest {
 
             Assertions.assertEquals(2, page.events().size());
             Assertions.assertTrue(page.events().stream().allMatch(
-                result -> result.actorUuid().orElseThrow().equals(PLAYER_ONE)
+                result -> actorUuid(result).equals(PLAYER_ONE)
             ));
             Assertions.assertEquals(
                 Set.of(AUDIT, OTHER),
@@ -697,14 +695,13 @@ class DuckDbEventSearchTest {
     private static SearchRequest request(
         String input,
         Set<Key> allowedEventTypes,
-        Optional<SearchRequest.RadiusCenter> center,
+        Optional<SearchQuery.Position> origin,
         Optional<SearchRequest.Cursor> cursor,
         int defaultLimit
     ) {
         return new SearchRequest(
-            SearchQueryParser.parse(input, CLOCK, ZoneOffset.UTC),
+            SearchQueryParser.parse(input, CLOCK, ZoneOffset.UTC, origin.orElse(null)),
             new SearchRequest.Constraints(allowedEventTypes),
-            center,
             cursor,
             defaultLimit
         );
@@ -726,10 +723,7 @@ class DuckDbEventSearchTest {
             event,
             occurredAt.toEpochMilli(),
             occurredAt.plus(Duration.ofDays(30)).toEpochMilli(),
-            new PlayerNameObservation(
-                username,
-                occurredAt.plus(Duration.ofDays(30)).toEpochMilli()
-            ),
+            username,
             null
         );
     }
@@ -753,5 +747,13 @@ class DuckDbEventSearchTest {
             target,
             EventPayload.copyOf(new byte[]{1})
         );
+    }
+
+    private static UUID actorUuid(SearchPage.Event event) {
+        return switch (event.actor().orElseThrow()) {
+            case PlayerActor player -> player.uniqueId();
+            case EntityActor entity -> entity.uniqueId();
+            case BlockActor ignored -> throw new AssertionError("block actors have no UUID");
+        };
     }
 }

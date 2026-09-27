@@ -11,8 +11,9 @@ public final class SearchCommandMessages {
 
     public static final DefaultMessageDefiner DEFINER = DefaultMessageDefiner.create();
 
-    public static final MessageKey PARSE_ERROR = DEFINER
-        .define("kansokusha.command.search.parse-error", "Invalid search query.");
+    public static final MessageKey.Arg1<String> PARSE_ERROR = DEFINER
+        .define("kansokusha.command.search.parse-error", "Invalid search query: <reason>")
+        .with(reason -> Argument.string("reason", reason));
 
     public static final MessageKey.Arg1<String> EVENT_PERMISSION = DEFINER
         .define(
@@ -20,18 +21,6 @@ public final class SearchCommandMessages {
             "You do not have permission to search event <event>."
         )
         .with(event -> Argument.string("event", event));
-
-    public static final MessageKey RADIUS_PLAYER_ONLY = DEFINER
-        .define(
-            "kansokusha.command.search.radius-player-only",
-            "radius is only available to players."
-        );
-
-    public static final MessageKey RADIUS_UNAVAILABLE = DEFINER
-        .define(
-            "kansokusha.command.search.radius-unavailable",
-            "radius is not available on this platform."
-        );
 
     public static final MessageKey.Arg1<String> LIMIT_RANGE = DEFINER
         .define(

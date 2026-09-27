@@ -95,8 +95,8 @@ when `kansokusha.command.event` is available.
 
 If more than 10 results exist and the player has `kansokusha.command.search`, inspection
 shows a clickable `[View full history]` link that opens the existing exact-position
-search and its normal pagination. Rapid clicks use latest-request-wins behavior, so a
-slower older lookup is not displayed after a newer target.
+search and its normal pagination. Lookups run in click order, so results are shown in the
+same order as the clicks.
 
 The packaged Paper verification and the manual Paper/Folia interaction checklist are in
 `docs/verification/paper-folia-packaged-smoke.md`.

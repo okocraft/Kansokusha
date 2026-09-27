@@ -32,8 +32,7 @@ import java.util.UUID;
 /**
  * Compact binary codec for Paper built-in payloads.
  *
- * <p>The event type and payload generation define the payload schema, including any
- * backward-compatible optional fields appended within that generation, so the persisted bytes do
+ * <p>The event type and payload generation define the payload schema, so the persisted bytes do
  * not need NBT's repeated field-name strings. Built-in field names and common fixed strings are
  * encoded as small integer IDs; unknown names still have a literal fallback for block-state
  * properties and other open-ended nested data.</p>

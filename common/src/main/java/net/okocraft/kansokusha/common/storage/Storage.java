@@ -22,25 +22,15 @@ public interface Storage extends AutoCloseable {
 
     void append(List<QueuedEvent> events) throws SQLException;
 
-    Optional<UUID> resolvePlayerName(String name) throws SQLException;
-
     List<String> offlinePlayerNames() throws SQLException;
-
-    List<UUID> findEventIdsContaining(String literal) throws SQLException;
 
     Optional<EventDetail> findEvent(UUID eventId) throws SQLException;
 
     SearchPage search(SearchRequest request) throws SQLException;
 
-    default SearchMetadata searchMetadata() throws SQLException {
-        return SearchMetadata.empty();
-    }
+    SearchMetadata searchMetadata() throws SQLException;
 
     int deleteExpired(Instant now) throws SQLException;
-
-    void checkpoint() throws SQLException;
-
-    StorageHealth health() throws SQLException;
 
     @Override
     void close() throws SQLException;

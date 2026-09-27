@@ -7,9 +7,7 @@ import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
-import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -24,16 +22,6 @@ public final class PaperPlayerSessionPayloadCodec {
         var payload = new CompoundTag();
         payload.putString("username", Objects.requireNonNull(username, "username"));
         return PaperPayloadNbtCodec.encode(payload);
-    }
-
-    /**
-     * Reads the generation-1 join username.
-     *
-     * <p>The field is optional for backward compatibility: generation-1 rows written before
-     * player-name observation used an empty compound.</p>
-     */
-    static @Nullable String decodeJoinUsername(EventPayload payload) throws IOException {
-        return PaperPayloadNbtCodec.decode(payload).getString("username").orElse(null);
     }
 
     static EventPayload encodeQuit(PlayerQuitEvent.QuitReason reason) {

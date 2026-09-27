@@ -10,7 +10,7 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
@@ -33,12 +33,14 @@ public final class VelocityPlayerSessionListener {
         Key.key("kansokusha", "backend_kick");
 
     private final KansokushaApi api;
+    private final EventSearchBackend backend;
     private final Logger logger;
     private final Clock clock;
     private final Set<String> warnedServerNames = ConcurrentHashMap.newKeySet();
 
     private VelocityPlayerSessionListener(KansokushaApi api, Logger logger, Clock clock) {
         this.api = Objects.requireNonNull(api, "api");
+        this.backend = EventSearchBackend.require(api);
         this.logger = Objects.requireNonNull(logger, "logger");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -88,11 +90,7 @@ public final class VelocityPlayerSessionListener {
                 rawVirtualHost
             )
         );
-        if (this.api instanceof PlayerNameDirectory playerNames) {
-            playerNames.submitPlayerLogin(submission, username);
-        } else {
-            this.api.submit(submission);
-        }
+        this.backend.submitPlayerLogin(submission, username);
     }
 
     @Subscribe

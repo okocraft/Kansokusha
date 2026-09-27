@@ -50,7 +50,6 @@ public final class KansokushaVelocityPlugin {
                 this.dataDirectory,
                 config,
                 null,
-                this.logger::info,
                 (message, failure) -> this.logger.error(message, failure)
             );
         } catch (IOException | SQLException e) {
@@ -74,6 +73,7 @@ public final class KansokushaVelocityPlugin {
         KansokushaCommands.register(
             this.proxyServer.getCommandManager(),
             this,
+            runtime,
             config.searchTimeZone()
         );
         Kansokusha.setApi(runtime);

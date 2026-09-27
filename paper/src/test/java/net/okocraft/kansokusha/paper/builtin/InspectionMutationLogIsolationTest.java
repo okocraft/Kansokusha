@@ -1,6 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
-import net.okocraft.kansokusha.paper.inspection.InspectionInteractionListener;
+import net.okocraft.kansokusha.paper.inspection.InspectionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.entity.Player;
@@ -42,7 +42,7 @@ class InspectionMutationLogIsolationTest {
             return null;
         }).when(event).setCancelled(Mockito.anyBoolean());
 
-        var inspection = new InspectionInteractionListener(sessions, (ignoredPlayer, ignoredTarget) -> {
+        var inspection = new InspectionListener(sessions, (ignoredPlayer, ignoredTarget) -> {
         });
         inspection.suppressBreak(event);
         PaperListenerTestSupport.fire(builtIn, event);

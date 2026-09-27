@@ -4,6 +4,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchMessages;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
@@ -13,11 +14,20 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 class KansokushaCommandsTest {
 
-    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand());
+    private final EventSearchBackend backend = Mockito.mock(EventSearchBackend.class);
+    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand(
+        this.backend,
+        Clock.systemUTC(),
+        ZoneOffset.UTC,
+        new InspectionSessionManager()
+    ));
 
     @Test
     void testVersionCommandIsWiredUnderKansokushaRoot() throws Exception {
@@ -49,33 +59,28 @@ class KansokushaCommandsTest {
     void testSearchCommandIsWiredUnderKansokushaRoot() throws Exception {
         ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
         TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
+        Mockito.when(this.backend.searchMetadata())
+            .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("stopped")));
 
         Assertions.assertEquals(
-            0,
+            1,
             this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
         );
         Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
     }
 
     @Test
-    void testEventCommandIsWiredUnderKansokushaRoot() {
-        Assertions.assertNotNull(KansokushaCommands.createCommand().getChild("event"));
-    }
+    void testSubcommandsAreWiredUnderKansokushaRoot() {
+        var command = KansokushaCommands.createCommand(
+            this.backend,
+            Clock.systemUTC(),
+            ZoneOffset.UTC,
+            new InspectionSessionManager()
+        );
 
-    @Test
-    void testLegacyCommandCreationDoesNotExposeInspectionWithoutSessionLifecycle() {
-        var command = KansokushaCommands.createCommand();
-
-        Assertions.assertNull(command.getChild("inspect"));
-        Assertions.assertNull(command.getChild("i"));
-    }
-
-    @Test
-    void testInspectCommandsAreWiredWhenSessionManagerIsProvided() {
-        var command = KansokushaCommands.createCommand(new InspectionSessionManager());
-
-        Assertions.assertNotNull(command.getChild("inspect"));
-        Assertions.assertNotNull(command.getChild("i"));
+        for (var name : List.of("version", "search", "event", "inspect", "i")) {
+            Assertions.assertNotNull(command.getChild(name), name);
+        }
     }
 
     @Test

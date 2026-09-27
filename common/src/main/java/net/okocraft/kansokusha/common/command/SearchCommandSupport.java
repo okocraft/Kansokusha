@@ -4,6 +4,10 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EntityActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -18,14 +22,17 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 @ApiStatus.Internal
 @NotNullByDefault
@@ -41,52 +48,117 @@ public final class SearchCommandSupport {
 
     private static final String CURSOR_PREFIX = "__cursor=";
 
-    public static Invocation parseInvocation(String rawInput, Clock clock, ZoneId timezone) {
-        Objects.requireNonNull(rawInput, "rawInput");
-        Objects.requireNonNull(clock, "clock");
-        Objects.requireNonNull(timezone, "timezone");
-
-        var input = rawInput.strip();
-        if (input.isEmpty()) {
-            return new Invocation("", SearchQueryParser.parse("", clock, timezone), Optional.empty());
+    /**
+     * Parses, authorizes and runs {@code /kansokusha search}, sending the page asynchronously.
+     *
+     * @return whether the search was started
+     */
+    public static boolean execute(
+        EventSearchBackend backend,
+        SearchSource source,
+        String rawInput,
+        Clock clock,
+        ZoneId timezone
+    ) {
+        final Invocation invocation;
+        try {
+            invocation = parseInvocation(rawInput, clock, timezone, source.origin());
+        } catch (SearchQueryParseException e) {
+            source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.getMessage()));
+            return false;
         }
 
-        var lastToken = SearchQueryParser.trailingToken(input).orElseThrow();
-        if (lastToken.quotedOrEscaped() || !lastToken.value().startsWith(CURSOR_PREFIX)) {
-            return new Invocation(
-                input,
-                SearchQueryParser.parse(input, clock, timezone),
-                Optional.empty()
+        var query = invocation.query();
+        var maxLimit = source.player() ? PLAYER_MAX_LIMIT : NON_PLAYER_MAX_LIMIT;
+        if (query.limit().orElse(0) > maxLimit) {
+            source.sendMessage().accept(SearchCommandMessages.LIMIT_RANGE.apply(Integer.toString(maxLimit)));
+            return false;
+        }
+
+        for (var eventType : explicitActions(query)) {
+            if (!source.hasPermission().test(eventPermission(eventType))) {
+                source.sendMessage().accept(SearchCommandMessages.EVENT_PERMISSION.apply(displayEventType(eventType)));
+                return false;
+            }
+        }
+
+        var defaultLimit = source.player() ? PLAYER_DEFAULT_LIMIT : NON_PLAYER_DEFAULT_LIMIT;
+        var eventDetailsPermitted = source.hasPermission().test(EventCommandSupport.PERMISSION);
+        backend.searchMetadata()
+            .thenCompose(metadata -> backend.search(new SearchRequest(
+                query,
+                new SearchRequest.Constraints(allowedEventTypes(source.hasPermission(), metadata)),
+                invocation.cursor(),
+                defaultLimit
+            )))
+            .whenComplete((page, failure) -> {
+                if (failure != null) {
+                    source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
+                    return;
+                }
+                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted);
+            });
+        return true;
+    }
+
+    /**
+     * Completes the argument of {@code /kansokusha search}.
+     *
+     * @param radiusAvailable whether the sender has a position that {@code radius} can use
+     */
+    public static CompletableFuture<Suggestions> suggest(
+        EventSearchBackend backend,
+        Predicate<String> hasPermission,
+        boolean radiusAvailable,
+        String input,
+        Clock clock,
+        ZoneId timezone
+    ) {
+        var completion = SearchQueryParser.completion(input, clock, timezone, radiusAvailable);
+        var prefix = completion.prefix();
+        CompletableFuture<List<String>> values = switch (completion.kind()) {
+            case USER -> backend.offlinePlayerNames();
+            case ACTION, TARGET, ACTOR_TYPE, WORLD -> backend.searchMetadata().thenApply(metadata ->
+                dynamicSuggestions(completion.kind(), prefix, visibleMetadata(hasPermission, metadata))
             );
+            default -> CompletableFuture.completedFuture(completion.staticSuggestions());
+        };
+        return values
+            .exceptionally(failure -> List.of())
+            .thenApply(candidates -> new Suggestions(
+                completion.replacementStart(),
+                candidates.stream()
+                    .filter(value -> startsWithIgnoreCase(value, prefix))
+                    .distinct()
+                    .toList()
+            ));
+    }
+
+    static Invocation parseInvocation(
+        String rawInput,
+        Clock clock,
+        ZoneId timezone,
+        SearchQuery.@Nullable Position origin
+    ) {
+        var input = rawInput.strip();
+        var lastToken = SearchQueryParser.trailingToken(input).orElse(null);
+        if (lastToken == null || lastToken.quotedOrEscaped() || !lastToken.value().startsWith(CURSOR_PREFIX)) {
+            return new Invocation(input, SearchQueryParser.parse(input, clock, timezone, origin), Optional.empty());
         }
 
         var queryText = input.substring(0, lastToken.start()).stripTrailing();
         return new Invocation(
             queryText,
-            SearchQueryParser.parse(queryText, clock, timezone),
+            SearchQueryParser.parse(queryText, clock, timezone, origin),
             Optional.of(parseCursor(lastToken.value().substring(CURSOR_PREFIX.length())))
         );
     }
 
-    public static int defaultLimit(boolean playerSource) {
-        return playerSource ? PLAYER_DEFAULT_LIMIT : NON_PLAYER_DEFAULT_LIMIT;
-    }
-
-    public static int maxLimit(boolean playerSource) {
-        return playerSource ? PLAYER_MAX_LIMIT : NON_PLAYER_MAX_LIMIT;
-    }
-
-    public static boolean hasRadius(SearchQuery query) {
-        Objects.requireNonNull(query, "query");
-        return !query.conditions().radii().isEmpty() || !query.exclusions().radii().isEmpty();
-    }
-
-    public static Set<Key> explicitActions(SearchQuery query) {
-        Objects.requireNonNull(query, "query");
+    static Set<Key> explicitActions(SearchQuery query) {
         var actions = new LinkedHashSet<Key>();
         actions.addAll(query.conditions().actions());
         actions.addAll(query.exclusions().actions());
-        return Set.copyOf(actions);
+        return actions;
     }
 
     public static String eventPermission(Key eventType) {
@@ -110,37 +182,26 @@ public final class SearchCommandSupport {
         return Set.copyOf(allowed);
     }
 
-    public static SearchMetadata visibleMetadata(
+    static SearchMetadata visibleMetadata(
         Predicate<String> hasPermission,
         SearchMetadata metadata
     ) {
         return metadata.retainEventTypes(allowedEventTypes(hasPermission, metadata));
     }
 
-    public static List<String> dynamicSuggestions(
+    static List<String> dynamicSuggestions(
         SearchQueryParser.CompletionKind kind,
         String prefix,
         SearchMetadata metadata
     ) {
-        Objects.requireNonNull(kind, "kind");
-        Objects.requireNonNull(prefix, "prefix");
-        Objects.requireNonNull(metadata, "metadata");
-
         var values = switch (kind) {
-            case ACTION -> metadata.eventTypes().stream()
-                .map(type -> completionEventType(type, prefix))
-                .toList();
-            case WORLD -> metadata.worlds().stream().map(Key::asString).toList();
-            case ACTOR_TYPE -> metadata.actorTypes().stream().map(Key::asString).toList();
-            case TARGET -> metadata.targetTypes().stream().map(Key::asString).toList();
-            default -> List.<String>of();
+            case ACTION -> metadata.eventTypes().stream().map(type -> completionEventType(type, prefix));
+            case WORLD -> metadata.worlds().stream().map(Key::asString);
+            case ACTOR_TYPE -> metadata.actorTypes().stream().map(Key::asString);
+            case TARGET -> metadata.targetTypes().stream().map(Key::asString);
+            default -> Stream.<String>empty();
         };
-
-        return values.stream()
-            .distinct()
-            .filter(value -> startsWithIgnoreCase(value, prefix))
-            .sorted(Comparator.naturalOrder())
-            .toList();
+        return values.sorted().toList();
     }
 
     public static String displayEventType(Key eventType) {
@@ -150,7 +211,7 @@ public final class SearchCommandSupport {
             : eventType.asString();
     }
 
-    public static boolean startsWithIgnoreCase(String value, String prefix) {
+    static boolean startsWithIgnoreCase(String value, String prefix) {
         Objects.requireNonNull(value, "value");
         Objects.requireNonNull(prefix, "prefix");
         return value.regionMatches(true, 0, prefix, 0, prefix.length());
@@ -176,14 +237,12 @@ public final class SearchCommandSupport {
 
         event.world().ifPresent(world -> {
             var location = new StringBuilder("@ ").append(world.asString());
-            if (event.x().isPresent() && event.y().isPresent() && event.z().isPresent()) {
-                location.append(' ')
-                    .append(event.x().getAsInt())
-                    .append(' ')
-                    .append(event.y().getAsInt())
-                    .append(' ')
-                    .append(event.z().getAsInt());
-            }
+            event.position().ifPresent(position -> location.append(' ')
+                .append(position.x())
+                .append(' ')
+                .append(position.y())
+                .append(' ')
+                .append(position.z()));
             parts.add(Component.text(location.toString()));
         });
 
@@ -205,7 +264,26 @@ public final class SearchCommandSupport {
             : result;
     }
 
-    public static @Nullable Component paginationComponent(String query, SearchPage page) {
+    private static void renderPage(
+        Consumer<Component> sendMessage,
+        String query,
+        SearchPage page,
+        boolean eventDetailsPermitted
+    ) {
+        if (page.events().isEmpty()) {
+            sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
+        }
+        for (var event : page.events()) {
+            sendMessage.accept(SearchCommandMessages.RESULT.apply(formatEvent(event, eventDetailsPermitted)));
+        }
+
+        var pagination = paginationComponent(query, page);
+        if (pagination != null) {
+            sendMessage.accept(pagination);
+        }
+    }
+
+    static @Nullable Component paginationComponent(String query, SearchPage page) {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(page, "page");
 
@@ -235,36 +313,22 @@ public final class SearchCommandSupport {
     }
 
     private static @Nullable Component formatActor(SearchPage.Event event) {
-        if (event.actorKind().isEmpty()) {
-            return null;
-        }
-
-        return switch (event.actorKind().get()) {
-            case PLAYER -> {
-                var uuid = event.actorUuid().map(Object::toString).orElse("");
-                if (event.actorName().isPresent()) {
-                    var name = Component.text(event.actorName().get());
-                    yield uuid.isEmpty()
-                        ? name
-                        : name.hoverEvent(HoverEvent.showText(Component.text(uuid)));
-                }
-                yield uuid.isEmpty() ? null : Component.text(uuid);
-            }
-            case ENTITY -> {
-                var type = event.actorType().map(Key::asString).orElse("");
-                var uuid = event.actorUuid().map(Object::toString).orElse("");
-                if (type.isEmpty()) {
-                    yield uuid.isEmpty() ? null : Component.text(uuid);
-                }
-                var component = Component.text(type);
-                yield uuid.isEmpty()
-                    ? component
-                    : component.hoverEvent(HoverEvent.showText(Component.text(uuid)));
-            }
-            case BLOCK -> event.actorType()
-                .map(type -> Component.text(type.asString()))
-                .orElse(null);
+        return switch (event.actor().orElse(null)) {
+            case null -> null;
+            case PlayerActor player -> withUuidHover(
+                Component.text(event.actorName().orElse(player.uniqueId().toString())),
+                player.uniqueId()
+            );
+            case EntityActor entity -> withUuidHover(
+                Component.text(entity.entityType().asString()),
+                entity.uniqueId()
+            );
+            case BlockActor block -> Component.text(block.blockType().asString());
         };
+    }
+
+    static Component withUuidHover(Component component, UUID uuid) {
+        return component.hoverEvent(HoverEvent.showText(Component.text(uuid.toString())));
     }
 
     private static String completionEventType(Key type, String prefix) {
@@ -309,7 +373,7 @@ public final class SearchCommandSupport {
             };
             return new SearchRequest.Cursor(
                 Instant.ofEpochMilli(Long.parseLong(parts[1])),
-                java.util.UUID.fromString(parts[2]),
+                UUID.fromString(parts[2]),
                 direction
             );
         } catch (RuntimeException e) {
@@ -317,7 +381,26 @@ public final class SearchCommandSupport {
         }
     }
 
-    public record Invocation(
+    /**
+     * The sender of {@code /kansokusha search}.
+     *
+     * @param origin the sender's position used as the center of {@code radius}, if any
+     */
+    public record SearchSource(
+        Predicate<String> hasPermission,
+        Consumer<Component> sendMessage,
+        boolean player,
+        SearchQuery.@Nullable Position origin
+    ) {
+    }
+
+    /**
+     * Completion candidates replacing the input from {@code replacementStart}.
+     */
+    public record Suggestions(int replacementStart, List<String> values) {
+    }
+
+    record Invocation(
         String queryText,
         SearchQuery query,
         Optional<SearchRequest.Cursor> cursor

@@ -3,15 +3,18 @@ package net.okocraft.kansokusha.common.command;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EntityActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
-import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +22,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -118,22 +120,20 @@ class EventCommandSupportTest {
     @Test
     void testCommonFieldsPlayerNameAndCommunicationTextAreRendered() {
         var event = new EventDetail(
-            EVENT_ID,
-            CHAT,
+            new SearchPage.Event(
+                EVENT_ID,
+                CHAT,
+                OCCURRED_AT,
+                Optional.of(Key.key("example", "server")),
+                Optional.of(Key.key("minecraft", "overworld")),
+                Optional.of(new BlockPosition(1, -2, 3)),
+                Optional.of(new PlayerActor(PLAYER_ID)),
+                Optional.of("Alice"),
+                Optional.of(Key.key("minecraft", "stone")),
+                Optional.of("hello\nworld")
+            ),
             new PayloadGeneration(2),
-            OCCURRED_AT,
-            Optional.of(Key.key("example", "server")),
-            Optional.of(Key.key("minecraft", "overworld")),
-            OptionalInt.of(1),
-            OptionalInt.of(-2),
-            OptionalInt.of(3),
-            Optional.of(SearchQuery.ActorKind.PLAYER),
-            Optional.of(PLAYER_ID),
-            Optional.of("Alice"),
-            Optional.empty(),
-            Optional.of(Key.key("minecraft", "stone")),
-            EXPIRES_AT,
-            Optional.of("hello\nworld")
+            EXPIRES_AT
         );
 
         var lines = EventCommandSupport.formatEvent(event);
@@ -185,16 +185,8 @@ class EventCommandSupportTest {
     @Test
     void testEntityAndBlockActorsAreReadable() {
         var entityId = UUID.fromString("123e4567-e89b-12d3-a456-426614174502");
-        var entity = detailWithActor(
-            SearchQuery.ActorKind.ENTITY,
-            Optional.of(entityId),
-            Optional.of(Key.key("minecraft", "creeper"))
-        );
-        var block = detailWithActor(
-            SearchQuery.ActorKind.BLOCK,
-            Optional.empty(),
-            Optional.of(Key.key("minecraft", "piston"))
-        );
+        var entity = detailWithActor(new EntityActor(entityId, Key.key("minecraft", "creeper")));
+        var block = detailWithActor(new BlockActor(Key.key("minecraft", "piston")));
 
         Assertions.assertTrue(EventCommandSupport.formatEvent(entity).contains(
             EventCommandMessages.ACTOR.asComponent()
@@ -217,102 +209,46 @@ class EventCommandSupportTest {
         ));
     }
 
-    @Test
-    void testNonCommunicationEventDoesNotRenderSearchText() {
-        var event = new EventDetail(
-            EVENT_ID,
-            BREAK,
-            PayloadGeneration.FIRST,
-            OCCURRED_AT,
-            Optional.empty(),
-            Optional.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            EXPIRES_AT,
-            Optional.of("derived text must stay hidden")
-        );
-
-        var textLabel = EventCommandMessages.COMMUNICATION_TEXT.asComponent();
-        Assertions.assertFalse(EventCommandSupport.formatEvent(event).stream().anyMatch(line ->
-            line.children().contains(textLabel)
-        ));
-        Assertions.assertEquals(5, EventCommandSupport.formatEvent(event).size());
-    }
-
     private static EventDetail minimalEvent(Key eventType) {
+        return event(eventType, Optional.empty());
+    }
+
+    private static EventDetail detailWithActor(EventActor actor) {
+        return event(BREAK, Optional.of(actor));
+    }
+
+    private static EventDetail event(Key eventType, Optional<EventActor> actor) {
         return new EventDetail(
-            EVENT_ID,
-            eventType,
+            new SearchPage.Event(
+                EVENT_ID,
+                eventType,
+                OCCURRED_AT,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                actor,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()
+            ),
             PayloadGeneration.FIRST,
-            OCCURRED_AT,
-            Optional.empty(),
-            Optional.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            EXPIRES_AT,
-            Optional.empty()
+            EXPIRES_AT
         );
     }
 
-    private static EventDetail detailWithActor(
-        SearchQuery.ActorKind kind,
-        Optional<UUID> uuid,
-        Optional<Key> type
-    ) {
-        return new EventDetail(
-            EVENT_ID,
-            BREAK,
-            PayloadGeneration.FIRST,
-            OCCURRED_AT,
-            Optional.empty(),
-            Optional.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            Optional.of(kind),
-            uuid,
-            Optional.empty(),
-            type,
-            Optional.empty(),
-            EXPIRES_AT,
-            Optional.empty()
-        );
-    }
-
-    private static final class TestApi implements KansokushaApi, EventSearchBackend {
+    private static final class TestApi implements EventSearchBackend {
 
         private UUID lookupId;
         private CompletableFuture<Optional<EventDetail>> lookup =
             CompletableFuture.completedFuture(Optional.empty());
 
         @Override
-        public Optional<Key> localServerKey() {
-            return Optional.empty();
-        }
-
-        @Override
-        public void registerEventType(EventTypeDefinition definition) {
-        }
-
-        @Override
-        public boolean submit(EventSubmission submission) {
+        public boolean submitSearchable(EventSubmission submission, String searchText) {
             return true;
         }
 
         @Override
-        public boolean submitSearchable(EventSubmission submission, String searchText) {
+        public boolean submitPlayerLogin(EventSubmission submission, String username) {
             return true;
         }
 
@@ -330,7 +266,12 @@ class EventCommandSupportTest {
         }
 
         @Override
-        public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
+        public CompletableFuture<SearchMetadata> searchMetadata() {
+            return CompletableFuture.completedFuture(SearchMetadata.empty());
+        }
+
+        @Override
+        public CompletableFuture<List<String>> offlinePlayerNames() {
             return CompletableFuture.completedFuture(List.of());
         }
     }

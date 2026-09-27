@@ -1,11 +1,15 @@
 package net.okocraft.kansokusha.paper.inspection;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
+import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -21,14 +25,10 @@ import org.mockito.Mockito;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Properties;
-import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -42,8 +42,10 @@ class InspectionSearchHandlerTest {
     private static final Key BREAK = Key.key("kansokusha", "block_break");
     private static final Key CHAT = Key.key("kansokusha", "paper_chat");
     private static final Key WORLD = Key.key("minecraft", "overworld");
-    private static final InspectionTarget TARGET =
-        new InspectionTarget(WORLD, 123, 64, -456);
+    private static final SearchQuery.Position TARGET = new SearchQuery.Position(WORLD, 123, 64, -456);
+    private static final Component FULL_HISTORY = InspectionSearchMessages.VIEW_FULL.asComponent().clickEvent(
+        ClickEvent.runCommand("/kansokusha search position minecraft:overworld 123 64 -456")
+    );
 
     @Test
     void testPermissionFilteredRequestAndClickableResult() {
@@ -62,10 +64,11 @@ class InspectionSearchHandlerTest {
 
         var request = java.util.Objects.requireNonNull(backend.lastRequest);
         Assertions.assertEquals(Set.of(BREAK), request.constraints().allowedEventTypes());
-        Assertions.assertEquals(
-            Set.of(new SearchQuery.Position(WORLD, 123, 64, -456)),
-            request.query().conditions().positions()
-        );
+        Assertions.assertEquals(SearchQuery.Conditions.position(TARGET), request.query().conditions());
+        Assertions.assertTrue(request.query().exclusions().isEmpty());
+        Assertions.assertEquals(SearchQuery.Order.NEWEST, request.query().order());
+        Assertions.assertEquals(SearchCommandSupport.PLAYER_DEFAULT_LIMIT, request.limit());
+        Assertions.assertTrue(request.cursor().isEmpty());
         Mockito.verify(fixture.player()).sendMessage(
             InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456")
         );
@@ -133,7 +136,7 @@ class InspectionSearchHandlerTest {
         permitted.handler().inspect(PLAYER_ID, TARGET);
 
         Mockito.verify(permitted.player()).sendMessage(
-            InspectionSearchOutput.fullHistory(TARGET)
+            FULL_HISTORY
         );
 
         var inspectOnlyBackend = new RecordingBackend();
@@ -148,54 +151,12 @@ class InspectionSearchHandlerTest {
         inspectOnly.handler().inspect(PLAYER_ID, TARGET);
 
         Mockito.verify(inspectOnly.player(), Mockito.never()).sendMessage(
-            InspectionSearchOutput.fullHistory(TARGET)
+            FULL_HISTORY
         );
     }
 
     @Test
-    void testLatestRequestWinsForOutOfOrderCompletion() {
-        var backend = new RecordingBackend();
-        backend.metadata = metadata(BREAK);
-        var first = new CompletableFuture<SearchPage>();
-        var second = new CompletableFuture<SearchPage>();
-        backend.queuedPages.add(first);
-        backend.queuedPages.add(second);
-        var fixture = fixture(backend);
-        TestSources.grant(
-            fixture.player(),
-            SearchCommandSupport.eventPermission(BREAK)
-        );
-
-        var firstTarget = new InspectionTarget(WORLD, 1, 2, 3);
-        var secondTarget = new InspectionTarget(WORLD, 4, 5, 6);
-        fixture.handler().inspect(PLAYER_ID, firstTarget);
-        fixture.handler().inspect(PLAYER_ID, secondTarget);
-
-        second.complete(new SearchPage(List.of(), Optional.empty(), Optional.empty()));
-        first.completeExceptionally(new IllegalStateException("stale"));
-
-        Mockito.verify(fixture.player()).sendMessage(
-            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 4 5 6")
-        );
-        Mockito.verify(fixture.player(), Mockito.never()).sendMessage(
-            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 1 2 3")
-        );
-        Mockito.verify(fixture.player(), Mockito.never()).sendMessage(
-            SearchCommandMessages.SEARCH_FAILED.asComponent()
-        );
-    }
-
-    @Test
-    void testFullHistoryUsesExistingPositionSearchAndJapaneseMessagesExist() throws Exception {
-        var click = InspectionSearchOutput.fullHistory(TARGET).clickEvent();
-        Assertions.assertNotNull(click);
-        Assertions.assertEquals(
-            ClickEvent.runCommand(
-                "/kansokusha search position minecraft:overworld 123 64 -456"
-            ),
-            click
-        );
-
+    void testJapaneseMessagesExist() throws Exception {
         var properties = new Properties();
         try (
             var input = InspectionSearchHandlerTest.class.getClassLoader()
@@ -236,13 +197,9 @@ class InspectionSearchHandlerTest {
             Instant.parse("2026-09-27T00:00:00Z"),
             Optional.empty(),
             Optional.of(WORLD),
-            OptionalInt.of(123),
-            OptionalInt.of(64),
-            OptionalInt.of(-456),
-            Optional.of(SearchQuery.ActorKind.PLAYER),
-            Optional.of(PLAYER_ID),
+            Optional.of(new BlockPosition(123, 64, -456)),
+            Optional.of(new PlayerActor(PLAYER_ID)),
             Optional.of("Alice"),
-            Optional.empty(),
             Optional.of(Key.key("minecraft", "stone")),
             Optional.empty()
         );
@@ -258,7 +215,6 @@ class InspectionSearchHandlerTest {
             new SearchPage(List.of(), Optional.empty(), Optional.empty());
         private Throwable failure;
         private SearchRequest lastRequest;
-        private final Queue<CompletableFuture<SearchPage>> queuedPages = new ArrayDeque<>();
 
         @Override
         public boolean submitSearchable(EventSubmission submission, String searchText) {
@@ -268,9 +224,6 @@ class InspectionSearchHandlerTest {
         @Override
         public CompletableFuture<SearchPage> search(SearchRequest request) {
             this.lastRequest = request;
-            if (!this.queuedPages.isEmpty()) {
-                return this.queuedPages.remove();
-            }
             if (this.failure != null) {
                 return CompletableFuture.failedFuture(this.failure);
             }
@@ -283,7 +236,17 @@ class InspectionSearchHandlerTest {
         }
 
         @Override
-        public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
+        public boolean submitPlayerLogin(EventSubmission submission, String username) {
+            return true;
+        }
+
+        @Override
+        public CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        @Override
+        public CompletableFuture<List<String>> offlinePlayerNames() {
             return CompletableFuture.completedFuture(List.of());
         }
     }

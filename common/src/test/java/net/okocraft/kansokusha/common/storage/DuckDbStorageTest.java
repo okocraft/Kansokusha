@@ -8,8 +8,6 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
@@ -23,7 +21,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -52,14 +49,14 @@ class DuckDbStorageTest {
                 new EventSubmission(
                     SHORT, PayloadGeneration.FIRST, NOW, null, null, null, null, null, EventPayload.copyOf(new byte[0])
                 )
-            ).map(DuckDbStorageTest::queued).toList());
+            ).map(event -> queued(event, event.eventType().equals(LONG) ? "hello" : null)).toList());
         }
 
         try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
              var rows = connection.createStatement().executeQuery(
                  "SELECT event_type, payload_generation, epoch_ms(occurred_at), server, world, x, y, z, "
                      + "actor_kind, actor_uuid, actor_type, target_type, "
-                     + "epoch_ms(expires_at), payload FROM events ORDER BY event_type"
+                     + "epoch_ms(expires_at), payload, search_text FROM events ORDER BY event_type"
              )) {
             Assertions.assertTrue(rows.next());
             Assertions.assertEquals("example:long", rows.getString(1));
@@ -76,6 +73,7 @@ class DuckDbStorageTest {
             Assertions.assertEquals("minecraft:stone", rows.getString(12));
             Assertions.assertEquals(NOW.plus(Duration.ofDays(10)).toEpochMilli(), rows.getLong(13));
             Assertions.assertArrayEquals(new byte[]{1, 2, 3}, rows.getBytes(14));
+            Assertions.assertEquals("hello", rows.getString(15));
 
             Assertions.assertTrue(rows.next());
             Assertions.assertEquals("example:short", rows.getString(1));
@@ -87,6 +85,7 @@ class DuckDbStorageTest {
             Assertions.assertNull(rows.getString(11));
             Assertions.assertNull(rows.getString(12));
             Assertions.assertEquals(NOW.plus(Duration.ofDays(1)).toEpochMilli(), rows.getLong(13));
+            Assertions.assertNull(rows.getString(15));
 
             Assertions.assertFalse(rows.next());
         }
@@ -196,209 +195,34 @@ class DuckDbStorageTest {
     }
 
     @Test
-    void testSearchTextUsesCaseInsensitiveLiteralSubstringAndSkipsUnrelatedEvents(
-        @TempDir Path dir
-    ) throws Exception {
+    void testPlayerNamesKeepTheLatestObservationOfEachName(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
-        var unreadablePayload = new EventSubmission(
-            SHORT,
-            PayloadGeneration.FIRST,
-            NOW,
-            null,
-            null,
-            null,
-            null,
-            null,
-            EventPayload.copyOf(new byte[]{(byte) 0xff, 0x00, 0x7f})
-        );
+        var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174105");
 
         try (var storage = DuckDbStorageImpl.open(file)) {
             storage.append(List.of(
-                queued(unreadablePayload, "Prefix Ban%_* Suffix"),
-                queued(event(LONG), "another BAN entry"),
-                queued(new EventSubmission(
-                    Key.key("example", "unrelated"),
-                    PayloadGeneration.FIRST,
-                    NOW,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    EventPayload.copyOf(new byte[]{1, 2, 3})
-                ))
+                queuedLogin(player, "CurrentName", NOW.plusSeconds(2)),
+                queuedLogin(player, "CurrentName", NOW.plusSeconds(1))
             ));
-
-            Assertions.assertEquals(2, storage.findEventIdsContaining("bAn").size());
-            Assertions.assertEquals(1, storage.findEventIdsContaining("%").size());
-            Assertions.assertEquals(1, storage.findEventIdsContaining("_").size());
-            Assertions.assertEquals(1, storage.findEventIdsContaining("*").size());
-            Assertions.assertTrue(storage.findEventIdsContaining("ban?").isEmpty());
-        }
-
-        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
-             var rows = connection.createStatement().executeQuery("""
-                 SELECT
-                     (SELECT count(*) FROM events),
-                     (SELECT count(*) FROM event_search_text)
-                 """)) {
-            Assertions.assertTrue(rows.next());
-            Assertions.assertEquals(3, rows.getLong(1));
-            Assertions.assertEquals(2, rows.getLong(2));
-        }
-    }
-
-    @Test
-    void testDeleteExpiredRemovesMatchingSearchTextProjection(@TempDir Path dir) throws Exception {
-        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
-            storage.append(List.of(
-                queued(event(SHORT), "short-only"),
-                queued(event(LONG), "long-only")
-            ));
-
-            Assertions.assertEquals(1, storage.findEventIdsContaining("short-only").size());
-            Assertions.assertEquals(1, storage.findEventIdsContaining("long-only").size());
-
-            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1))));
-            Assertions.assertTrue(storage.findEventIdsContaining("short-only").isEmpty());
-            Assertions.assertEquals(1, storage.findEventIdsContaining("long-only").size());
-
-            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
-            Assertions.assertTrue(storage.findEventIdsContaining("long-only").isEmpty());
-        }
-    }
-
-    @Test
-    void testPlayerNameObservationCreatesOnlyRealNameChanges(@TempDir Path dir) throws Exception {
-        var file = dir.resolve("kansokusha.duckdb");
-        var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174100");
-        var renamedAt = NOW.plusSeconds(2);
-
-        try (var storage = DuckDbStorageImpl.open(file)) {
-            storage.append(List.of(queuedLogin(player, "FirstName", NOW)));
-            storage.append(List.of(queuedLogin(player, "FirstName", NOW.plusSeconds(1))));
-            storage.append(List.of(queuedLogin(player, "SecondName", renamedAt)));
+            storage.append(List.of(queuedLogin(player, "OldName", NOW)));
         }
 
         try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
              var statement = connection.prepareStatement("""
-                 SELECT event_type, epoch_ms(occurred_at), actor_kind, actor_uuid, payload
-                 FROM events
-                 WHERE event_type = ?
-                 ORDER BY occurred_at, event_id
+                 SELECT name, epoch_ms(last_seen)
+                 FROM player_names
+                 WHERE player_uuid = ?
+                 ORDER BY last_seen DESC
                  """)) {
-            statement.setString(1, PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString());
+            statement.setObject(1, player);
             try (var rows = statement.executeQuery()) {
                 Assertions.assertTrue(rows.next());
-                Assertions.assertEquals(
-                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString(),
-                    rows.getString("event_type")
-                );
-                Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(2));
-                Assertions.assertEquals("player", rows.getString(3));
-                Assertions.assertEquals(player, rows.getObject(4, UUID.class));
-                var payload = PlayerNameChangePayloadCodec.decode(
-                    EventPayload.copyOf(rows.getBytes(5))
-                );
-                Assertions.assertEquals("FirstName", payload.previousName());
-                Assertions.assertEquals("SecondName", payload.newName());
+                Assertions.assertEquals("CurrentName", rows.getString(1));
+                Assertions.assertEquals(NOW.plusSeconds(2).toEpochMilli(), rows.getLong(2));
+                Assertions.assertTrue(rows.next());
+                Assertions.assertEquals("OldName", rows.getString(1));
                 Assertions.assertFalse(rows.next());
             }
-        }
-    }
-
-    @Test
-    void testStalePlayerNameObservationDoesNotRewindOrCreateReverseChange(
-        @TempDir Path dir
-    ) throws Exception {
-        var file = dir.resolve("kansokusha.duckdb");
-        var player = UUID.fromString("123e4567-e89b-12d3-a456-426614174105");
-        var currentAt = NOW.plusSeconds(2);
-        var renamedAt = NOW.plusSeconds(3);
-
-        try (var storage = DuckDbStorageImpl.open(file)) {
-            storage.append(List.of(queuedLogin(player, "CurrentName", currentAt)));
-            storage.append(List.of(queuedLogin(player, "CurrentName", NOW.plusSeconds(1))));
-            storage.append(List.of(queuedLogin(player, "StaleName", NOW)));
-            storage.append(List.of(queuedLogin(player, "RenamedName", renamedAt)));
-        }
-
-        try (var connection = new DuckDBDriver().connect(
-            "jdbc:duckdb:" + file,
-            new Properties()
-        )) {
-            try (var statement = connection.prepareStatement("""
-                SELECT name, epoch_ms(first_seen), epoch_ms(last_seen)
-                FROM player_name_history
-                WHERE player_uuid = ?
-                ORDER BY last_seen DESC, last_event_id DESC
-                """)) {
-                statement.setObject(1, player);
-                try (var rows = statement.executeQuery()) {
-                    Assertions.assertTrue(rows.next());
-                    Assertions.assertEquals("RenamedName", rows.getString(1));
-                    Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(3));
-
-                    Assertions.assertTrue(rows.next());
-                    Assertions.assertEquals("CurrentName", rows.getString(1));
-                    Assertions.assertEquals(
-                        NOW.plusSeconds(1).toEpochMilli(),
-                        rows.getLong(2)
-                    );
-                    Assertions.assertEquals(currentAt.toEpochMilli(), rows.getLong(3));
-
-                    Assertions.assertTrue(rows.next());
-                    Assertions.assertEquals("StaleName", rows.getString(1));
-                    Assertions.assertEquals(NOW.toEpochMilli(), rows.getLong(3));
-                    Assertions.assertFalse(rows.next());
-                }
-            }
-
-            try (var statement = connection.prepareStatement("""
-                SELECT epoch_ms(occurred_at), payload
-                FROM events
-                WHERE event_type = ?
-                ORDER BY occurred_at, event_id
-                """)) {
-                statement.setString(
-                    1,
-                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE.asString()
-                );
-                try (var rows = statement.executeQuery()) {
-                    Assertions.assertTrue(rows.next());
-                    Assertions.assertEquals(renamedAt.toEpochMilli(), rows.getLong(1));
-                    var payload = PlayerNameChangePayloadCodec.decode(
-                        EventPayload.copyOf(rows.getBytes(2))
-                    );
-                    Assertions.assertEquals("CurrentName", payload.previousName());
-                    Assertions.assertEquals("RenamedName", payload.newName());
-                    Assertions.assertFalse(rows.next());
-                }
-            }
-        }
-    }
-
-    @Test
-    void testResolvePlayerNameUsesNewestHistoricalOwnerCaseInsensitively(
-        @TempDir Path dir
-    ) throws Exception {
-        var first = UUID.fromString("123e4567-e89b-12d3-a456-426614174101");
-        var second = UUID.fromString("123e4567-e89b-12d3-a456-426614174102");
-
-        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
-            storage.append(List.of(queuedLogin(first, "SharedName", NOW)));
-            storage.append(List.of(queuedLogin(second, "SharedName", NOW.plusSeconds(1))));
-
-            Assertions.assertEquals(
-                Optional.of(second),
-                storage.resolvePlayerName("sHaReDnAmE")
-            );
-
-            storage.append(List.of(queuedLogin(first, "SharedName", NOW.plusSeconds(2))));
-            Assertions.assertEquals(
-                Optional.of(first),
-                storage.resolvePlayerName("SHAREDNAME")
-            );
         }
     }
 
@@ -428,22 +252,6 @@ class DuckDbStorageTest {
             Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(1)).minusMillis(1)));
             Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1))));
             Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
-        }
-    }
-
-    @Test
-    void testCheckpointAndHealthReportStorageState(@TempDir Path dir) throws Exception {
-        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
-            storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
-            storage.checkpoint();
-
-            var health = storage.health();
-            Assertions.assertEquals(2, health.eventCount());
-            Assertions.assertFalse(health.databaseSize().isBlank());
-            Assertions.assertTrue(health.blockSize() > 0);
-            Assertions.assertTrue(health.totalBlocks() >= health.usedBlocks());
-            Assertions.assertTrue(health.freeBlocks() >= 0);
-            Assertions.assertFalse(health.walSize().isBlank());
         }
     }
 
@@ -528,10 +336,7 @@ class DuckDbStorageTest {
             event,
             occurredAt.toEpochMilli(),
             occurredAt.plus(Duration.ofDays(30)).toEpochMilli(),
-            new PlayerNameObservation(
-                username,
-                occurredAt.plus(Duration.ofDays(180)).toEpochMilli()
-            ),
+            username,
             null
         );
     }

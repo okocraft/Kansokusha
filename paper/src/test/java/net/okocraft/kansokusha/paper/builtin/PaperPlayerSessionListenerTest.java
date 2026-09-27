@@ -78,21 +78,6 @@ class PaperPlayerSessionListenerTest {
     }
 
     @Test
-    void testJoinGenerationOneAcceptsLegacyPayloadWithoutUsername() throws Exception {
-        var legacyPayload = PaperPayloadNbtCodec.encode(new CompoundTag());
-
-        Assertions.assertNull(
-            PaperPlayerSessionPayloadCodec.decodeJoinUsername(legacyPayload)
-        );
-        Assertions.assertEquals(
-            "TestPlayer",
-            PaperPlayerSessionPayloadCodec.decodeJoinUsername(
-                PaperPlayerSessionPayloadCodec.encodeJoin("TestPlayer")
-            )
-        );
-    }
-
-    @Test
     void testQuitRecordsFinalReadableLocationAndReason() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerQuitListener.register(

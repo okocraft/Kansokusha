@@ -83,8 +83,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
     );
 
     private static final Set<String> EXPECTED_INSPECTION_LISTENERS = Set.of(
-        "net.okocraft.kansokusha.paper.inspection.InspectionInteractionListener",
-        "net.okocraft.kansokusha.paper.inspection.InspectionSessionListener"
+        "net.okocraft.kansokusha.paper.inspection.InspectionListener"
     );
 
     private Path resultFile;

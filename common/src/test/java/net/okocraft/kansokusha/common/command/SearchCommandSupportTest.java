@@ -1,11 +1,19 @@
 package net.okocraft.kansokusha.common.command;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
+import net.okocraft.kansokusha.common.search.SearchPage;
+import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,6 +49,42 @@ class SearchCommandSupportTest {
         Assertions.assertTrue(checks.stream().noneMatch(permission -> permission.contains("*")));
         Assertions.assertTrue(checks.stream().allMatch(
             permission -> permission.startsWith(SearchCommandSupport.EVENT_PERMISSION_PREFIX)
+        ));
+    }
+
+    @Test
+    void testPaginationComponentsRetainQueryAndCursor() {
+        var now = Instant.parse("2026-09-27T07:00:00Z");
+        var previous = new SearchRequest.Cursor(
+            now.minusSeconds(5),
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174302"),
+            SearchRequest.Direction.PREVIOUS
+        );
+        var next = new SearchRequest.Cursor(
+            now.plusSeconds(5),
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174303"),
+            SearchRequest.Direction.NEXT
+        );
+        var page = new SearchPage(List.of(), Optional.of(next), Optional.of(previous));
+
+        var expected = Component.empty()
+            .append(SearchCommandMessages.PREVIOUS.asComponent().clickEvent(ClickEvent.runCommand(
+                "/kansokusha search action block_break limit 1 __cursor=previous,"
+                    + previous.occurredAt().toEpochMilli() + "," + previous.eventId()
+            )))
+            .append(Component.text(" | "))
+            .append(SearchCommandMessages.NEXT.asComponent().clickEvent(ClickEvent.runCommand(
+                "/kansokusha search action block_break limit 1 __cursor=next,"
+                    + next.occurredAt().toEpochMilli() + "," + next.eventId()
+            )));
+
+        Assertions.assertEquals(
+            expected,
+            SearchCommandSupport.paginationComponent("action block_break limit 1", page)
+        );
+        Assertions.assertNull(SearchCommandSupport.paginationComponent(
+            "",
+            new SearchPage(List.of(), Optional.empty(), Optional.empty())
         ));
     }
 }

@@ -7,12 +7,12 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
-import net.okocraft.kansokusha.common.storage.StorageHealth;
 import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
@@ -37,7 +37,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 class KansokushaRuntimeTest {
 
@@ -94,10 +93,16 @@ class KansokushaRuntimeTest {
             var now = Instant.now();
             Assertions.assertTrue(runtime.submitSearchable(event(now), "Mixed BAN%_* text"));
             Assertions.assertTrue(runtime.submit(event(now)));
+        }
 
-            Assertions.assertEquals(1, runtime.findEventIdsContaining("bAn").join().size());
-            Assertions.assertEquals(1, runtime.findEventIdsContaining("%_*").join().size());
-            Assertions.assertTrue(runtime.findEventIdsContaining("missing").join().isEmpty());
+        var file = dir.resolve(KansokushaRuntime.DATABASE_FILENAME);
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT search_text FROM events WHERE search_text IS NOT NULL"
+             )) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals("Mixed BAN%_* text", rows.getString(1));
+            Assertions.assertFalse(rows.next());
         }
     }
 
@@ -108,8 +113,6 @@ class KansokushaRuntimeTest {
             storage,
             config(10, BATCH_SIZE),
             SERVER_KEY,
-            ignored -> {
-            },
             (message, failure) -> {
                 throw new AssertionError(message, failure);
             }
@@ -141,16 +144,13 @@ class KansokushaRuntimeTest {
             storage,
             config(10, BATCH_SIZE),
             SERVER_KEY,
-            ignored -> {
-            },
             (message, failure) -> {
                 throw new AssertionError(message, failure);
             }
         );
         var request = new SearchRequest(
-            SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC),
+            SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC, null),
             new SearchRequest.Constraints(Set.of(EVENT_TYPE)),
-            Optional.empty(),
             Optional.empty(),
             10
         );
@@ -178,9 +178,8 @@ class KansokushaRuntimeTest {
         try (var runtime = start(dir, 10)) {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             var request = new SearchRequest(
-                SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC),
+                SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC, null),
                 new SearchRequest.Constraints(Set.of(EVENT_TYPE)),
-                Optional.empty(),
                 Optional.empty(),
                 10
             );
@@ -263,22 +262,6 @@ class KansokushaRuntimeTest {
         runtime.close();
 
         Assertions.assertEquals(BATCH_SIZE + 1, countEvents(dir));
-    }
-
-    @Test
-    void testCloseReportsDatabaseHealth(@TempDir Path dir) throws Exception {
-        var report = new AtomicReference<String>();
-        var runtime = start(dir, 10, BATCH_SIZE, report::set);
-        runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
-        Assertions.assertTrue(runtime.submit(event(Instant.now())));
-
-        runtime.close();
-
-        var message = report.get();
-        Assertions.assertNotNull(message);
-        Assertions.assertTrue(message.contains("events=1"));
-        Assertions.assertTrue(message.contains("reusable="));
-        Assertions.assertTrue(message.contains("expired-on-shutdown="));
     }
 
     @Test
@@ -367,17 +350,7 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public Optional<UUID> resolvePlayerName(String name) {
-            return Optional.empty();
-        }
-
-        @Override
         public List<String> offlinePlayerNames() {
-            return List.of();
-        }
-
-        @Override
-        public List<UUID> findEventIdsContaining(String literal) {
             return List.of();
         }
 
@@ -415,12 +388,8 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public void checkpoint() {
-        }
-
-        @Override
-        public StorageHealth health() {
-            return new StorageHealth(0, "0 B", 0, 0, 0, 0, "0 B");
+        public SearchMetadata searchMetadata() {
+            return SearchMetadata.empty();
         }
 
         @Override
@@ -433,22 +402,11 @@ class KansokushaRuntimeTest {
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity, int batchSize) throws Exception {
-        return start(dir, queueCapacity, batchSize, message -> {
-        });
-    }
-
-    private static KansokushaRuntime start(
-        Path dir,
-        int queueCapacity,
-        int batchSize,
-        Consumer<String> infoReporter
-    ) throws Exception {
         var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
         return KansokushaRuntime.start(
             storage,
             config(queueCapacity, batchSize),
             SERVER_KEY,
-            infoReporter,
             (message, failure) -> {
                 throw new AssertionError(message, failure);
             }

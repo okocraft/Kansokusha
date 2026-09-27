@@ -5,13 +5,13 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.okocraft.kansokusha.api.Kansokusha;
-import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.command.SearchCommandSupport;
+import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -24,9 +24,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -38,7 +36,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -60,22 +57,10 @@ class SearchCommandTest {
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174301");
 
+    private final SearchApi api = new SearchApi();
     private final CommandTester tester = CommandTester.of(
-        SearchCommand.createSearchCommand(CLOCK, ZoneOffset.UTC).build()
+        SearchCommand.createSearchCommand(this.api, CLOCK, ZoneOffset.UTC).build()
     );
-
-    private SearchApi api;
-
-    @BeforeEach
-    void setUp() {
-        this.api = new SearchApi();
-        Kansokusha.setApi(this.api);
-    }
-
-    @AfterEach
-    void tearDown() {
-        Kansokusha.setApi(null);
-    }
 
     @Test
     void testSearchPermissionIsRequired() {
@@ -120,7 +105,7 @@ class SearchCommandTest {
         this.api.metadata = metadata(Set.of(BREAK));
         ConsoleCommandSender console = console(BREAK);
         var tokyoTester = CommandTester.of(
-            SearchCommand.createSearchCommand(CLOCK, ZoneId.of("Asia/Tokyo")).build()
+            SearchCommand.createSearchCommand(this.api, CLOCK, ZoneId.of("Asia/Tokyo")).build()
         );
 
         Assertions.assertEquals(
@@ -155,7 +140,9 @@ class SearchCommandTest {
             0,
             this.tester.execute(TestSources.ofSenderOnly(console), "search order sideways")
         );
-        Mockito.verify(console).sendMessage(SearchCommandMessages.PARSE_ERROR.asComponent());
+        Mockito.verify(console).sendMessage(
+            SearchCommandMessages.PARSE_ERROR.apply("order must be newest or oldest: sideways")
+        );
         Assertions.assertNull(this.api.lastRequest);
     }
 
@@ -284,9 +271,6 @@ class SearchCommandTest {
     void testPlayerRadiusUsesCurrentWorldAndBlockPosition() throws Exception {
         this.api.metadata = metadata(Set.of(BREAK));
         Player player = player(BREAK);
-        World world = Mockito.mock(World.class);
-        Mockito.when(world.getKey()).thenReturn(NamespacedKey.minecraft("overworld"));
-        Mockito.when(player.getLocation()).thenReturn(new Location(world, 10.8, 64.2, -3.2));
 
         Assertions.assertEquals(
             1,
@@ -295,10 +279,9 @@ class SearchCommandTest {
 
         var request = java.util.Objects.requireNonNull(this.api.lastRequest);
         Assertions.assertEquals(10, request.defaultLimit());
-        Assertions.assertEquals(Set.of(5), request.query().conditions().radii());
         Assertions.assertEquals(
-            Optional.of(new SearchRequest.RadiusCenter(OVERWORLD, 10, -4)),
-            request.radiusCenter()
+            Set.of(new SearchQuery.Around(OVERWORLD, 10, -4, 5)),
+            request.query().conditions().around()
         );
     }
 
@@ -310,7 +293,7 @@ class SearchCommandTest {
 
         Assertions.assertEquals(0, this.tester.execute(source, "search radius 5"));
         Mockito.verify(console).sendMessage(
-            SearchCommandMessages.RADIUS_PLAYER_ONLY.asComponent()
+            SearchCommandMessages.PARSE_ERROR.apply("radius requires the position of a player")
         );
         Assertions.assertNull(this.api.lastRequest);
 
@@ -323,7 +306,6 @@ class SearchCommandTest {
             )
         );
         var request = java.util.Objects.requireNonNull(this.api.lastRequest);
-        Assertions.assertTrue(request.radiusCenter().isEmpty());
         Assertions.assertEquals(
             Set.of(new SearchQuery.Around(OVERWORLD, 10, 20, 5)),
             request.query().conditions().around()
@@ -421,7 +403,7 @@ class SearchCommandTest {
         );
 
         Mockito.verify(console).sendMessage(
-            SearchCommandMessages.RESULT.apply(SearchCommand.formatEvent(event, false))
+            SearchCommandMessages.RESULT.apply(SearchCommandSupport.formatEvent(event, false))
         );
         Mockito.verify(console).hasPermission(EventCommand.PERMISSION);
     }
@@ -459,12 +441,8 @@ class SearchCommandTest {
                 )
             ));
 
-        Assertions.assertEquals(
-            expected,
-            SearchCommand.paginationComponent("action block_break limit 1", page)
-        );
-
         this.api.metadata = metadata(Set.of(BREAK));
+        this.api.page = page;
         ConsoleCommandSender console = console(BREAK);
         Assertions.assertEquals(
             1,
@@ -481,6 +459,7 @@ class SearchCommandTest {
             java.util.Objects.requireNonNull(this.api.lastRequest).cursor()
         );
         Assertions.assertEquals(Set.of(BREAK), this.api.lastRequest.query().conditions().actions());
+        Mockito.verify(console).sendMessage(expected);
     }
 
     @Test
@@ -560,6 +539,9 @@ class SearchCommandTest {
 
     private Player player(Key... permittedEventTypes) {
         Player player = Mockito.mock(Player.class);
+        World world = Mockito.mock(World.class);
+        Mockito.when(world.getKey()).thenReturn(NamespacedKey.minecraft("overworld"));
+        Mockito.when(player.getLocation()).thenReturn(new Location(world, 10.8, 64.2, -3.2));
         TestSources.grant(player, SearchCommand.PERMISSION);
         for (var eventType : permittedEventTypes) {
             TestSources.grant(player, eventPermission(eventType));
@@ -568,7 +550,7 @@ class SearchCommandTest {
     }
 
     private static String eventPermission(Key eventType) {
-        return SearchCommand.EVENT_PERMISSION_PREFIX + eventType.asString();
+        return SearchCommandSupport.eventPermission(eventType);
     }
 
     private static SearchMetadata metadata(Set<Key> eventTypes) {
@@ -586,20 +568,15 @@ class SearchCommandTest {
             NOW,
             Optional.empty(),
             Optional.of(OVERWORLD),
-            OptionalInt.of(1),
-            OptionalInt.of(64),
-            OptionalInt.of(-2),
-            Optional.of(SearchQuery.ActorKind.PLAYER),
-            Optional.of(PLAYER_ID),
+            Optional.of(new BlockPosition(1, 64, -2)),
+            Optional.of(new PlayerActor(PLAYER_ID)),
             Optional.of("Alice"),
-            Optional.empty(),
             Optional.of(STONE),
             Optional.of("/say hello\nworld")
         );
     }
 
-    private static final class SearchApi
-        implements KansokushaApi, PlayerNameDirectory, EventSearchBackend {
+    private static final class SearchApi implements EventSearchBackend {
 
         private SearchMetadata metadata = SearchMetadata.empty();
         private List<String> playerNames = List.of();
@@ -608,36 +585,12 @@ class SearchCommandTest {
         private Throwable failure;
 
         @Override
-        public Optional<Key> localServerKey() {
-            return Optional.empty();
-        }
-
-        @Override
-        public void registerEventType(EventTypeDefinition definition) {
-        }
-
-        @Override
-        public boolean submit(EventSubmission submission) {
+        public boolean submitSearchable(EventSubmission submission, String searchText) {
             return true;
         }
 
         @Override
         public boolean submitPlayerLogin(EventSubmission submission, String username) {
-            return true;
-        }
-
-        @Override
-        public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
-
-        @Override
-        public CompletableFuture<List<String>> offlinePlayerNames() {
-            return CompletableFuture.completedFuture(this.playerNames);
-        }
-
-        @Override
-        public boolean submitSearchable(EventSubmission submission, String searchText) {
             return true;
         }
 
@@ -651,13 +604,18 @@ class SearchCommandTest {
         }
 
         @Override
+        public CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        @Override
         public CompletableFuture<SearchMetadata> searchMetadata() {
             return CompletableFuture.completedFuture(this.metadata);
         }
 
         @Override
-        public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
-            return CompletableFuture.completedFuture(List.of());
+        public CompletableFuture<List<String>> offlinePlayerNames() {
+            return CompletableFuture.completedFuture(this.playerNames);
         }
     }
 }

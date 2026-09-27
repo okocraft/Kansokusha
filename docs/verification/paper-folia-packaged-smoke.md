@@ -21,8 +21,7 @@ The verification requires all of the following:
 - the external fixture obtains `Kansokusha.api()`, registers an event type, and
   `submit` returns `true`;
 - every expected built-in audit listener is registered by the packaged plugin;
-- `InspectionSessionListener` and `InspectionInteractionListener` are both registered
-  by the packaged plugin;
+- `InspectionListener` is registered by the packaged plugin;
 - normal server shutdown makes `Kansokusha.api()` unavailable and the previously
   acquired API rejects further events;
 - after the Paper process exits, the Gradle verification loads

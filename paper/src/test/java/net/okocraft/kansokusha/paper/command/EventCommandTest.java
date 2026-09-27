@@ -2,25 +2,21 @@ package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.kyori.adventure.key.Key;
-import net.okocraft.kansokusha.api.Kansokusha;
-import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
-import net.okocraft.kansokusha.common.command.EventCommandSupport;
+import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.command.ConsoleCommandSender;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -30,21 +26,10 @@ class EventCommandTest {
         UUID.fromString("0199a123-4567-789a-8bcd-ef0123456790");
     private static final Key EVENT_TYPE = Key.key("kansokusha", "block_break");
 
+    private final EventSearchBackend api = Mockito.mock(EventSearchBackend.class);
     private final CommandTester tester = CommandTester.of(
-        EventCommand.createEventCommand().build()
+        EventCommand.createEventCommand(this.api).build()
     );
-    private SearchableApi api;
-
-    @BeforeEach
-    void setUp() {
-        this.api = Mockito.mock(SearchableApi.class);
-        Kansokusha.setApi(this.api);
-    }
-
-    @AfterEach
-    void tearDown() {
-        Kansokusha.setApi(null);
-    }
 
     @Test
     void testEventPermissionIsRequired() {
@@ -68,7 +53,7 @@ class EventCommandTest {
         TestSources.grant(
             console,
             EventCommand.PERMISSION,
-            EventCommandSupport.eventPermission(EVENT_TYPE)
+            SearchCommandSupport.eventPermission(EVENT_TYPE)
         );
         Mockito.when(this.api.findEvent(EVENT_ID))
             .thenReturn(CompletableFuture.completedFuture(Optional.of(event())));
@@ -102,25 +87,20 @@ class EventCommandTest {
 
     private static EventDetail event() {
         return new EventDetail(
-            EVENT_ID,
-            EVENT_TYPE,
+            new SearchPage.Event(
+                EVENT_ID,
+                EVENT_TYPE,
+                Instant.parse("2026-09-27T10:00:00Z"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()
+            ),
             PayloadGeneration.FIRST,
-            Instant.parse("2026-09-27T10:00:00Z"),
-            Optional.empty(),
-            Optional.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            OptionalInt.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Instant.parse("2026-10-27T10:00:00Z"),
-            Optional.empty()
+            Instant.parse("2026-10-27T10:00:00Z")
         );
-    }
-
-    private interface SearchableApi extends KansokushaApi, EventSearchBackend {
     }
 }

@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.common.search.query.SearchQuery.Position;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.TimeRange;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.DateTimeException;
@@ -20,6 +21,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -28,6 +30,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Parser for the platform-neutral modifiers following {@code /kansokusha search}.
@@ -38,27 +41,7 @@ public final class SearchQueryParser {
 
     private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([mhdw])");
 
-    private static final List<String> MODIFIER_SUGGESTIONS = List.of(
-        "user",
-        "action",
-        "time",
-        "radius",
-        "include",
-        "target",
-        "filter",
-        "actor-uuid",
-        "actor-kind",
-        "actor-type",
-        "world",
-        "position",
-        "around",
-        "from",
-        "to",
-        "exclude",
-        "order",
-        "limit"
-    );
-    private static final List<String> EXCLUDE_SUGGESTIONS = List.of(
+    private static final List<String> CONDITION_SUGGESTIONS = List.of(
         "user",
         "action",
         "time",
@@ -73,106 +56,71 @@ public final class SearchQueryParser {
         "position",
         "around"
     );
+    private static final List<String> MODIFIER_SUGGESTIONS = Stream.concat(
+        CONDITION_SUGGESTIONS.stream(),
+        Stream.of("from", "to", "exclude", "order", "limit")
+    ).toList();
     private static final List<String> ACTOR_KIND_SUGGESTIONS =
         List.of("player", "entity", "block");
     private static final List<String> ORDER_SUGGESTIONS = List.of("newest", "oldest");
+    private static final Set<String> SINGLETON_MODIFIERS = Set.of("from", "to", "order", "limit");
 
     private SearchQueryParser() {
     }
 
     /**
      * Parses a raw modifier string. Single and double quoted values are supported.
+     *
+     * @param origin the executing player's position used as the center of {@code radius},
+     *               or {@code null} when the sender has no position
      */
-    public static SearchQuery parse(String input, Clock clock, ZoneId timezone) {
+    public static SearchQuery parse(String input, Clock clock, ZoneId timezone, @Nullable Position origin) {
         Objects.requireNonNull(input, "input");
-        return parse(tokenize(input), clock, timezone);
+        return parse(tokenize(input), clock, timezone, origin);
     }
 
     /**
      * Parses already-tokenized modifier arguments.
      */
-    public static SearchQuery parse(List<String> arguments, Clock clock, ZoneId timezone) {
+    public static SearchQuery parse(
+        List<String> arguments,
+        Clock clock,
+        ZoneId timezone,
+        @Nullable Position origin
+    ) {
         Objects.requireNonNull(arguments, "arguments");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(timezone, "timezone");
 
         var cursor = new Cursor(arguments);
+        var context = new Context(clock.instant(), timezone, origin);
         var conditions = new MutableConditions();
         var exclusions = new MutableConditions();
+        var singletons = new HashSet<String>();
         var order = Order.NEWEST;
         var limit = OptionalInt.empty();
-        var orderSet = false;
-        var limitSet = false;
-        var fromSet = false;
-        var toSet = false;
-        var relativeTimeSet = false;
         var from = Optional.<Instant>empty();
         var to = Optional.<Instant>empty();
-        var now = clock.instant();
 
         while (cursor.hasNext()) {
             var modifier = cursor.next("modifier");
+            if (SINGLETON_MODIFIERS.contains(modifier) && !singletons.add(modifier)) {
+                throw error(modifier + " may only be specified once");
+            }
             switch (modifier) {
-                case "user" -> conditions.users.add(nonEmpty(cursor.next("user"), "user"));
-                case "action" -> conditions.actions.add(parseActionKey(cursor.next("action")));
-                case "time" -> {
-                    if (fromSet || toSet) {
-                        throw error("time cannot be combined with from/to");
-                    }
-                    relativeTimeSet = true;
-                    conditions.timeRanges.add(parseRelativeTime(cursor.next("time"), now, timezone));
-                }
-                case "radius" -> conditions.radii.add(parsePositiveInt(cursor.next("radius"), "radius"));
-                case "include", "target" ->
-                    conditions.targets.add(parseKey(cursor.next(modifier), modifier));
-                case "filter" -> conditions.filters.add(nonEmpty(cursor.next("filter"), "filter"));
-                case "actor-uuid" -> conditions.actorUuids.add(parseUuid(cursor.next("actor-uuid")));
-                case "actor-kind" -> conditions.actorKinds.add(parseActorKind(cursor.next("actor-kind")));
-                case "actor-type" ->
-                    conditions.actorTypes.add(parseKey(cursor.next("actor-type"), "actor-type"));
-                case "world" -> conditions.worlds.add(parseKey(cursor.next("world"), "world"));
-                case "position" -> conditions.positions.add(parsePosition(cursor));
-                case "around" -> conditions.around.add(parseAround(cursor));
-                case "from" -> {
-                    if (relativeTimeSet) {
-                        throw error("from/to cannot be combined with time");
-                    }
-                    if (fromSet) {
-                        throw error("from may only be specified once");
-                    }
-                    fromSet = true;
-                    from = Optional.of(parseAbsoluteBound(cursor.next("from"), timezone, false));
-                }
-                case "to" -> {
-                    if (relativeTimeSet) {
-                        throw error("from/to cannot be combined with time");
-                    }
-                    if (toSet) {
-                        throw error("to may only be specified once");
-                    }
-                    toSet = true;
-                    to = Optional.of(parseAbsoluteBound(cursor.next("to"), timezone, true));
-                }
-                case "exclude" -> parseExcluded(cursor, exclusions, now, timezone);
-                case "order" -> {
-                    if (orderSet) {
-                        throw error("order may only be specified once");
-                    }
-                    orderSet = true;
-                    order = parseOrder(cursor.next("order"));
-                }
-                case "limit" -> {
-                    if (limitSet) {
-                        throw error("limit may only be specified once");
-                    }
-                    limitSet = true;
-                    limit = OptionalInt.of(parsePositiveInt(cursor.next("limit"), "limit"));
-                }
-                default -> throw error("unknown modifier: " + modifier);
+                case "from" -> from = Optional.of(parseAbsoluteBound(cursor.next("from"), timezone, false));
+                case "to" -> to = Optional.of(parseAbsoluteBound(cursor.next("to"), timezone, true));
+                case "exclude" -> parseCondition(cursor.next("exclude condition"), "exclude ", cursor, exclusions, context);
+                case "order" -> order = parseOrder(cursor.next("order"));
+                case "limit" -> limit = OptionalInt.of(parsePositiveInt(cursor.next("limit"), "limit"));
+                default -> parseCondition(modifier, "", cursor, conditions, context);
             }
         }
 
-        if (fromSet || toSet) {
+        if (from.isPresent() || to.isPresent()) {
+            if (!conditions.timeRanges.isEmpty()) {
+                throw error("time cannot be combined with from/to");
+            }
             try {
                 conditions.timeRanges.add(new TimeRange(from, to));
             } catch (IllegalArgumentException e) {
@@ -180,26 +128,24 @@ public final class SearchQueryParser {
             }
         }
 
-        try {
-            return new SearchQuery(conditions.freeze(), exclusions.freeze(), order, limit);
-        } catch (IllegalArgumentException e) {
-            throw error(e.getMessage(), e);
-        }
+        return new SearchQuery(conditions.freeze(), exclusions.freeze(), order, limit);
     }
 
     /**
      * Interprets a partially typed query for platform completion without duplicating the query
      * grammar in a platform module.
+     *
+     * @param radiusAvailable whether the sender has a position that {@code radius} can use
      */
-    public static Completion completion(String input, Clock clock, ZoneId timezone) {
+    public static Completion completion(String input, Clock clock, ZoneId timezone, boolean radiusAvailable) {
         Objects.requireNonNull(input, "input");
-        Objects.requireNonNull(clock, "clock");
-        Objects.requireNonNull(timezone, "timezone");
 
         var partial = tokenizeForCompletion(input);
+        // Completion only needs to know whether radius is accepted, not the actual position.
+        var origin = radiusAvailable ? new Position(Key.key("kansokusha", "completion"), 0, 0, 0) : null;
         CompletionKind kind;
         try {
-            parse(partial.completedArguments(), clock, timezone);
+            parse(partial.completedArguments(), clock, timezone, origin);
             kind = CompletionKind.MODIFIER;
         } catch (SearchQueryParseException e) {
             kind = completionKind(e.getMessage());
@@ -209,7 +155,7 @@ public final class SearchQueryParser {
             kind,
             partial.prefix(),
             partial.replacementStart(),
-            staticSuggestions(kind)
+            staticSuggestions(kind, radiusAvailable)
         );
     }
 
@@ -218,28 +164,33 @@ public final class SearchQueryParser {
             return CompletionKind.NONE;
         }
 
-        return switch (message.substring("missing ".length())) {
-            case "user", "exclude user" -> CompletionKind.USER;
-            case "action", "exclude action" -> CompletionKind.ACTION;
-            case "include", "target", "exclude include", "exclude target" ->
-                CompletionKind.TARGET;
-            case "actor-kind", "exclude actor-kind" -> CompletionKind.ACTOR_KIND;
-            case "actor-type", "exclude actor-type" -> CompletionKind.ACTOR_TYPE;
-            case "world", "exclude world" -> CompletionKind.WORLD;
+        var expected = message.substring("missing ".length());
+        if (expected.equals("exclude condition")) {
+            return CompletionKind.EXCLUDE_CONDITION;
+        }
+        return switch (expected.startsWith("exclude ") ? expected.substring("exclude ".length()) : expected) {
+            case "user" -> CompletionKind.USER;
+            case "action" -> CompletionKind.ACTION;
+            case "include", "target" -> CompletionKind.TARGET;
+            case "actor-kind" -> CompletionKind.ACTOR_KIND;
+            case "actor-type" -> CompletionKind.ACTOR_TYPE;
+            case "world" -> CompletionKind.WORLD;
             case "order" -> CompletionKind.ORDER;
-            case "exclude condition" -> CompletionKind.EXCLUDE_CONDITION;
             default -> CompletionKind.NONE;
         };
     }
 
-    private static List<String> staticSuggestions(CompletionKind kind) {
-        return switch (kind) {
+    private static List<String> staticSuggestions(CompletionKind kind, boolean radiusAvailable) {
+        var suggestions = switch (kind) {
             case MODIFIER -> MODIFIER_SUGGESTIONS;
-            case EXCLUDE_CONDITION -> EXCLUDE_SUGGESTIONS;
+            case EXCLUDE_CONDITION -> CONDITION_SUGGESTIONS;
             case ACTOR_KIND -> ACTOR_KIND_SUGGESTIONS;
             case ORDER -> ORDER_SUGGESTIONS;
-            default -> List.of();
+            default -> List.<String>of();
         };
+        return radiusAvailable
+            ? suggestions
+            : suggestions.stream().filter(value -> !value.equals("radius")).toList();
     }
 
     private static CompletionTokens tokenizeForCompletion(String input) {
@@ -326,35 +277,35 @@ public final class SearchQueryParser {
     ) {
     }
 
-    private static void parseExcluded(
+    private static void parseCondition(
+        String field,
+        String labelPrefix,
         Cursor cursor,
-        MutableConditions exclusions,
-        Instant now,
-        ZoneId timezone
+        MutableConditions target,
+        Context context
     ) {
-        var condition = cursor.next("exclude condition");
-        switch (condition) {
-            case "user" -> exclusions.users.add(nonEmpty(cursor.next("exclude user"), "exclude user"));
-            case "action" -> exclusions.actions.add(parseActionKey(cursor.next("exclude action")));
-            case "time" ->
-                exclusions.timeRanges.add(parseRelativeTime(cursor.next("exclude time"), now, timezone));
-            case "radius" ->
-                exclusions.radii.add(parsePositiveInt(cursor.next("exclude radius"), "exclude radius"));
-            case "include", "target" ->
-                exclusions.targets.add(parseKey(cursor.next("exclude " + condition), "exclude " + condition));
-            case "filter" ->
-                exclusions.filters.add(nonEmpty(cursor.next("exclude filter"), "exclude filter"));
-            case "actor-uuid" ->
-                exclusions.actorUuids.add(parseUuid(cursor.next("exclude actor-uuid")));
-            case "actor-kind" ->
-                exclusions.actorKinds.add(parseActorKind(cursor.next("exclude actor-kind")));
-            case "actor-type" ->
-                exclusions.actorTypes.add(parseKey(cursor.next("exclude actor-type"), "exclude actor-type"));
-            case "world" ->
-                exclusions.worlds.add(parseKey(cursor.next("exclude world"), "exclude world"));
-            case "position" -> exclusions.positions.add(parsePosition(cursor));
-            case "around" -> exclusions.around.add(parseAround(cursor));
-            default -> throw error("unsupported exclude condition: " + condition);
+        var label = labelPrefix + field;
+        switch (field) {
+            case "user" -> target.users.add(nonEmpty(cursor.next(label), label));
+            case "action" -> target.actions.add(parseActionKey(cursor.next(label)));
+            case "time" -> target.timeRanges.add(parseRelativeTime(cursor.next(label), context));
+            case "radius" -> {
+                var radius = parsePositiveInt(cursor.next(label), label);
+                var origin = context.origin();
+                if (origin == null) {
+                    throw error("radius requires the position of a player");
+                }
+                target.around.add(new Around(origin.world(), origin.x(), origin.z(), radius));
+            }
+            case "include", "target" -> target.targets.add(parseKey(cursor.next(label), label));
+            case "filter" -> target.filters.add(nonEmpty(cursor.next(label), label));
+            case "actor-uuid" -> target.actorUuids.add(parseUuid(cursor.next(label)));
+            case "actor-kind" -> target.actorKinds.add(parseActorKind(cursor.next(label)));
+            case "actor-type" -> target.actorTypes.add(parseKey(cursor.next(label), label));
+            case "world" -> target.worlds.add(parseKey(cursor.next(label), label));
+            case "position" -> target.positions.add(parsePosition(cursor));
+            case "around" -> target.around.add(parseAround(cursor));
+            default -> throw error("unknown condition: " + label);
         }
     }
 
@@ -437,7 +388,9 @@ public final class SearchQueryParser {
         return value;
     }
 
-    private static TimeRange parseRelativeTime(String value, Instant now, ZoneId timezone) {
+    private static TimeRange parseRelativeTime(String value, Context context) {
+        var now = context.now();
+        var timezone = context.timezone();
         if ("today".equals(value) || "yesterday".equals(value)) {
             var today = now.atZone(timezone).toLocalDate();
             var date = "today".equals(value) ? today : today.minusDays(1);
@@ -624,6 +577,9 @@ public final class SearchQueryParser {
         return new SearchQueryParseException(message, cause);
     }
 
+    private record Context(Instant now, ZoneId timezone, @Nullable Position origin) {
+    }
+
     private static final class Cursor {
 
         private final List<String> arguments;
@@ -653,7 +609,6 @@ public final class SearchQueryParser {
         private final Set<String> users = new LinkedHashSet<>();
         private final Set<Key> actions = new LinkedHashSet<>();
         private final Set<TimeRange> timeRanges = new LinkedHashSet<>();
-        private final Set<Integer> radii = new LinkedHashSet<>();
         private final Set<Key> targets = new LinkedHashSet<>();
         private final Set<String> filters = new LinkedHashSet<>();
         private final Set<UUID> actorUuids = new LinkedHashSet<>();
@@ -668,7 +623,6 @@ public final class SearchQueryParser {
                 this.users,
                 this.actions,
                 this.timeRanges,
-                this.radii,
                 this.targets,
                 this.filters,
                 this.actorUuids,

@@ -1,6 +1,13 @@
 package net.okocraft.kansokusha.common.storage.duckdb;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.actor.EntityActor;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
@@ -8,6 +15,7 @@ import net.okocraft.kansokusha.common.search.query.SearchQuery.ActorKind;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Conditions;
 import org.duckdb.DuckDBConnection;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,7 +26,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,7 +35,47 @@ import java.util.UUID;
 @NotNullByDefault
 final class DuckDbEventSearch {
 
+    private static final String SELECT_EVENTS = """
+        SELECT
+            e.event_id,
+            e.event_type,
+            e.payload_generation,
+            epoch_ms(e.occurred_at) AS occurred_at_ms,
+            e.server,
+            e.world,
+            e.x,
+            e.y,
+            e.z,
+            e.actor_kind,
+            e.actor_uuid,
+            (
+                SELECT arg_max(pn.name, pn.last_seen)
+                FROM player_names pn
+                WHERE pn.player_uuid = e.actor_uuid
+            ) AS actor_name,
+            e.actor_type,
+            e.target_type,
+            epoch_ms(e.expires_at) AS expires_at_ms,
+            e.search_text
+        FROM events e
+        """;
+
     private DuckDbEventSearch() {
+    }
+
+    static Optional<EventDetail> find(DuckDBConnection connection, UUID eventId) throws SQLException {
+        try (var statement = connection.prepareStatement(SELECT_EVENTS + "WHERE e.event_id = ?")) {
+            statement.setObject(1, eventId);
+            try (var rows = statement.executeQuery()) {
+                return rows.next()
+                    ? Optional.of(new EventDetail(
+                        readEvent(rows),
+                        new PayloadGeneration(rows.getInt("payload_generation")),
+                        Instant.ofEpochMilli(rows.getLong("expires_at_ms"))
+                    ))
+                    : Optional.empty();
+            }
+        }
     }
 
     static SearchPage search(DuckDBConnection connection, SearchRequest request) throws SQLException {
@@ -44,22 +91,14 @@ final class DuckDbEventSearch {
 
         addAllowedEventTypes(where, parameters, request.constraints().allowedEventTypes());
 
-        var included = compileConditions(
-            request.query().conditions(),
-            includedUsers,
-            request.radiusCenter()
-        );
+        var included = compileConditions(request.query().conditions(), includedUsers);
         if (!included.sql().isEmpty()) {
             where.add(included.sql());
             parameters.addAll(included.parameters());
         }
 
-        if (hasConditions(request.query().exclusions())) {
-            var excluded = compileConditions(
-                request.query().exclusions(),
-                excludedUsers,
-                request.radiusCenter()
-            );
+        if (!request.query().exclusions().isEmpty()) {
+            var excluded = compileConditions(request.query().exclusions(), excludedUsers);
             where.add("NOT COALESCE((" + excluded.sql() + "), FALSE)");
             parameters.addAll(excluded.parameters());
         }
@@ -75,30 +114,7 @@ final class DuckDbEventSearch {
         var fetchAscending = fetchingPrevious ? !logicalAscending : logicalAscending;
         var direction = fetchAscending ? "ASC" : "DESC";
 
-        var sql = """
-            SELECT
-                e.event_id,
-                e.event_type,
-                epoch_ms(e.occurred_at) AS occurred_at_ms,
-                e.server,
-                e.world,
-                e.x,
-                e.y,
-                e.z,
-                e.actor_kind,
-                e.actor_uuid,
-                (
-                    SELECT pnh.name
-                    FROM player_name_history pnh
-                    WHERE pnh.player_uuid = e.actor_uuid
-                    ORDER BY pnh.last_seen DESC, pnh.last_event_id DESC
-                    LIMIT 1
-                ) AS actor_name,
-                e.actor_type,
-                e.target_type,
-                st.search_text
-            FROM events e
-            LEFT JOIN event_search_text st ON st.event_id = e.event_id
+        var sql = SELECT_EVENTS + """
             WHERE %s
             ORDER BY e.occurred_at %s, e.event_id %s
             LIMIT ?
@@ -175,13 +191,13 @@ final class DuckDbEventSearch {
         var resolved = new LinkedHashSet<UUID>();
         try (var statement = connection.prepareStatement("""
             SELECT player_uuid
-            FROM player_name_history
-            WHERE normalized_name = ?
-            ORDER BY last_seen DESC, last_event_id DESC
+            FROM player_names
+            WHERE lower(name) = lower(?)
+            ORDER BY last_seen DESC
             LIMIT 1
             """)) {
             for (var name : names) {
-                statement.setString(1, name.toLowerCase(Locale.ROOT));
+                statement.setString(1, name);
                 try (var rows = statement.executeQuery()) {
                     if (rows.next()) {
                         resolved.add(rows.getObject(1, UUID.class));
@@ -192,11 +208,7 @@ final class DuckDbEventSearch {
         return Set.copyOf(resolved);
     }
 
-    private static Predicate compileConditions(
-        Conditions conditions,
-        Set<UUID> resolvedUsers,
-        Optional<SearchRequest.RadiusCenter> radiusCenter
-    ) {
+    private static Predicate compileConditions(Conditions conditions, Set<UUID> resolvedUsers) {
         var groups = new ArrayList<String>();
         var parameters = new ArrayList<Object>();
 
@@ -214,7 +226,6 @@ final class DuckDbEventSearch {
 
         addKeyGroup(groups, parameters, "e.event_type", conditions.actions());
         addTimeRanges(groups, parameters, conditions.timeRanges());
-        addRadii(groups, parameters, conditions.radii(), radiusCenter);
         addKeyGroup(groups, parameters, "e.target_type", conditions.targets());
         addFilters(groups, parameters, conditions.filters());
         addUuidGroup(groups, parameters, "e.actor_uuid", conditions.actorUuids());
@@ -294,31 +305,6 @@ final class DuckDbEventSearch {
         groups.add("(" + String.join(" OR ", alternatives) + ")");
     }
 
-    private static void addRadii(
-        List<String> groups,
-        List<Object> parameters,
-        Set<Integer> radii,
-        Optional<SearchRequest.RadiusCenter> radiusCenter
-    ) {
-        if (radii.isEmpty()) {
-            return;
-        }
-
-        var center = radiusCenter.orElseThrow();
-        var alternatives = new ArrayList<String>();
-        for (var radius : radii) {
-            alternatives.add(
-                "(e.world = ? AND e.x >= ? AND e.x <= ? AND e.z >= ? AND e.z <= ?)"
-            );
-            parameters.add(center.world().asString());
-            parameters.add((long) center.x() - radius);
-            parameters.add((long) center.x() + radius);
-            parameters.add((long) center.z() - radius);
-            parameters.add((long) center.z() + radius);
-        }
-        groups.add("(" + String.join(" OR ", alternatives) + ")");
-    }
-
     private static void addFilters(
         List<String> groups,
         List<Object> parameters,
@@ -330,11 +316,11 @@ final class DuckDbEventSearch {
 
         var alternatives = new ArrayList<String>();
         for (var filter : filters) {
-            alternatives.add("contains(lower(st.search_text), lower(?))");
+            alternatives.add("contains(lower(e.search_text), lower(?))");
             parameters.add(filter);
         }
         groups.add(
-            "(st.search_text IS NOT NULL AND (" + String.join(" OR ", alternatives) + "))"
+            "(e.search_text IS NOT NULL AND (" + String.join(" OR ", alternatives) + "))"
         );
     }
 
@@ -385,21 +371,6 @@ final class DuckDbEventSearch {
         return column + " IN (" + String.join(", ", Collections.nCopies(size, "?")) + ")";
     }
 
-    private static boolean hasConditions(Conditions conditions) {
-        return !conditions.users().isEmpty()
-            || !conditions.actions().isEmpty()
-            || !conditions.timeRanges().isEmpty()
-            || !conditions.radii().isEmpty()
-            || !conditions.targets().isEmpty()
-            || !conditions.filters().isEmpty()
-            || !conditions.actorUuids().isEmpty()
-            || !conditions.actorKinds().isEmpty()
-            || !conditions.actorTypes().isEmpty()
-            || !conditions.worlds().isEmpty()
-            || !conditions.positions().isEmpty()
-            || !conditions.around().isEmpty();
-    }
-
     private static void addCursor(
         List<String> where,
         List<Object> parameters,
@@ -420,37 +391,40 @@ final class DuckDbEventSearch {
     }
 
     private static SearchPage.Event readEvent(ResultSet rows) throws SQLException {
+        var x = rows.getInt("x");
+        var position = rows.wasNull()
+            ? Optional.<BlockPosition>empty()
+            : Optional.of(new BlockPosition(x, rows.getInt("y"), rows.getInt("z")));
         return new SearchPage.Event(
             rows.getObject("event_id", UUID.class),
             Key.key(rows.getString("event_type")),
             Instant.ofEpochMilli(rows.getLong("occurred_at_ms")),
             optionalKey(rows.getString("server")),
             optionalKey(rows.getString("world")),
-            optionalInt(rows, "x"),
-            optionalInt(rows, "y"),
-            optionalInt(rows, "z"),
-            optionalActorKind(rows.getString("actor_kind")),
-            Optional.ofNullable(rows.getObject("actor_uuid", UUID.class)),
+            position,
+            Optional.ofNullable(readActor(rows)),
             Optional.ofNullable(rows.getString("actor_name")),
-            optionalKey(rows.getString("actor_type")),
             optionalKey(rows.getString("target_type")),
             Optional.ofNullable(rows.getString("search_text"))
         );
     }
 
-    private static Optional<Key> optionalKey(String value) {
+    private static @Nullable EventActor readActor(ResultSet rows) throws SQLException {
+        var kind = rows.getString("actor_kind");
+        if (kind == null) {
+            return null;
+        }
+        var uuid = rows.getObject("actor_uuid", UUID.class);
+        var type = rows.getString("actor_type");
+        return switch (ActorKind.valueOf(kind.toUpperCase(Locale.ROOT))) {
+            case PLAYER -> new PlayerActor(uuid);
+            case ENTITY -> new EntityActor(uuid, Key.key(type));
+            case BLOCK -> new BlockActor(Key.key(type));
+        };
+    }
+
+    private static Optional<Key> optionalKey(@Nullable String value) {
         return value == null ? Optional.empty() : Optional.of(Key.key(value));
-    }
-
-    private static OptionalInt optionalInt(ResultSet rows, String column) throws SQLException {
-        var value = rows.getInt(column);
-        return rows.wasNull() ? OptionalInt.empty() : OptionalInt.of(value);
-    }
-
-    private static Optional<ActorKind> optionalActorKind(String value) {
-        return value == null
-            ? Optional.empty()
-            : Optional.of(ActorKind.valueOf(value.toUpperCase(Locale.ROOT)));
     }
 
     private record Predicate(String sql, List<Object> parameters) {
