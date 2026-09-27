@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
+import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
@@ -158,7 +159,7 @@ public final class PaperNaturalBlockChangeListener implements Listener {
         var destination = event.getToBlock();
         var occurredAt = this.clock.instant();
         var eggState = source.getBlockData();
-        var airState = Material.AIR.createBlockData();
+        var airState = Blocks.AIR.defaultBlockState().asBlockData();
 
         this.submit(
             occurredAt,
