@@ -66,7 +66,7 @@ final class SearchCommand {
         try {
             invocation = SearchCommandSupport.parseInvocation(rawInput, clock, timezone);
         } catch (IllegalArgumentException e) {
-            sender.sendMessage(SearchCommandMessages.PARSE_ERROR);
+            sender.sendMessage(SearchCommandMessages.PARSE_ERROR.asComponent());
             return 0;
         }
 
@@ -95,7 +95,7 @@ final class SearchCommand {
         Optional<SearchRequest.RadiusCenter> radiusCenter = Optional.empty();
         if (SearchCommandSupport.hasRadius(query)) {
             if (player == null) {
-                sender.sendMessage(SearchCommandMessages.RADIUS_PLAYER_ONLY);
+                sender.sendMessage(SearchCommandMessages.RADIUS_PLAYER_ONLY.asComponent());
                 return 0;
             }
             var location = player.getLocation();
@@ -110,7 +110,7 @@ final class SearchCommand {
         try {
             backend = EventSearchBackend.require(Kansokusha.api());
         } catch (IllegalStateException | IllegalArgumentException e) {
-            sender.sendMessage(SearchCommandMessages.SEARCH_FAILED);
+            sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
             return 0;
         }
 
@@ -127,7 +127,7 @@ final class SearchCommand {
             )))
             .whenComplete((page, failure) -> {
                 if (failure != null) {
-                    sender.sendMessage(SearchCommandMessages.SEARCH_FAILED);
+                    sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
                 renderPage(sender::sendMessage, invocation.queryText(), page);
@@ -203,7 +203,7 @@ final class SearchCommand {
         SearchPage page
     ) {
         if (page.events().isEmpty()) {
-            sendMessage.accept(SearchCommandMessages.NO_RESULTS);
+            sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
         } else {
             for (var event : page.events()) {
                 sendMessage.accept(SearchCommandMessages.RESULT.apply(formatEvent(event)));
