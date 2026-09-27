@@ -8,6 +8,8 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import org.bukkit.Bukkit;
+import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -358,6 +360,55 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         }
     }
 
+    private static void verifyRemoteSyncBoundaryForIntegration() {
+        var minecraftServer = ((CraftServer) Bukkit.getServer()).getServer();
+        var level = minecraftServer.overworld();
+        var player = new ServerPlayer(
+            minecraftServer,
+            level,
+            new GameProfile(
+                UUID.fromString("123e4567-e89b-12d3-a456-4266141745ff"),
+                "KansokushaFixture"
+            ),
+            ClientInformation.createDefault()
+        );
+
+        var inventory = player.getInventory();
+        var menus = List.<AbstractContainerMenu>of(
+            new CraftingMenu(100, inventory),
+            new AnvilMenu(101, inventory),
+            new SmithingMenu(102, inventory)
+        );
+
+        for (var menu : menus) {
+            var synchronizer = new VerificationContainerSynchronizer();
+            menu.setSynchronizer(synchronizer);
+            synchronizer.reset();
+
+            menu.suppressRemoteUpdates();
+            menu.setCarried(new net.minecraft.world.item.ItemStack(Items.DIAMOND));
+            menu.broadcastChanges();
+            menu.broadcastChanges();
+
+            if (synchronizer.carriedChanges != 0) {
+                throw new AssertionError(
+                    menu.getClass().getSimpleName()
+                        + " synchronized carried state during suppressed nested broadcast."
+                );
+            }
+
+            menu.resumeRemoteUpdates();
+            menu.broadcastChanges();
+
+            if (synchronizer.carriedChanges != 1) {
+                throw new AssertionError(
+                    menu.getClass().getSimpleName()
+                        + " did not synchronize carried state at packet-end-style broadcast."
+                );
+            }
+        }
+    }
+
     record ContainerDelta(ItemStack item, int amountDelta) {
         ContainerDelta {
             Objects.requireNonNull(item, "item");
@@ -397,6 +448,71 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         private MutableDelta(ItemStack item, int amount) {
             this.item = item;
             this.amount = amount;
+        }
+    }
+
+    private static final class VerificationContainerSynchronizer
+        implements ContainerSynchronizer {
+
+        private int carriedChanges;
+
+        @Override
+        public void sendInitialData(
+            AbstractContainerMenu container,
+            List<net.minecraft.world.item.ItemStack> slotItems,
+            net.minecraft.world.item.ItemStack carried,
+            int[] dataSlots
+        ) {
+        }
+
+        @Override
+        public void sendSlotChange(
+            AbstractContainerMenu container,
+            int slotIndex,
+            net.minecraft.world.item.ItemStack itemStack
+        ) {
+        }
+
+        @Override
+        public void sendCarriedChange(
+            AbstractContainerMenu container,
+            net.minecraft.world.item.ItemStack itemStack
+        ) {
+            this.carriedChanges++;
+        }
+
+        @Override
+        public void sendDataChange(AbstractContainerMenu container, int id, int value) {
+        }
+
+        @Override
+        public RemoteSlot createSlot() {
+            return new VerificationRemoteSlot();
+        }
+
+        private void reset() {
+            this.carriedChanges = 0;
+        }
+    }
+
+    private static final class VerificationRemoteSlot implements RemoteSlot {
+
+        private net.minecraft.world.item.ItemStack remote =
+            net.minecraft.world.item.ItemStack.EMPTY;
+
+        @Override
+        public void force(net.minecraft.world.item.ItemStack outgoing) {
+            this.remote = outgoing.copy();
+        }
+
+        @Override
+        public void receive(HashedStack incoming) {
+            this.remote = net.minecraft.world.item.ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean matches(net.minecraft.world.item.ItemStack local) {
+            return net.minecraft.world.item.ItemStack.matches(this.remote, local);
         }
     }
 
