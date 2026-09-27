@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
@@ -226,6 +227,11 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         Objects.requireNonNull(request, "request");
         // Deliberately do not flush the write queue here. Search only sees committed storage state.
         return this.queryStorage(() -> this.storage.search(request));
+    }
+
+    @Override
+    public CompletableFuture<SearchMetadata> searchMetadata() {
+        return this.queryStorage(this.storage::searchMetadata);
     }
 
     @Override
