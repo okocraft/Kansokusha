@@ -13,6 +13,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.Scaffolding;
@@ -38,7 +39,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
 
@@ -47,11 +47,6 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 public final class PaperNaturalBlockChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "natural_block_change");
-
-    private static final String NEIGHBOR_UPDATER_CLASS =
-        "net.minecraft.world.level.redstone.NeighborUpdater";
-    private static final String BLOCK_CLASS =
-        "net.minecraft.world.level.block.Block";
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -79,53 +74,34 @@ public final class PaperNaturalBlockChangeListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void recordPhysicsDestroy(BlockDestroyEvent event) {
         Objects.requireNonNull(event, "event");
-        this.recordPhysicsDestroy(event, isNeighbourShapeDestroy());
-    }
 
-    void recordPhysicsDestroy(BlockDestroyEvent event, boolean neighbourShapeDestroy) {
-        Objects.requireNonNull(event, "event");
-        if (!neighbourShapeDestroy) {
+        var block = event.getBlock();
+        if (canSurvive(block)) {
             return;
         }
 
-        var block = event.getBlock();
         this.submitIfChanged(
             block,
             null,
             block.getBlockData(),
             event.getNewState(),
-            "physics_destroy",
+            "support_loss",
             null,
             null
         );
     }
 
-    private static boolean isNeighbourShapeDestroy() {
-        return StackWalker.getInstance().walk(
-            PaperNaturalBlockChangeListener::isNeighbourShapeDestroy
-        );
-    }
-
-    static boolean isNeighbourShapeDestroy(Stream<StackWalker.StackFrame> frames) {
-        var sawNeighborShapeUpdate = false;
-        var sawUpdateOrDestroy = false;
-        var iterator = frames.iterator();
-        while (iterator.hasNext()) {
-            var frame = iterator.next();
-            if (
-                frame.getClassName().equals(NEIGHBOR_UPDATER_CLASS)
-                    && frame.getMethodName().equals("executeShapeUpdate")
-            ) {
-                sawNeighborShapeUpdate = true;
-            }
-            if (
-                frame.getClassName().equals(BLOCK_CLASS)
-                    && frame.getMethodName().equals("updateOrDestroy")
-            ) {
-                sawUpdateOrDestroy = true;
-            }
+    static boolean canSurvive(Block block) {
+        Objects.requireNonNull(block, "block");
+        if (!(block instanceof CraftBlock craftBlock)) {
+            throw new IllegalArgumentException(
+                "Paper block is not backed by CraftBlock: " + block.getClass().getName()
+            );
         }
-        return sawNeighborShapeUpdate && sawUpdateOrDestroy;
+        return craftBlock.getBlockState().canSurvive(
+            craftBlock.getLevel(),
+            craftBlock.getPosition()
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
