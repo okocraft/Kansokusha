@@ -37,7 +37,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             this.runtime = runtime;
             this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
                 Commands commands = event.registrar();
-                KansokushaCommands.register(commands);
+                KansokushaCommands.register(commands, config.searchTimeZone());
             });
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
