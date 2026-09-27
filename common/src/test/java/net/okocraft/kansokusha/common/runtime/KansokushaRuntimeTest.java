@@ -6,8 +6,13 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
+import net.okocraft.kansokusha.common.storage.QueuedEvent;
+import net.okocraft.kansokusha.common.storage.Storage;
+import net.okocraft.kansokusha.common.storage.StorageHealth;
 import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
@@ -21,12 +26,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -90,6 +98,39 @@ class KansokushaRuntimeTest {
             Assertions.assertEquals(1, runtime.findEventIdsContaining("bAn").join().size());
             Assertions.assertEquals(1, runtime.findEventIdsContaining("%_*").join().size());
             Assertions.assertTrue(runtime.findEventIdsContaining("missing").join().isEmpty());
+        }
+    }
+
+    @Test
+    void testEventLookupRunsOnStorageThreadWithoutBlockingCaller() throws Exception {
+        var storage = new BlockingLookupStorage();
+        var runtime = KansokushaRuntime.start(
+            storage,
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            ignored -> {
+            },
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        var eventId = UUID.fromString("0199a123-4567-789a-8bcd-ef0123456792");
+
+        try {
+            var callerThread = Thread.currentThread();
+            var result = runtime.findEvent(eventId);
+
+            Assertions.assertTrue(storage.lookupStarted.await(5, TimeUnit.SECONDS));
+            Assertions.assertFalse(result.isDone());
+            Assertions.assertNotSame(callerThread, storage.lookupThread.get());
+            Assertions.assertEquals("kansokusha-storage", storage.lookupThread.get().getName());
+            Assertions.assertEquals(eventId, storage.lookupEventId.get());
+
+            storage.lookupRelease.countDown();
+            Assertions.assertTrue(result.get(5, TimeUnit.SECONDS).isEmpty());
+        } finally {
+            storage.lookupRelease.countDown();
+            runtime.close();
         }
     }
 
@@ -269,6 +310,70 @@ class KansokushaRuntimeTest {
 
         Assertions.assertEquals(accepted.get(), countEvents(dir));
         Assertions.assertFalse(runtime.submit(event(now)));
+    }
+
+    private static final class BlockingLookupStorage implements Storage {
+
+        private final CountDownLatch lookupStarted = new CountDownLatch(1);
+        private final CountDownLatch lookupRelease = new CountDownLatch(1);
+        private final AtomicReference<Thread> lookupThread = new AtomicReference<>();
+        private final AtomicReference<UUID> lookupEventId = new AtomicReference<>();
+
+        @Override
+        public void append(List<QueuedEvent> events) {
+        }
+
+        @Override
+        public Optional<UUID> resolvePlayerName(String name) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<String> offlinePlayerNames() {
+            return List.of();
+        }
+
+        @Override
+        public List<UUID> findEventIdsContaining(String literal) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<EventDetail> findEvent(UUID eventId) throws SQLException {
+            this.lookupThread.set(Thread.currentThread());
+            this.lookupEventId.set(eventId);
+            this.lookupStarted.countDown();
+            try {
+                this.lookupRelease.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("Interrupted while waiting in test storage.", e);
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        public SearchPage search(SearchRequest request) {
+            return new SearchPage(List.of(), Optional.empty(), Optional.empty());
+        }
+
+        @Override
+        public int deleteExpired(Instant now) {
+            return 0;
+        }
+
+        @Override
+        public void checkpoint() {
+        }
+
+        @Override
+        public StorageHealth health() {
+            return new StorageHealth(0, "0 B", 0, 0, 0, 0, "0 B");
+        }
+
+        @Override
+        public void close() {
+        }
     }
 
     private static KansokushaRuntime start(Path dir, int queueCapacity) throws Exception {
