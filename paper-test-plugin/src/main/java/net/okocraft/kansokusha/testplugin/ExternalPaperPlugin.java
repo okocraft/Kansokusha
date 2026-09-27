@@ -43,6 +43,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         "net.okocraft.kansokusha.paper.builtin.PaperFlowerPotChangeListener",
         "net.okocraft.kansokusha.paper.builtin.PaperPlayerItemAuditListener",
         "net.okocraft.kansokusha.paper.builtin.PaperPlayerContainerTransactionListener",
+        "net.okocraft.kansokusha.paper.builtin.PaperPlayerWorkstationAuditListener",
         "net.okocraft.kansokusha.paper.builtin.PaperPlayerBlockInteractionListener",
         "net.okocraft.kansokusha.paper.builtin.PaperBlockIgniteListener",
         "net.okocraft.kansokusha.paper.builtin.PaperBlockBurnListener",
