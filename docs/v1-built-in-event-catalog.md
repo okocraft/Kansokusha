@@ -40,10 +40,10 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
 | `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` + NMS `AbstractContainerMenu` slot notification | `audit` | confirmed net item delta in a located non-player container after the accepted click/drag is applied |
-| `kansokusha:craft_item` | `CraftItemEvent` | `audit` | completed crafting-recipe interaction; matrix/result/click metadata |
-| `kansokusha:anvil_use` | ANVIL result-slot `InventoryClickEvent` | `audit` | repair/combine/rename result take; inputs/result/cost metadata |
-| `kansokusha:smith_item` | `SmithItemEvent` | `audit` | completed smithing-recipe interaction; template/equipment/mineral/result metadata |
-| `kansokusha:enchant_item` | `EnchantItemEvent` | `audit` | accepted enchanting action; item/cost/button/final event enchant map |
+| `kansokusha:craft_item` | `CraftItemEvent` + Paper `ItemCraftedEvent` confirmation | `audit` | crafted item was actually picked up; pre-click recipe/matrix context is paired with the post-pickup item |
+| `kansokusha:anvil_use` | ANVIL result-slot `InventoryClickEvent` + packet-end confirmation | `audit` | repair/combine/rename only when vanilla consumed the primary input |
+| `kansokusha:smith_item` | `SmithItemEvent` + packet-end confirmation | `audit` | smithing only when vanilla consumed all three inputs |
+| `kansokusha:enchant_item` | `EnchantItemEvent` + container-button packet-end confirmation | `audit` | enchanting only after the item actually changed; requirement and consumed levels are separate |
 | `kansokusha:dispenser_dispense` | `BlockDispenseEvent` | `short` | direct dispenser/dropper dispense operation only; later effects are not correlated |
 | `kansokusha:item_drop` | `PlayerDropItemEvent` | `audit` | player → world item ownership transfer |
 | `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
@@ -413,24 +413,24 @@ common `target_type` は delta item の type とする。
 
 ## Workstation audit events
 
-workstation UI の generic slot mutation は `container_transaction` に混ぜない。recipe/result の意味が確定する専用 event を監査境界として使う。
+workstation UI の generic slot mutation は `container_transaction` に混ぜない。pre-application Bukkit event は operation context の capture にだけ使い、成功を直接表す Paper event または同じ packet の vanilla 適用後 state を確認してから submit する。
 
 ### `kansokusha:craft_item`
 
-non-cancelled `CraftItemEvent` を記録する。player 2x2 crafting と crafting table の両方を対象とする。
+non-cancelled `CraftItemEvent` では recipe/matrix/click context だけを pending に保持し、Paper `ItemCraftedEvent` が実際に result item の pickup を通知した場合だけ submit する。player 2x2 crafting と crafting table の両方を対象とする。destination が満杯の shift-click 等で pickup が成立しなければ `ItemCraftedEvent` が来ないため記録しない。
 
 generation 1 payload:
 
 - `recipe`: recipe が `Keyed` の場合の namespaced key
-- `input_items`: event 時点の crafting matrix
-- `result_item`: result slot item
+- `input_items`: `CraftItemEvent` 時点の crafting matrix
+- `result_item`: `ItemCraftedEvent#getCraftedItem()`
 - `click`, `action`
 
-common target type は result item type。workstation inventory の slot 入れ替え自体は記録しない。
+common target type は実際に pickup された crafted item type。workstation inventory の slot 入れ替え自体は記録しない。
 
 ### `kansokusha:anvil_use`
 
-anvil には completed-operation 専用 Bukkit event がないため、non-cancelled `InventoryClickEvent` のうち ANVIL view の top RESULT slot で `InventoryAction.NOTHING` ではないものだけを記録する。`PrepareAnvilEvent` は result preview 更新なので監査 event にはしない。
+non-cancelled ANVIL result-slot `InventoryClickEvent` で inputs/result/cost context を capture するが、その場では submit しない。同じ `handleContainerClick` packet の vanilla `clicked(...)` 完了後まで待ち、anvil の primary input が実際に消費されたことを確認した場合だけ submit する。shift-click の移動先が満杯、XP 不足等で result take が成立しなければ記録しない。`PrepareAnvilEvent` は result preview 更新なので監査 event にはしない。
 
 generation 1 payload:
 
@@ -442,7 +442,7 @@ generation 1 payload:
 
 ### `kansokusha:smith_item`
 
-non-cancelled `SmithItemEvent` を記録する。
+non-cancelled `SmithItemEvent` は operation context の capture にだけ使う。同じ `handleContainerClick` packet の vanilla 適用後に template / equipment / mineral の3 input がそれぞれ1個ずつ実際に消費されたことを確認してから submit する。destination が満杯の shift-click 等で mutation が起きなければ記録しない。
 
 generation 1 payload:
 
@@ -453,14 +453,15 @@ generation 1 payload:
 
 ### `kansokusha:enchant_item`
 
-non-cancelled `EnchantItemEvent` を記録する。MONITOR 時点の plugin-adjusted event values を保存する。
+non-cancelled `EnchantItemEvent` では plugin-adjusted requirement / enchantment map と pre-state を capture するが、その場では submit しない。`EnchantmentMenu#clickMenuButton` が戻った後の同じ `handleContainerButtonClick` packet-end synchronization まで待ち、item slot が実際に変化した場合だけ submit する。event-adjusted required level を player が満たさない場合や `getEnchantsToAdd()` が空の場合など、Paper が event dispatch 後に abort した操作は記録しない。
 
 generation 1 payload:
 
 - `item`
-- `exp_level_cost`
+- `required_level`: `EnchantItemEvent#getExpLevelCost()`。enchant offer を実行するために要求される player level
+- `consumed_levels`: vanilla が成功時に実際に消費する level 数。通常は selected button index + 1、infinite-materials player は 0
 - `button`
-- `enchantments`: `type` / `level` の list
+- `enchantments`: plugin-adjusted `type` / `level` の list
 
 common world/position は enchanting table block、actor は enchanter、target type は enchanted item type。
 
