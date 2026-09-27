@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -76,7 +77,13 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
 
         var current = event.getCurrentItem();
         var cursor = event.getCursor();
-        var target = PaperBuiltInSupport.itemType(nonEmpty(current) ? current : cursor);
+        var exchangeItem = exchangeItem(event, player);
+        var targetItem = nonEmpty(current)
+            ? current
+            : nonEmpty(cursor)
+                ? cursor
+                : exchangeItem;
+        var target = PaperBuiltInSupport.itemType(targetItem);
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -95,7 +102,9 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
                 event.getRawSlot(),
                 direction,
                 current,
-                cursor
+                cursor,
+                exchangeItem,
+                event.getHotbarButton()
             )
         ));
     }
@@ -149,6 +158,9 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     }
 
     private static @Nullable String direction(InventoryAction action, String clickedScope) {
+        if (action == InventoryAction.COLLECT_TO_CURSOR) {
+            return "mixed";
+        }
         if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
             return clickedScope.equals("container")
                 ? "container_to_player"
@@ -175,8 +187,24 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         ) {
             return "exchange";
         }
-        if (action == InventoryAction.COLLECT_TO_CURSOR) {
-            return "mixed";
+        return null;
+    }
+
+    private static @Nullable ItemStack exchangeItem(InventoryClickEvent event, Player player) {
+        var action = event.getAction();
+        if (
+            action != InventoryAction.HOTBAR_SWAP
+                && action != InventoryAction.HOTBAR_MOVE_AND_READD
+        ) {
+            return null;
+        }
+
+        var hotbarButton = event.getHotbarButton();
+        if (hotbarButton >= 0) {
+            return player.getInventory().getItem(hotbarButton);
+        }
+        if (event.getClick() == ClickType.SWAP_OFFHAND) {
+            return player.getInventory().getItemInOffHand();
         }
         return null;
     }
