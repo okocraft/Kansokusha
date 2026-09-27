@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import io.papermc.paper.event.inventory.ItemCraftedEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.network.HashedStack;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.RemoteSlot;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -255,7 +256,8 @@ public final class PaperPlayerWorkstationAuditListener implements Listener {
             snapshotContents(inventory),
             event.getItem().clone(),
             event.getExpLevelCost(),
-            craftPlayer.getHandle().hasInfiniteMaterials() ? 0 : event.whichButton() + 1,
+            player.getLevel(),
+            craftPlayer.getHandle().getStats().getValue(Stats.CUSTOM.get(Stats.ENCHANT_ITEM)),
             event.whichButton(),
             Map.copyOf(event.getEnchantsToAdd()),
             event.getEnchantBlock().getLocation().clone(),
@@ -298,13 +300,22 @@ public final class PaperPlayerWorkstationAuditListener implements Listener {
 
     private void resolveEnchant(PendingEnchant pending) {
         var after = snapshotContents(pending.inventory());
+        if (!(pending.player() instanceof CraftPlayer craftPlayer)) {
+            return;
+        }
+
+        var enchantStatAfter = craftPlayer.getHandle()
+            .getStats()
+            .getValue(Stats.CUSTOM.get(Stats.ENCHANT_ITEM));
         if (
             pending.enchantments().isEmpty()
+                || enchantStatAfter <= pending.enchantStatBefore()
                 || !enchantApplied(pending.before(), after)
         ) {
             return;
         }
 
+        var consumedLevels = Math.max(0, pending.levelBefore() - pending.player().getLevel());
         this.submitAtLocation(
             ENCHANT_ITEM,
             pending.player(),
@@ -313,7 +324,7 @@ public final class PaperPlayerWorkstationAuditListener implements Listener {
             PaperWorkstationPayloadCodec.encodeEnchant(
                 pending.item(),
                 pending.requiredLevel(),
-                pending.consumedLevels(),
+                consumedLevels,
                 pending.button(),
                 pending.enchantments()
             ),
@@ -604,7 +615,8 @@ public final class PaperPlayerWorkstationAuditListener implements Listener {
         ItemStack[] before,
         ItemStack item,
         int requiredLevel,
-        int consumedLevels,
+        int levelBefore,
+        int enchantStatBefore,
         int button,
         Map<org.bukkit.enchantments.Enchantment, Integer> enchantments,
         Location location,
