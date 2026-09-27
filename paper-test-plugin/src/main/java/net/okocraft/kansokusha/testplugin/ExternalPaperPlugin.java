@@ -125,6 +125,8 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 "Unexpected Kansokusha inspection listener set: " + registeredInspection
             );
 
+            this.verifyContainerRemoteSyncBoundary();
+
             // Plugins are disabled before shutdown hooks run.
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> this.verifyAfterShutdown(api, submission), "kansokusha-external-api-fixture")
@@ -152,6 +154,15 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         } catch (Throwable failure) {
             this.writeFailure(failure);
         }
+    }
+
+    private static void verifyContainerRemoteSyncBoundary() throws ReflectiveOperationException {
+        var listenerClass = Class.forName(
+            "net.okocraft.kansokusha.paper.builtin.PaperPlayerContainerTransactionListener"
+        );
+        var method = listenerClass.getDeclaredMethod("verifyRemoteSyncBoundaryForIntegration");
+        check(method.trySetAccessible(), "Could not access container transaction verification hook.");
+        method.invoke(null);
     }
 
     private static Set<String> registeredListenerClasses(String packageName) {

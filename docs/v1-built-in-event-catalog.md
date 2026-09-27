@@ -39,7 +39,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
-| `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` | `audit` | non-cancelled player operation touching a located non-player container; final storage success is not asserted |
+| `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` + NMS `AbstractContainerMenu` slot notification | `audit` | confirmed net item delta in a located non-player container after the accepted click/drag is applied |
 | `kansokusha:dispenser_dispense` | `BlockDispenseEvent` | `short` | direct dispenser/dropper dispense operation only; later effects are not correlated |
 | `kansokusha:item_drop` | `PlayerDropItemEvent` | `audit` | player → world item ownership transfer |
 | `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
@@ -138,7 +138,7 @@ block の変化で変化前と変化後の両方がある event の target は�
 | `container_transfer` | 移動を起こした inventory の holder（hopper の block、hopper minecart の entity）。holder が block / entity でなければなし | 移動した item |
 | `container_pickup` | 拾った inventory の holder。holder が block / entity でなければなし | 拾われた item |
 | `container_process` | 処理した block | furnace / campfire / crafter は結果の item、brewing は ingredient の item |
-| `container_transaction` | player | operation で直接取得できる item。なければなし |
+| `container_transaction` | player | 確定した container net delta の item type |
 | `dispenser_dispense` | dispenser / dropper の block | dispense された item |
 | `item_drop` / `item_pickup` | player | item |
 | `book_edit` | player | 署名時 `minecraft:written_book`、それ以外 `minecraft:writable_book` |
@@ -205,7 +205,7 @@ The five communication event types `paper_chat`, `velocity_chat`, `paper_player_
 
 Search query syntax, permission filtering, pagination, time-zone behavior, and initial-scope limitations are documented in `docs/search.md`.
 
-Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, `container_transaction`, `block_interaction`, `dispenser_dispense`, and `player_trade` are event/attempt observations within the documented boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
+Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not generally prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, `block_interaction`, `dispenser_dispense`, and `player_trade` are event/attempt observations within the documented boundary. `container_transaction` is the exception: it waits for the same NMS container-click packet processing to apply and records the confirmed top-container net delta observed from `AbstractContainerMenu` slot notification. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
 
 ## Explicit exclusions
 
@@ -378,6 +378,33 @@ generation 1 payload:
 
 common position は lectern block position とし、generation 1 payload は `action`、`before`、`after` の detached ItemStack snapshot を持つ。insert は empty → inserted book、take は taken book → empty とする。
 
+## `kansokusha:container_transaction`
+
+located non-player container を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。
+
+MONITOR では top inventory の detached before snapshot と operation metadata だけを保持し、その場では submit しない。listener は player の NMS `AbstractContainerMenu` の cursor 同期用 `RemoteSlot` (`remoteCarried`) を一時的な delegating sentinel で包む。Paper の `ServerGamePacketListenerImpl#handleContainerClick` は Bukkit event dispatch 前から vanilla `clicked(...)` 完了まで `suppressRemoteUpdates = true` とし、その間の nested `broadcastChanges()` では remote synchronization を行わない。`clicked(...)` が完全に戻った後、packet-end の `broadcastChanges()` は必ず `remoteCarried.matches(...)` を呼ぶため、その callback を確定境界として top inventory の after snapshot を取得する。full resync / crafting・smithing の explicit full sync は `remoteCarried.force(...)` を同じく `clicked(...)` 後に観測して確定する。
+
+`RemoteSlot` callback が別 tick の hopper、別 player、通常の container tick 等から来た場合は `handleContainerClick` の packet stack 外なので transaction 完了には使用しない。Bukkit event dispatch 中、または NMS `AbstractContainerMenu#clicked(...)` が stack 上に残っている callback も final boundary として扱わない。これにより crafting grid、anvil/smithing、bundle 等が click 処理途中で起こす nested `broadcastChanges()` の中間状態を確定値として保存しない。
+
+before/after は永続化せず、`ItemStack#isSimilar` 相当の item identity ごとに amount を集約して net delta のみを生成する。container 内の slot rearrangement だけで item identity ごとの総量が変わらなければ submission は作らない。
+
+1 click/drag で複数 item identity が増減した場合は identity ごとに複数の `container_transaction` submission を生成する。全 submission は同じ `occurredAt` と `transaction_id` を共有する。
+
+generation 1 payload:
+
+- `container`: located top inventory metadata
+- `transaction_id`: 同一 click/drag から生成された delta を束ねる UUID
+- `operation`: `click` / `drag`
+- `action`: Bukkit action / drag type
+- click の場合は `click`, `clicked_scope`, `slot`, `raw_slot`, 必要に応じて `hotbar_button`
+- `transfer_direction`: `added_to_container` / `removed_from_container`
+- `item`: amount 1 に正規化した detached ItemStack identity
+- `amount_delta`: container 側の signed net amount。追加は正、取り出しは負
+
+common `target_type` は delta item の type とする。
+
+この event は player inventory 全体の mutation、cursor の最終 state、slot ごとの before/after、rollback 用 snapshot を保存しない。
+
 ## `kansokusha:player_trade`
 
 `PlayerPurchaseEvent` を canonical handler とし、その subclass である `PlayerTradeEvent` 用の別 handler は登録しない。このため同一 transaction を二重保存しない。payload の `source_event` で villager/trader の `PlayerTradeEvent` と standalone merchant の `PlayerPurchaseEvent` を区別する。
@@ -454,7 +481,7 @@ target backend name は common `server` field から復元可能なため payloa
 | lifecycle | the platform unregisters listeners when the plugin stops; a startup failure disables the plugin |
 | ingestion | ordinary callbacks use bounded `KansokushaApi.submit`; Paper join / Velocity post-login use internal `PlayerNameDirectory.submitPlayerLogin`; the five communication events use internal `EventSearchBackend.submitSearchable` so event and derived text projection share one queue item and transaction |
 | search | Paper / Velocity share the common typed parser/backend/formatting support; reads use `(occurred_at, event_id)` keyset pagination, exact platform permission checks, and the instance-local DuckDB only |
-| Folia | listeners keep no state shared between events; each platform event is recorded within one MONITOR handler call |
+| Folia | ordinary listeners remain event-local; `container_transaction` keeps per-player tracking in a concurrent map and only reads the same player's active menu/container on that region thread |
 | coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
 
 ## 参照
