@@ -12,7 +12,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 
 ## Current catalog
 
-以下は current runtime の全57 event type と source の対応である。うち56件は platform listener が register / wire し、`player_name_change` は accepted login の名前観測から common storage が派生生成する。source event は同一 Kansokusha event type へ canonicalize される場合がある。表にない close 済み対象外 event を built-in listener source として追加しない。
+以下は current runtime の全62 event type と source の対応である。うち61件は platform listener が register / wire し、`player_name_change` は accepted login の名前観測から common storage が派生生成する。source event は同一 Kansokusha event type へ canonicalize される場合がある。表にない close 済み対象外 event を built-in listener source として追加しない。
 
 ### Paper / Folia
 
@@ -30,20 +30,23 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:tnt_prime` | `TNTPrimeEvent` | `audit` | accepted TNT prime while `tntExplodes` is true |
 | `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block; exploded TNT is owned by `tnt_prime` while `tntExplodes` is true, except for the Ender Dragon |
 | `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement |
-| `kansokusha:entity_block_change` | `EntityChangeBlockEvent` | `audit` | entity-caused block mutation |
-| `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent` | `short` | natural/environmental change; `EntityBlockFormEvent` is excluded |
-| `kansokusha:fluid_change` | `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
+| `kansokusha:entity_block_change` | `EntityChangeBlockEvent` / `EntityBlockFormEvent` | `audit` | entity-caused block mutation |
+| `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent`, `PortalCreateEvent`, dragon-egg `BlockFromToEvent` | `short` | natural/environmental change; dragon-egg teleport emits source removal and destination placement with one timestamp |
+| `kansokusha:fluid_change` | water/lava `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
 | `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason`, while actor identity stays in the common actor columns |
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
+| `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` | `audit` | non-cancelled player operation touching a located non-player container; final storage success is not asserted |
+| `kansokusha:dispenser_dispense` | `BlockDispenseEvent` | `short` | direct dispenser/dropper dispense operation only; later effects are not correlated |
 | `kansokusha:item_drop` | `PlayerDropItemEvent` | `audit` | player → world item ownership transfer |
 | `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
 | `kansokusha:book_edit` | `PlayerEditBookEvent` | `audit` | previous/final book state |
 | `kansokusha:lectern_change` | `PlayerInsertLecternBookEvent` / `PlayerTakeLecternBookEvent` | `audit` | insert/take only; page navigation is excluded |
 | `kansokusha:player_trade` | `PlayerPurchaseEvent` (including `PlayerTradeEvent` subclass) | `audit` | non-cancelled purchase attempt; trade success is not confirmed |
+| `kansokusha:block_interaction` | selected `PlayerInteractEvent` right-clicks | `audit` | container/openable/powerable/sign/special-storage interaction and suspicious-block brushing; final state change is not asserted |
 | `kansokusha:paper_join` | `PlayerJoinEvent` | `session` | successful backend join |
 | `kansokusha:paper_quit` | `PlayerQuitEvent` | `session` | completed backend session end |
 | `kansokusha:paper_kick` | `PlayerKickEvent` | `session` | accepted kick decision; a subsequent quit is intentionally separate |
@@ -51,12 +54,14 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:player_teleport` | `PlayerTeleportEvent` excluding `PlayerPortalEvent` preflight | `session` | accepted teleport operation; intentionally coexists with world change |
 | `kansokusha:player_gamemode_change` | `PlayerGameModeChangeEvent` | `audit` | accepted old → final-new transition |
 | `kansokusha:player_spawn_change` | `PlayerSetSpawnEvent` | `audit` | effective player respawn-point set/clear boundary |
-| `kansokusha:player_death` | `PlayerDeathEvent` | `audit` | death context; full drops are not persisted |
+| `kansokusha:player_death` | `PlayerDeathEvent` | `audit` | death context plus detached storage/armor/offhand inventory snapshot |
 | `kansokusha:paper_chat` | `AsyncChatEvent` | `default` | original raw message only |
 | `kansokusha:paper_player_command` | `PlayerCommandPreprocessEvent` | `audit` | original raw command line only |
 | `kansokusha:paper_server_command` | `ServerCommandEvent` / `RemoteServerCommandEvent` | `audit` | source descriptor + original raw command only |
 | `kansokusha:entity_place` | `EntityPlaceEvent` / `HangingPlaceEvent` | `audit` | #156 hanging place is canonicalized into #155 |
-| `kansokusha:entity_break` | `HangingBreakByEntityEvent` | `audit` | #157 hanging break is canonicalized into #164; non-hanging entities are handled once the Paper baseline provides `EntityBreakByEntityEvent` |
+| `kansokusha:entity_break` | `HangingBreakEvent` / `HangingBreakByEntityEvent` | `audit` | by-entity subclass is canonicalized into the same event type without duplicate submission |
+| `kansokusha:entity_death` | selected `EntityDeathEvent` | `audit` | non-player deaths with a direct player killer, or villager/named/tamed/armor-stand targets |
+| `kansokusha:entity_spawn` | selected `CreatureSpawnEvent` reasons | `audit` | operation-like spawn reasons only; actor remains absent unless the source event directly exposes one |
 | `kansokusha:armor_stand_manipulate` | `PlayerArmorStandManipulateEvent` | `audit` | player armor-stand state change |
 | `kansokusha:entity_leash_change` | `PlayerLeashEntityEvent` / `PlayerUnleashEntityEvent` | `audit` | player leash/unleash |
 | `kansokusha:item_frame_change` | `PlayerItemFrameChangeEvent` | `audit` | existing frame content/rotation change; the payload records the fixed state |
@@ -125,7 +130,7 @@ block の変化で変化前と変化後の両方がある event の target は�
 | `explosion_block_change` | 爆発した entity（`BlockExplodeEvent` では爆発した block） | 破壊された block |
 | `piston_move` | piston の block | 移動した block |
 | `entity_block_change` | block を変化させた entity | 変化した block |
-| `natural_block_change` | `BlockSpreadEvent` では広がり元の block。それ以外はなし | 変化した block（`LeavesDecayEvent` では葉の block） |
+| `natural_block_change` | `BlockSpreadEvent` では広がり元の block、`PortalCreateEvent` では source entity があればその entity。それ以外はなし | 変化した block（`LeavesDecayEvent` では葉の block） |
 | `fluid_change` | 流れた液体の block（`minecraft:water` / `minecraft:lava`） | 流入先の block。流入先が空気なら液体の block |
 | `sponge_absorb` | sponge の block | 吸収された block |
 | `block_fertilize` | player。なければなし | 変化した block |
@@ -133,12 +138,17 @@ block の変化で変化前と変化後の両方がある event の target は�
 | `container_transfer` | 移動を起こした inventory の holder（hopper の block、hopper minecart の entity）。holder が block / entity でなければなし | 移動した item |
 | `container_pickup` | 拾った inventory の holder。holder が block / entity でなければなし | 拾われた item |
 | `container_process` | 処理した block | furnace / campfire / crafter は結果の item、brewing は ingredient の item |
+| `container_transaction` | player | operation で直接取得できる item。なければなし |
+| `dispenser_dispense` | dispenser / dropper の block | dispense された item |
 | `item_drop` / `item_pickup` | player | item |
 | `book_edit` | player | 署名時 `minecraft:written_book`、それ以外 `minecraft:writable_book` |
 | `lectern_change` | player | 出し入れされた book の item |
 | `player_trade` | player | 取引の結果 item |
+| `block_interaction` | player | interaction 対象の block |
 | `entity_place` | player。なければなし | 設置された entity |
-| `entity_break` | 取り除いた entity | 壊された entity |
+| `entity_break` | 取り除いた entity。generic hanging break ではなし | 壊された entity |
+| `entity_death` | damage source の causing entity。なければなし | 死亡した entity |
+| `entity_spawn` | なし | spawn した entity |
 | `armor_stand_manipulate` / `entity_leash_change` / `item_frame_change` / `entity_name_change` | player | 対象の entity |
 | `entity_tame` | 新しい owner（entity の場合）。それ以外はなし | 手懐けられた entity |
 | `gamerule_change` | 変更した command sender（player / entity / command block）。それ以外はなし | gamerule の key |
@@ -180,7 +190,7 @@ Canonicalization and intentional coexistence are part of the event contract, not
 - scaffolding: `BlockFadeEvent` for scaffolding at the maximum distance is not recorded because the block falls and `entity_block_change` records the falling block.
 - harvest/shear/break: `PlayerHarvestBlockEvent` and `PlayerShearBlockEvent` both map to `block_harvest`; normal `BlockBreakEvent` remains `block_break`, and the real Paper fixture verifies representative vanilla actions are not double-owned.
 - entity placement: generic `EntityPlaceEvent` skips `Hanging`; `HangingPlaceEvent` supplies the hanging path into the same `entity_place` type.
-- entity break: the Paper 26.2 baseline only exposes `HangingBreakByEntityEvent`, which is the sole source.
+- entity break: generic `HangingBreakEvent` records explosion/physics/obstruction removal, while `HangingBreakByEntityEvent` is handled by the by-entity path and skipped by the generic handler to avoid duplicates.
 - trade: only the `PlayerPurchaseEvent` handler is registered for purchase/trade dispatch; `PlayerTradeEvent` is identified as its subclass in payload metadata.
 - kick/quit: an accepted `paper_kick` and the subsequent `paper_quit` with kicked quit reason are intentionally both recorded because they represent the kick decision and completed session end.
 - world change/teleport: `player_world_change` and `player_teleport` intentionally coexist because they represent state transition and operation history respectively.
@@ -195,7 +205,7 @@ The five communication event types `paper_chat`, `velocity_chat`, `paper_player_
 
 Search query syntax, permission filtering, pagination, time-zone behavior, and initial-scope limitations are documented in `docs/search.md`.
 
-Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, and `player_trade` are event/attempt observations within the documented boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
+Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, `container_transaction`, `block_interaction`, `dispenser_dispense`, and `player_trade` are event/attempt observations within the documented boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
 
 ## Explicit exclusions
 
@@ -221,8 +231,8 @@ current built-in catalog の推奨保持期間は bundled `config.yml`（`common
 | `short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
 | default | `P30D` | 上記以外（session transition、chat） |
 
-- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `player_name_change`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `entity_break`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
-- `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`.
+- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `container_transaction`, `block_interaction`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `player_name_change`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `entity_break`, `entity_death`, `entity_spawn`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`, `dispenser_dispense`.
 - default: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`, `paper_chat`, `velocity_chat`.
 
 ## `kansokusha:block_break`
@@ -437,7 +447,7 @@ target backend name は common `server` field から復元可能なため payloa
 
 | Area | Current contract |
 | --- | --- |
-| runtime wiring | Paper 49 event type / Velocity 7 event type = 56 platform-sourced built-ins are registered at startup; common additionally derives `player_name_change` from accepted login observations |
+| runtime wiring | Paper 54 event type / Velocity 7 event type = 61 platform-sourced built-ins are registered at startup; common additionally derives `player_name_change` from accepted login observations |
 | closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
 | canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |

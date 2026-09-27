@@ -59,24 +59,26 @@ final class PaperEntityEventPayloadCodec {
 
     static EventPayload encodeBreak(
         EntitySnapshot brokenEntity,
-        EntitySnapshot breaker,
+        @Nullable EntitySnapshot breaker,
         String cause,
-        String damageType,
+        @Nullable String damageType,
         boolean indirectDamage,
         String sourceEvent
     ) {
         Objects.requireNonNull(brokenEntity, "brokenEntity");
-        Objects.requireNonNull(breaker, "breaker");
         Objects.requireNonNull(cause, "cause");
-        Objects.requireNonNull(damageType, "damageType");
         Objects.requireNonNull(sourceEvent, "sourceEvent");
 
         var payload = new CompoundTag();
         putEntity(payload, "entity", brokenEntity);
-        putEntity(payload, "breaker", breaker);
+        if (breaker != null) {
+            putEntity(payload, "breaker", breaker);
+        }
         payload.putString("cause", cause);
-        payload.putString("damage_type", damageType);
-        payload.putBoolean("indirect_damage", indirectDamage);
+        if (damageType != null) {
+            payload.putString("damage_type", damageType);
+            payload.putBoolean("indirect_damage", indirectDamage);
+        }
         payload.putString("source_event", sourceEvent);
         return PaperPayloadNbtCodec.encode(payload);
     }

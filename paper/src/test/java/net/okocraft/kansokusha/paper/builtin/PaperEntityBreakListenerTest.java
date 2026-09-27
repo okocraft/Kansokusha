@@ -63,6 +63,30 @@ class PaperEntityBreakListenerTest {
     }
 
     @Test
+    void testGenericHangingBreakHasNoInferredActor() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = listener(api);
+        var world = PaperBlockEventTestSupport.world();
+        var target = hanging(world, ENTITY_ID, 7.5, 70, 8.5);
+        var event = Mockito.mock(HangingBreakEvent.class);
+        Mockito.when(event.getEntity()).thenReturn(target);
+        Mockito.when(event.getCause()).thenReturn(HangingBreakEvent.RemoveCause.OBSTRUCTION);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        var submission = onlySubmission(api);
+        Assertions.assertNull(submission.actor());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("obstruction", payload.getString("cause").orElseThrow());
+        Assertions.assertFalse(payload.contains("breaker"));
+        Assertions.assertFalse(payload.contains("damage_type"));
+        Assertions.assertEquals(
+            PaperEntityBreakListener.GENERIC_HANGING_SOURCE_EVENT,
+            payload.getString("source_event").orElseThrow()
+        );
+    }
+
+    @Test
     void testCancelledBreaksAreDropped() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api);

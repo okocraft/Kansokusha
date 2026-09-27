@@ -102,7 +102,7 @@ public final class PaperPayloadNbtCodec {
         "fixed", "drop_leash", "indirect_damage", "experience_reward", "ignore_discounts",
         "rewarding_experience", "increasing_trade_uses", "source_present",
         "before_enabled", "after_enabled", "before_whitelisted", "after_whitelisted",
-        "new_owner", "hanging", "username"
+        "new_owner", "hanging", "username", "exchange_item", "hotbar_button"
     };
 
     // Common schema constants. IDs are append-only for the same reason as FIELD_NAMES.
