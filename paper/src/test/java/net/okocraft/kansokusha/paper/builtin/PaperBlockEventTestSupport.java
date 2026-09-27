@@ -29,6 +29,9 @@ final class PaperBlockEventTestSupport {
 
     static final Key SERVER_KEY = Key.key("example", "paper");
 
+    private static final ConcurrentLinkedQueue<World> RETAINED_WORLDS =
+        new ConcurrentLinkedQueue<>();
+
     private PaperBlockEventTestSupport() {
     }
 
@@ -41,6 +44,9 @@ final class PaperBlockEventTestSupport {
     static World world() {
         var world = Mockito.mock(World.class);
         Mockito.when(world.getKey()).thenReturn(new NamespacedKey("example", "world"));
+        // Bukkit Location keeps only a weak reference to its World. Test fixtures often retain
+        // the Location but not the World, so keep mock worlds strongly reachable for the test JVM.
+        RETAINED_WORLDS.add(world);
         return world;
     }
 
