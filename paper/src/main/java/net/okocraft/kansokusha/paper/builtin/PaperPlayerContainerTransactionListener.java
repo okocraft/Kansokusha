@@ -128,14 +128,14 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         );
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void cleanup(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
             this.detach(player.getUniqueId());
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void cleanup(PlayerQuitEvent event) {
         this.detach(event.getPlayer().getUniqueId());
     }
