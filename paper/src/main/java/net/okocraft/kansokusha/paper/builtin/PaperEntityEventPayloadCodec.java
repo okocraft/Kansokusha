@@ -77,8 +77,8 @@ final class PaperEntityEventPayloadCodec {
         payload.putString("cause", cause);
         if (damageType != null) {
             payload.putString("damage_type", damageType);
+            payload.putBoolean("indirect_damage", indirectDamage);
         }
-        payload.putBoolean("indirect_damage", indirectDamage);
         payload.putString("source_event", sourceEvent);
         return PaperPayloadNbtCodec.encode(payload);
     }
