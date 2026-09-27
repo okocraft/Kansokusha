@@ -300,14 +300,17 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     private static @Nullable PaperContainerPayloadCodec.InventorySnapshot locatedContainer(
         Inventory inventory
     ) {
-        if (
-            inventory.getHolder() instanceof Player
-                || !STORAGE_CONTAINER_TYPES.contains(inventory.getType())
-        ) {
+        if (!isStorageContainer(inventory)) {
             return null;
         }
         var snapshot = PaperContainerPayloadCodec.snapshotInventory(inventory);
         return snapshot.worldKey() == null || snapshot.position() == null ? null : snapshot;
+    }
+
+    static boolean isStorageContainer(Inventory inventory) {
+        Objects.requireNonNull(inventory, "inventory");
+        return !(inventory.getHolder() instanceof Player)
+            && STORAGE_CONTAINER_TYPES.contains(inventory.getType());
     }
 
     private static boolean isPostVanillaContainerClick() {
