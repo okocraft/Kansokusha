@@ -471,6 +471,31 @@ class SearchQueryParserTest {
         Assertions.assertEquals(List.of("newest", "oldest"), order.staticSuggestions());
     }
 
+    @Test
+    void testTrailingTokenUsesParserQuoteAndEscapeRules() {
+        var quoted = SearchQueryParser.trailingToken(
+            "filter \"foo __cursor=bar\""
+        ).orElseThrow();
+        Assertions.assertEquals("foo __cursor=bar", quoted.value());
+        Assertions.assertTrue(quoted.quotedOrEscaped());
+        Assertions.assertEquals(7, quoted.start());
+
+        var escaped = SearchQueryParser.trailingToken(
+            "filter foo\\ __cursor=bar"
+        ).orElseThrow();
+        Assertions.assertEquals("foo __cursor=bar", escaped.value());
+        Assertions.assertTrue(escaped.quotedOrEscaped());
+
+        var plain = SearchQueryParser.trailingToken(
+            "filter foo __cursor=next,1,123e4567-e89b-12d3-a456-426614174000"
+        ).orElseThrow();
+        Assertions.assertEquals(
+            "__cursor=next,1,123e4567-e89b-12d3-a456-426614174000",
+            plain.value()
+        );
+        Assertions.assertFalse(plain.quotedOrEscaped());
+    }
+
     private static SearchQuery parse(String input) {
         return SearchQueryParser.parse(input, CLOCK, TOKYO);
     }
