@@ -8,7 +8,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.InventoryHolder;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Openable;
 import org.bukkit.block.data.Powerable;
@@ -24,7 +24,6 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
-import java.util.Locale;
 import java.util.Objects;
 
 @ApiStatus.Internal
