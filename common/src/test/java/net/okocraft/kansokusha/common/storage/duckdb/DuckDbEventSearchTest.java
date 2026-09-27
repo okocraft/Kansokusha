@@ -50,6 +50,49 @@ class DuckDbEventSearchTest {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174203");
 
     @Test
+    void testSearchRequestEnforcesBackendPageSizeLimit() {
+        var atMaximum = request(
+            "limit " + SearchRequest.MAX_LIMIT,
+            Set.of(AUDIT),
+            Optional.empty(),
+            Optional.empty(),
+            20
+        );
+        Assertions.assertEquals(SearchRequest.MAX_LIMIT, atMaximum.limit());
+
+        Assertions.assertThrows(
+            IllegalArgumentException.class,
+            () -> request(
+                "limit " + (SearchRequest.MAX_LIMIT + 1),
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            )
+        );
+        Assertions.assertThrows(
+            IllegalArgumentException.class,
+            () -> request(
+                "limit 2147483647",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            )
+        );
+        Assertions.assertThrows(
+            IllegalArgumentException.class,
+            () -> request(
+                "",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                SearchRequest.MAX_LIMIT + 1
+            )
+        );
+    }
+
+    @Test
     void testTypedConditionsProjectionAndPermissionScope(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(
