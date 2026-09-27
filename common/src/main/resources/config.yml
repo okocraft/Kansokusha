@@ -47,6 +47,10 @@ retention:
         - kansokusha:lectern_change
         - kansokusha:player_trade
         - kansokusha:container_transaction
+        - kansokusha:craft_item
+        - kansokusha:anvil_use
+        - kansokusha:smith_item
+        - kansokusha:enchant_item
         - kansokusha:block_interaction
         - kansokusha:player_gamemode_change
         - kansokusha:player_spawn_change
