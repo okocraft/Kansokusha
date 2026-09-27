@@ -22,6 +22,11 @@ public interface EventSearchBackend {
 
     boolean submitSearchable(EventSubmission submission, String searchText);
 
+    /**
+     * Executes a typed search asynchronously through the runtime's storage-owned read path.
+     */
+    CompletableFuture<SearchPage> search(SearchRequest request);
+
     CompletableFuture<List<UUID>> findEventIdsContaining(String literal);
 
     static EventSearchBackend require(KansokushaApi api) {
