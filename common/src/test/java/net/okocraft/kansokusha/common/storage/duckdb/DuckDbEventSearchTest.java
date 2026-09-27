@@ -116,11 +116,21 @@ class DuckDbEventSearchTest {
 
             var metadata = storage.searchMetadata();
             Assertions.assertEquals(Set.of(AUDIT, OTHER), metadata.eventTypes());
-            Assertions.assertEquals(Set.of(OVERWORLD, NETHER), metadata.worlds());
+
+            var audit = metadata.retainEventTypes(Set.of(AUDIT));
+            Assertions.assertEquals(Set.of(OVERWORLD), audit.worlds());
+            Assertions.assertTrue(audit.actorTypes().isEmpty());
+            Assertions.assertEquals(Set.of(STONE), audit.targetTypes());
+
+            var other = metadata.retainEventTypes(Set.of(OTHER));
+            Assertions.assertEquals(Set.of(NETHER), other.worlds());
             Assertions.assertEquals(
                 Set.of(Key.key("minecraft", "creeper")),
-                metadata.actorTypes()
+                other.actorTypes()
             );
+            Assertions.assertEquals(Set.of(DIRT), other.targetTypes());
+
+            Assertions.assertEquals(Set.of(OVERWORLD, NETHER), metadata.worlds());
             Assertions.assertEquals(Set.of(STONE, DIRT), metadata.targetTypes());
         }
     }
