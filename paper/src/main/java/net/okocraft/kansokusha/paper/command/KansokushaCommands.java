@@ -27,14 +27,32 @@ public final class KansokushaCommands {
         );
     }
 
+    /**
+     * Registers the legacy command surface without inspection commands.
+     *
+     * <p>Inspection requires an explicitly managed session lifecycle, so callers that need it
+     * must use the overload accepting {@link InspectionSessionManager}.</p>
+     */
     public static void register(Commands commands) {
         commands.register(createCommand());
     }
 
+    /**
+     * Registers the legacy command surface without inspection commands.
+     *
+     * <p>Inspection requires an explicitly managed session lifecycle, so callers that need it
+     * must use the overload accepting {@link InspectionSessionManager}.</p>
+     */
     public static void register(Commands commands, ZoneId searchTimeZone) {
         commands.register(createCommand(Clock.systemUTC(), searchTimeZone));
     }
 
+    /**
+     * Registers commands including inspection mode backed by the supplied session manager.
+     *
+     * <p>The caller owns that manager's lifecycle and must remove player state on quit and clear
+     * all state when the plugin is disabled.</p>
+     */
     public static void register(
         Commands commands,
         ZoneId searchTimeZone,
