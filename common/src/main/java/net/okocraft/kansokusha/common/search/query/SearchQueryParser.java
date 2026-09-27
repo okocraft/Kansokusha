@@ -38,6 +38,45 @@ public final class SearchQueryParser {
 
     private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([mhdw])");
 
+    private static final List<String> MODIFIER_SUGGESTIONS = List.of(
+        "user",
+        "action",
+        "time",
+        "radius",
+        "include",
+        "target",
+        "filter",
+        "actor-uuid",
+        "actor-kind",
+        "actor-type",
+        "world",
+        "position",
+        "around",
+        "from",
+        "to",
+        "exclude",
+        "order",
+        "limit"
+    );
+    private static final List<String> EXCLUDE_SUGGESTIONS = List.of(
+        "user",
+        "action",
+        "time",
+        "radius",
+        "include",
+        "target",
+        "filter",
+        "actor-uuid",
+        "actor-kind",
+        "actor-type",
+        "world",
+        "position",
+        "around"
+    );
+    private static final List<String> ACTOR_KIND_SUGGESTIONS =
+        List.of("player", "entity", "block");
+    private static final List<String> ORDER_SUGGESTIONS = List.of("newest", "oldest");
+
     private SearchQueryParser() {
     }
 
@@ -146,6 +185,151 @@ public final class SearchQueryParser {
         } catch (IllegalArgumentException e) {
             throw error(e.getMessage(), e);
         }
+    }
+
+    /**
+     * Interprets a partially typed query for platform completion without duplicating the query
+     * grammar in a platform module.
+     */
+    public static Completion completion(String input, Clock clock, ZoneId timezone) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(timezone, "timezone");
+
+        var partial = tokenizeForCompletion(input);
+        CompletionKind kind;
+        try {
+            parse(partial.completedArguments(), clock, timezone);
+            kind = CompletionKind.MODIFIER;
+        } catch (SearchQueryParseException e) {
+            kind = completionKind(e.getMessage());
+        }
+
+        return new Completion(
+            kind,
+            partial.prefix(),
+            partial.replacementStart(),
+            staticSuggestions(kind)
+        );
+    }
+
+    private static CompletionKind completionKind(String message) {
+        if (message == null || !message.startsWith("missing ")) {
+            return CompletionKind.NONE;
+        }
+
+        return switch (message.substring("missing ".length())) {
+            case "user", "exclude user" -> CompletionKind.USER;
+            case "action", "exclude action" -> CompletionKind.ACTION;
+            case "include", "target", "exclude include", "exclude target" ->
+                CompletionKind.TARGET;
+            case "actor-kind", "exclude actor-kind" -> CompletionKind.ACTOR_KIND;
+            case "actor-type", "exclude actor-type" -> CompletionKind.ACTOR_TYPE;
+            case "world", "exclude world" -> CompletionKind.WORLD;
+            case "order" -> CompletionKind.ORDER;
+            case "exclude condition" -> CompletionKind.EXCLUDE_CONDITION;
+            default -> CompletionKind.NONE;
+        };
+    }
+
+    private static List<String> staticSuggestions(CompletionKind kind) {
+        return switch (kind) {
+            case MODIFIER -> MODIFIER_SUGGESTIONS;
+            case EXCLUDE_CONDITION -> EXCLUDE_SUGGESTIONS;
+            case ACTOR_KIND -> ACTOR_KIND_SUGGESTIONS;
+            case ORDER -> ORDER_SUGGESTIONS;
+            default -> List.of();
+        };
+    }
+
+    private static CompletionTokens tokenizeForCompletion(String input) {
+        var completed = new ArrayList<String>();
+        var token = new StringBuilder();
+        var tokenStarted = false;
+        var tokenStart = input.length();
+        var quote = '\0';
+        var escaping = false;
+
+        for (var index = 0; index < input.length(); index++) {
+            var character = input.charAt(index);
+            if (!tokenStarted && !Character.isWhitespace(character)) {
+                tokenStarted = true;
+                tokenStart = index;
+            }
+
+            if (escaping) {
+                token.append(character);
+                escaping = false;
+                continue;
+            }
+            if (character == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (quote != '\0') {
+                if (character == quote) {
+                    quote = '\0';
+                } else {
+                    token.append(character);
+                }
+                continue;
+            }
+            if (character == '"' || character == '\'') {
+                quote = character;
+                continue;
+            }
+            if (Character.isWhitespace(character)) {
+                if (tokenStarted) {
+                    completed.add(token.toString());
+                    token.setLength(0);
+                    tokenStarted = false;
+                }
+                continue;
+            }
+            token.append(character);
+        }
+
+        if (escaping) {
+            token.append('\\');
+        }
+
+        return tokenStarted
+            ? new CompletionTokens(List.copyOf(completed), token.toString(), tokenStart)
+            : new CompletionTokens(List.copyOf(completed), "", input.length());
+    }
+
+    public enum CompletionKind {
+        MODIFIER,
+        USER,
+        ACTION,
+        TARGET,
+        ACTOR_KIND,
+        ACTOR_TYPE,
+        WORLD,
+        ORDER,
+        EXCLUDE_CONDITION,
+        NONE
+    }
+
+    public record Completion(
+        CompletionKind kind,
+        String prefix,
+        int replacementStart,
+        List<String> staticSuggestions
+    ) {
+
+        public Completion {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(prefix, "prefix");
+            staticSuggestions = List.copyOf(staticSuggestions);
+        }
+    }
+
+    private record CompletionTokens(
+        List<String> completedArguments,
+        String prefix,
+        int replacementStart
+    ) {
     }
 
     private static void parseExcluded(
