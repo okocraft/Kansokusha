@@ -10,7 +10,9 @@ import org.bukkit.entity.Enderman;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Snowman;
 import org.bukkit.entity.Zombie;
+import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.junit.jupiter.api.Assertions;
@@ -167,6 +169,50 @@ class PaperEntityBlockChangeListenerTest {
         );
         Assertions.assertFalse(payload.contains("actor_entity_uuid"));
         Assertions.assertFalse(payload.contains("actor_entity_type"));
+    }
+
+    @Test
+    void testEntityBlockFormUsesEntityBlockChangeBoundary() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperEntityBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 30, 64, 30, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var newState = PaperBlockEventTestSupport.state(
+            world, block, 30, 64, 30, Blocks.SNOW.defaultBlockState()
+        );
+        var actorId = UUID.fromString("123e4567-e89b-12d3-a456-426614174023");
+        var snowman = Mockito.mock(Snowman.class);
+        Mockito.when(snowman.getUniqueId()).thenReturn(actorId);
+        Mockito.when(snowman.getType()).thenReturn(EntityType.SNOW_GOLEM);
+        var event = Mockito.mock(EntityBlockFormEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(newState);
+        Mockito.when(event.getEntity()).thenReturn(snowman);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(PaperEntityBlockChangeListener.EVENT_TYPE, submission.eventType());
+        Assertions.assertEquals(
+            new EntityActor(actorId, Key.key("minecraft", "snow_golem")),
+            submission.actor()
+        );
+        Assertions.assertEquals(Key.key("minecraft", "snow"), submission.targetType());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals(
+            PaperBlockStatePayloadCodec.blockState(Blocks.AIR.defaultBlockState().asBlockData()),
+            payload.get("before")
+        );
+        Assertions.assertEquals(
+            PaperBlockStatePayloadCodec.blockState(Blocks.SNOW.defaultBlockState().asBlockData()),
+            payload.get("to")
+        );
     }
 
     @Test
