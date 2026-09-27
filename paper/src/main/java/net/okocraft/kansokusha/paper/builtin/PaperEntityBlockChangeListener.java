@@ -10,6 +10,7 @@ import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -44,6 +45,29 @@ public final class PaperEntityBlockChangeListener implements Listener {
     ) {
         PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperEntityBlockChangeListener(api, serverKey, clock);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordForm(EntityBlockFormEvent event) {
+        Objects.requireNonNull(event, "event");
+
+        var block = event.getBlock();
+        var actor = event.getEntity();
+        var to = event.getNewState().getBlockData();
+        this.api.submit(new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
+            this.clock.instant(),
+            this.serverKey,
+            PaperKansokusha.key(block.getWorld().getKey()),
+            PaperBuiltInSupport.position(block),
+            PaperBuiltInSupport.actor(actor),
+            PaperBuiltInSupport.changedBlockType(block.getBlockData(), to),
+            PaperWorldMutationPayloadCodec.encodeEntityBlockChange(
+                block.getBlockData(),
+                to
+            )
+        ));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
