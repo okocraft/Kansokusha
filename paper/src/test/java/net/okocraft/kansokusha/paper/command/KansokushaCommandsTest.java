@@ -40,17 +40,11 @@ class KansokushaCommandsTest {
         ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
         TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
 
-        net.okocraft.kansokusha.api.Kansokusha.setApi(
-            new SearchCommandTest.SearchApiForWiring()
+        Assertions.assertEquals(
+            0,
+            this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
         );
-        try {
-            Assertions.assertEquals(
-                1,
-                this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
-            );
-        } finally {
-            net.okocraft.kansokusha.api.Kansokusha.setApi(null);
-        }
+        Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
     }
 
     @Test
