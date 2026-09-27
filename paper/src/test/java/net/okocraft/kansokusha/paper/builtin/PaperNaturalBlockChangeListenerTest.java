@@ -15,11 +15,13 @@ import org.bukkit.TreeType;
 import org.bukkit.World;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
+import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -232,6 +234,76 @@ class PaperNaturalBlockChangeListenerTest {
         stubTransition(destroyed, world, 2, scaffolding.setValue(ScaffoldingBlock.DISTANCE, 6), Blocks.AIR.defaultBlockState());
         PaperListenerTestSupport.fire(listener, destroyed);
         Assertions.assertEquals(1, api.submissions.size());
+    }
+
+    @Test
+    void testDragonEggTeleportRecordsDepartureAndArrivalWithOneTimestamp() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var source = PaperBlockEventTestSupport.block(
+            world, 40, 70, 40, Blocks.DRAGON_EGG.defaultBlockState(), Material.DRAGON_EGG
+        );
+        var destination = PaperBlockEventTestSupport.block(
+            world, 43, 72, 41, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var event = Mockito.mock(BlockFromToEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(source);
+        Mockito.when(event.getToBlock()).thenReturn(destination);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        Assertions.assertEquals(2, api.submissions.size());
+        var submissions = api.submissions.stream().toList();
+        Assertions.assertEquals(OCCURRED_AT, submissions.get(0).occurredAt());
+        Assertions.assertEquals(OCCURRED_AT, submissions.get(1).occurredAt());
+        Assertions.assertEquals(new BlockPosition(40, 70, 40), submissions.get(0).position());
+        Assertions.assertEquals(new BlockPosition(43, 72, 41), submissions.get(1).position());
+
+        var departure = PaperPayloadNbtCodec.decode(submissions.get(0).payload());
+        var arrival = PaperPayloadNbtCodec.decode(submissions.get(1).payload());
+        Assertions.assertEquals(
+            "dragon_egg_teleport",
+            departure.getString("source_event").orElseThrow()
+        );
+        Assertions.assertEquals("departure", departure.getString("cause").orElseThrow());
+        Assertions.assertEquals("arrival", arrival.getString("cause").orElseThrow());
+    }
+
+    @Test
+    void testPortalCreateRecordsChangedBlocksWithoutInferredActor() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var block = PaperBlockEventTestSupport.block(
+            world, 50, 65, 50, Blocks.AIR.defaultBlockState(), Material.AIR
+        );
+        var state = PaperBlockEventTestSupport.state(
+            world, block, 50, 65, 50, Blocks.NETHER_PORTAL.defaultBlockState()
+        );
+        var event = Mockito.mock(PortalCreateEvent.class);
+        Mockito.when(event.getBlocks()).thenReturn(java.util.List.of(state));
+        Mockito.when(event.getReason()).thenReturn(PortalCreateEvent.CreateReason.FIRE);
+        Mockito.when(event.getEntity()).thenReturn(null);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertNull(submission.actor());
+        Assertions.assertEquals(new BlockPosition(50, 65, 50), submission.position());
+        Assertions.assertEquals(Key.key("minecraft", "nether_portal"), submission.targetType());
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("portal_create", payload.getString("source_event").orElseThrow());
+        Assertions.assertEquals("fire", payload.getString("cause").orElseThrow());
     }
 
     @Test
