@@ -49,7 +49,7 @@ class PaperBuiltInListenersTest {
         }
 
         Assertions.assertEquals(PaperBuiltInListeners.FACTORIES.size(), listenerClasses.size());
-        Assertions.assertEquals(54, api.registered.size());
+        Assertions.assertEquals(58, api.registered.size());
         Assertions.assertTrue(api.registered.stream().allMatch(
             definition -> definition.key().namespace().equals("kansokusha")
                 && definition.payloadGeneration().equals(PayloadGeneration.FIRST)

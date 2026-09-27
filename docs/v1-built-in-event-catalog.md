@@ -40,6 +40,10 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
 | `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` + NMS `AbstractContainerMenu` slot notification | `audit` | confirmed net item delta in a located non-player container after the accepted click/drag is applied |
+| `kansokusha:craft_item` | `CraftItemEvent` + Paper `ItemCraftedEvent` confirmation | `audit` | crafted item was actually picked up; pre-click recipe/matrix context is paired with the post-pickup item |
+| `kansokusha:anvil_use` | ANVIL result-slot `InventoryClickEvent` + packet-end confirmation | `audit` | repair/combine/rename only when vanilla consumed the primary input |
+| `kansokusha:smith_item` | `SmithItemEvent` + packet-end confirmation | `audit` | smithing only when vanilla consumed all three inputs |
+| `kansokusha:enchant_item` | `EnchantItemEvent` + container-button packet-end confirmation | `audit` | enchanting only after the item actually changed; requirement and consumed levels are separate |
 | `kansokusha:dispenser_dispense` | `BlockDispenseEvent` | `short` | direct dispenser/dropper dispense operation only; later effects are not correlated |
 | `kansokusha:item_drop` | `PlayerDropItemEvent` | `audit` | player → world item ownership transfer |
 | `kansokusha:item_pickup` | `EntityPickupItemEvent` when actor is `Player` | `audit` | world item → player ownership transfer |
@@ -233,7 +237,7 @@ current built-in catalog の推奨保持期間は bundled `config.yml`（`common
 | `short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
 | default | `P30D` | 上記以外（session transition、chat） |
 
-- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `container_transaction`, `block_interaction`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `player_name_change`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `entity_break`, `entity_death`, `entity_spawn`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `container_transaction`, `craft_item`, `anvil_use`, `smith_item`, `enchant_item`, `block_interaction`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `player_name_change`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `entity_break`, `entity_death`, `entity_spawn`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
 - `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`, `dispenser_dispense`.
 - default: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`, `paper_chat`, `velocity_chat`.
 
@@ -382,7 +386,7 @@ common position は lectern block position とし、generation 1 payload は `ac
 
 ## `kansokusha:container_transaction`
 
-located non-player container を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。
+**storage / persistent processing container** を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。対象 inventory type は chest/barrel/shulker/ender-chest/hopper/dispenser/dropper/furnace/blast-furnace/smoker/brewing/crafter に明示限定する。通常の player-holder inventory は除外するが、ender chest は Paper が active chest location を提供するため例外として対象に含める。workbench/anvil/smithing/enchanting/loom/cartography/grindstone/stonecutter/beacon/lectern/merchant 等の virtual workstation inventory は対象外とする。
 
 MONITOR では top inventory の detached before snapshot と operation metadata だけを保持し、その場では submit しない。listener は player の NMS `AbstractContainerMenu` の cursor 同期用 `RemoteSlot` (`remoteCarried`) を一時的な delegating sentinel で包む。Paper の `ServerGamePacketListenerImpl#handleContainerClick` は Bukkit event dispatch 前から vanilla `clicked(...)` 完了まで `suppressRemoteUpdates = true` とし、その間の nested `broadcastChanges()` では remote synchronization を行わない。`clicked(...)` が完全に戻った後、packet-end の `broadcastChanges()` は必ず `remoteCarried.matches(...)` を呼ぶため、その callback を確定境界として top inventory の after snapshot を取得する。full resync / crafting・smithing の explicit full sync は `remoteCarried.force(...)` を同じく `clicked(...)` 後に観測して確定する。
 
@@ -406,6 +410,61 @@ generation 1 payload:
 common `target_type` は delta item の type とする。
 
 この event は player inventory 全体の mutation、cursor の最終 state、slot ごとの before/after、rollback 用 snapshot を保存しない。
+
+## Workstation audit events
+
+workstation UI の generic slot mutation は `container_transaction` に混ぜない。pre-application Bukkit event は operation context の capture にだけ使い、成功を直接表す Paper event または同じ packet の vanilla 適用後 state を確認してから submit する。
+
+### `kansokusha:craft_item`
+
+non-cancelled `CraftItemEvent` では recipe/matrix/click context だけを pending に保持し、Paper `ItemCraftedEvent` が実際に result item の pickup を通知した場合だけ submit する。player 2x2 crafting と crafting table の両方を対象とする。destination が満杯の shift-click 等で pickup が成立しなければ `ItemCraftedEvent` が来ないため記録しない。
+
+generation 1 payload:
+
+- `recipe`: recipe が `Keyed` の場合の namespaced key
+- `input_items`: `CraftItemEvent` 時点の crafting matrix
+- `result_item`: `ItemCraftedEvent#getCraftedItem()`
+- `click`, `action`
+
+common target type は実際に pickup された crafted item type。workstation inventory の slot 入れ替え自体は記録しない。
+
+### `kansokusha:anvil_use`
+
+non-cancelled ANVIL result-slot `InventoryClickEvent` で inputs/result/cost context を capture するが、その場では submit しない。同じ `handleContainerClick` packet の vanilla `clicked(...)` 完了後まで待ち、anvil の primary input が実際に消費されたことを確認した場合だけ submit する。shift-click の移動先が満杯、XP 不足等で result take が成立しなければ記録しない。`PrepareAnvilEvent` は result preview 更新なので監査 event にはしない。
+
+generation 1 payload:
+
+- `input_items`: left/right input
+- `result_item`
+- optional `rename_text`
+- `repair_item_count`, `repair_cost`
+- `click`, `action`
+
+### `kansokusha:smith_item`
+
+non-cancelled `SmithItemEvent` は operation context の capture にだけ使う。同じ `handleContainerClick` packet の vanilla 適用後に template / equipment / mineral の3 input がそれぞれ1個ずつ実際に消費されたことを確認してから submit する。destination が満杯の shift-click 等で mutation が起きなければ記録しない。
+
+generation 1 payload:
+
+- optional `recipe`
+- `input_items`: template / equipment / mineral
+- `result_item`
+- `click`, `action`
+
+### `kansokusha:enchant_item`
+
+non-cancelled `EnchantItemEvent` では plugin-adjusted requirement / enchantment map と pre-state を capture するが、その場では submit しない。`EnchantmentMenu#clickMenuButton` が戻った後の同じ `handleContainerButtonClick` packet-end synchronization まで待ち、item slot が実際に変化し、かつ vanilla の `Stats.ENCHANT_ITEM` が増加した場合だけ submit する。event-adjusted required level を player が満たさない場合や `getEnchantsToAdd()` が空の場合など、Paper が event dispatch 後に abort した操作は記録しない。
+
+generation 1 payload:
+
+- `item`
+- `required_level`: `EnchantItemEvent#getExpLevelCost()`。enchant offer を実行するために要求される player level
+- `consumed_levels`: confirmed operation の前後で観測した player level の減少量。成功判定そのものは vanilla が increment する `Stats.ENCHANT_ITEM` と item mutation の両方で確認する
+- `button`
+- `enchantments`: plugin-adjusted `type` / `level` の list
+
+common world/position は enchanting table block、actor は enchanter、target type は enchanted item type。
+
 
 ## `kansokusha:player_trade`
 
@@ -476,7 +535,7 @@ target backend name は common `server` field から復元可能なため payloa
 
 | Area | Current contract |
 | --- | --- |
-| runtime wiring | Paper 54 event type / Velocity 7 event type = 61 platform-sourced built-ins are registered at startup; common additionally derives `player_name_change` from accepted login observations |
+| runtime wiring | Paper 58 event type / Velocity 7 event type = 65 platform-sourced built-ins are registered at startup; common additionally derives `player_name_change` from accepted login observations |
 | closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
 | canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |

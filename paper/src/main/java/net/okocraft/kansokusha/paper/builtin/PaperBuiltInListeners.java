@@ -23,6 +23,7 @@ public final class PaperBuiltInListeners {
         PaperFlowerPotChangeListener::register,
         PaperPlayerItemAuditListener::register,
         PaperPlayerContainerTransactionListener::register,
+        PaperPlayerWorkstationAuditListener::register,
         PaperPlayerBlockInteractionListener::register,
         PaperBlockIgniteListener::register,
         PaperBlockBurnListener::register,
