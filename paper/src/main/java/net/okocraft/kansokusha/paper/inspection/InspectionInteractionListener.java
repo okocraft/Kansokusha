@@ -47,7 +47,7 @@ public final class InspectionInteractionListener implements Listener {
      * interaction. Off-hand events are suppressed as well, but only the main-hand event produces
      * a lookup target.</p>
      */
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void inspect(PlayerInteractEvent event) {
         Objects.requireNonNull(event, "event");
 
@@ -80,7 +80,7 @@ public final class InspectionInteractionListener implements Listener {
         this.targetHandler.inspect(player.getUniqueId(), InspectionTarget.from(targetBlock));
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void suppressDamage(BlockDamageEvent event) {
         Objects.requireNonNull(event, "event");
         if (this.sessions.isEnabled(event.getPlayer())) {
@@ -88,7 +88,7 @@ public final class InspectionInteractionListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void suppressBreak(BlockBreakEvent event) {
         Objects.requireNonNull(event, "event");
         if (this.sessions.isEnabled(event.getPlayer())) {
