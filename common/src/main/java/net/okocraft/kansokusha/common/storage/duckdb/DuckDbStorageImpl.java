@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
 import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
@@ -30,6 +31,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -465,6 +467,42 @@ public final class DuckDbStorageImpl implements Storage {
     @Override
     public SearchPage search(SearchRequest request) throws SQLException {
         return DuckDbEventSearch.search(this.connection, request);
+    }
+
+    @Override
+    public SearchMetadata searchMetadata() throws SQLException {
+        var eventTypes = new LinkedHashSet<Key>();
+        var worlds = new LinkedHashSet<Key>();
+        var actorTypes = new LinkedHashSet<Key>();
+        var targetTypes = new LinkedHashSet<Key>();
+
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery("""
+                 SELECT category, value
+                 FROM (
+                     SELECT 'event' AS category, event_type AS value FROM events
+                     UNION
+                     SELECT 'world', world FROM events WHERE world IS NOT NULL
+                     UNION
+                     SELECT 'actor', actor_type FROM events WHERE actor_type IS NOT NULL
+                     UNION
+                     SELECT 'target', target_type FROM events WHERE target_type IS NOT NULL
+                 )
+                 ORDER BY category, value
+                 """)) {
+            while (rows.next()) {
+                var value = Key.key(rows.getString("value"));
+                switch (rows.getString("category")) {
+                    case "event" -> eventTypes.add(value);
+                    case "world" -> worlds.add(value);
+                    case "actor" -> actorTypes.add(value);
+                    case "target" -> targetTypes.add(value);
+                    default -> throw new SQLException("Unexpected search metadata category.");
+                }
+            }
+        }
+
+        return new SearchMetadata(eventTypes, worlds, actorTypes, targetTypes);
     }
 
     @Override
