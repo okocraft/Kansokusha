@@ -453,13 +453,13 @@ generation 1 payload:
 
 ### `kansokusha:enchant_item`
 
-non-cancelled `EnchantItemEvent` では plugin-adjusted requirement / enchantment map と pre-state を capture するが、その場では submit しない。`EnchantmentMenu#clickMenuButton` が戻った後の同じ `handleContainerButtonClick` packet-end synchronization まで待ち、item slot が実際に変化した場合だけ submit する。event-adjusted required level を player が満たさない場合や `getEnchantsToAdd()` が空の場合など、Paper が event dispatch 後に abort した操作は記録しない。
+non-cancelled `EnchantItemEvent` では plugin-adjusted requirement / enchantment map と pre-state を capture するが、その場では submit しない。`EnchantmentMenu#clickMenuButton` が戻った後の同じ `handleContainerButtonClick` packet-end synchronization まで待ち、item slot が実際に変化し、かつ vanilla の `Stats.ENCHANT_ITEM` が増加した場合だけ submit する。event-adjusted required level を player が満たさない場合や `getEnchantsToAdd()` が空の場合など、Paper が event dispatch 後に abort した操作は記録しない。
 
 generation 1 payload:
 
 - `item`
 - `required_level`: `EnchantItemEvent#getExpLevelCost()`。enchant offer を実行するために要求される player level
-- `consumed_levels`: vanilla が成功時に実際に消費する level 数。通常は selected button index + 1、infinite-materials player は 0
+- `consumed_levels`: confirmed operation の前後で観測した player level の減少量。成功判定そのものは vanilla が increment する `Stats.ENCHANT_ITEM` と item mutation の両方で確認する
 - `button`
 - `enchantments`: plugin-adjusted `type` / `level` の list
 
