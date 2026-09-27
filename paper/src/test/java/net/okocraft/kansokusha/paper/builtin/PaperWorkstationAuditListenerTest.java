@@ -111,12 +111,14 @@ class PaperWorkstationAuditListenerTest {
             PaperWorkstationPayloadCodec.encodeEnchant(
                 ItemStack.of(Material.DIAMOND_SWORD, 1),
                 30,
+                3,
                 2,
                 Map.of(sharpness, 4)
             )
         );
 
-        Assertions.assertEquals(30, payload.getIntOr("exp_level_cost", -1));
+        Assertions.assertEquals(30, payload.getIntOr("required_level", -1));
+        Assertions.assertEquals(3, payload.getIntOr("consumed_levels", -1));
         Assertions.assertEquals(2, payload.getIntOr("button", -1));
         var enchantments = payload.getListOrEmpty("enchantments");
         Assertions.assertEquals(1, enchantments.size());
@@ -126,6 +128,63 @@ class PaperWorkstationAuditListenerTest {
             enchantment.getString("type").orElseThrow()
         );
         Assertions.assertEquals(4, enchantment.getIntOr("level", -1));
+    }
+
+    @Test
+    void testAnvilConfirmationRequiresFirstInputConsumption() {
+        var before = new ItemStack[]{
+            ItemStack.of(Material.IRON_SWORD, 1),
+            ItemStack.of(Material.IRON_INGOT, 2)
+        };
+
+        Assertions.assertTrue(
+            PaperPlayerWorkstationAuditListener.anvilApplied(
+                before,
+                new ItemStack[]{null, ItemStack.of(Material.IRON_INGOT, 1)}
+            )
+        );
+        Assertions.assertFalse(
+            PaperPlayerWorkstationAuditListener.anvilApplied(before, before)
+        );
+    }
+
+    @Test
+    void testSmithConfirmationRequiresAllInputsToBeConsumed() {
+        var before = new ItemStack[]{
+            ItemStack.of(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 2),
+            ItemStack.of(Material.DIAMOND_SWORD, 1),
+            ItemStack.of(Material.NETHERITE_INGOT, 3)
+        };
+
+        Assertions.assertTrue(
+            PaperPlayerWorkstationAuditListener.smithApplied(
+                before,
+                new ItemStack[]{
+                    ItemStack.of(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 1),
+                    null,
+                    ItemStack.of(Material.NETHERITE_INGOT, 2)
+                }
+            )
+        );
+        Assertions.assertFalse(
+            PaperPlayerWorkstationAuditListener.smithApplied(before, before)
+        );
+    }
+
+    @Test
+    void testEnchantConfirmationRequiresActualItemMutation() {
+        Assertions.assertTrue(
+            PaperPlayerWorkstationAuditListener.enchantApplied(
+                new ItemStack[]{ItemStack.of(Material.BOOK, 1), ItemStack.of(Material.LAPIS_LAZULI, 3)},
+                new ItemStack[]{ItemStack.of(Material.ENCHANTED_BOOK, 1), ItemStack.of(Material.LAPIS_LAZULI, 2)}
+            )
+        );
+        Assertions.assertFalse(
+            PaperPlayerWorkstationAuditListener.enchantApplied(
+                new ItemStack[]{ItemStack.of(Material.DIAMOND_SWORD, 1), ItemStack.of(Material.LAPIS_LAZULI, 3)},
+                new ItemStack[]{ItemStack.of(Material.DIAMOND_SWORD, 1), ItemStack.of(Material.LAPIS_LAZULI, 3)}
+            )
+        );
     }
 
     private static Inventory inventory(
