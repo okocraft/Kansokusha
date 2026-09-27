@@ -11,6 +11,7 @@ import io.papermc.paper.command.brigadier.Commands;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.api.Kansokusha;
+import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
@@ -130,7 +131,12 @@ final class SearchCommand {
                     sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(sender::sendMessage, invocation.queryText(), page);
+                renderPage(
+                    sender::sendMessage,
+                    invocation.queryText(),
+                    page,
+                    sender.hasPermission(EventCommandSupport.PERMISSION)
+                );
             });
 
         return Command.SINGLE_SUCCESS;
@@ -200,13 +206,16 @@ final class SearchCommand {
     private static void renderPage(
         java.util.function.Consumer<Component> sendMessage,
         String query,
-        SearchPage page
+        SearchPage page,
+        boolean eventDetailsPermitted
     ) {
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
         } else {
             for (var event : page.events()) {
-                sendMessage.accept(SearchCommandMessages.RESULT.apply(formatEvent(event)));
+                sendMessage.accept(
+                    SearchCommandMessages.RESULT.apply(formatEvent(event, eventDetailsPermitted))
+                );
             }
         }
 
@@ -216,8 +225,8 @@ final class SearchCommand {
         }
     }
 
-    static Component formatEvent(SearchPage.Event event) {
-        return SearchCommandSupport.formatEvent(event);
+    static Component formatEvent(SearchPage.Event event, boolean eventDetailsPermitted) {
+        return SearchCommandSupport.formatEvent(event, eventDetailsPermitted);
     }
 
     static @Nullable Component paginationComponent(String query, SearchPage page) {

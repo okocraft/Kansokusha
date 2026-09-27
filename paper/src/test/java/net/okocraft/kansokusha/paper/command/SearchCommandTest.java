@@ -340,6 +340,7 @@ class SearchCommandTest {
         this.api.metadata = metadata(Set.of(BREAK));
         this.api.page = new SearchPage(List.of(event), Optional.empty(), Optional.empty());
         ConsoleCommandSender console = console(BREAK);
+        TestSources.grant(console, EventCommand.PERMISSION);
 
         Assertions.assertEquals(
             1,
@@ -369,6 +370,27 @@ class SearchCommandTest {
             .hoverEvent(HoverEvent.showText(Component.text(event().eventId().toString())));
 
         Mockito.verify(console).sendMessage(SearchCommandMessages.RESULT.apply(expected));
+    }
+
+    @Test
+    void testResultIsNotClickableWithoutEventCommandPermission() throws Exception {
+        var event = event();
+        this.api.metadata = metadata(Set.of(BREAK));
+        this.api.page = new SearchPage(List.of(event), Optional.empty(), Optional.empty());
+        ConsoleCommandSender console = console(BREAK);
+
+        Assertions.assertEquals(
+            1,
+            this.tester.execute(
+                TestSources.ofSenderOnly(console),
+                "search action block_break"
+            )
+        );
+
+        Mockito.verify(console).sendMessage(
+            SearchCommandMessages.RESULT.apply(SearchCommand.formatEvent(event, false))
+        );
+        Mockito.verify(console).hasPermission(EventCommand.PERMISSION);
     }
 
     @Test

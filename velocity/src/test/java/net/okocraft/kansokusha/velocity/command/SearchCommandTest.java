@@ -295,6 +295,7 @@ class SearchCommandTest {
             Optional.of(previous)
         );
         ConsoleCommandSource console = console(CHAT);
+        TestSources.grant(console, EventCommand.PERMISSION);
 
         Assertions.assertEquals(
             1,
@@ -341,6 +342,26 @@ class SearchCommandTest {
                 )
             ));
         Mockito.verify(console).sendMessage(expectedPagination);
+    }
+
+    @Test
+    void testResultIsNotClickableWithoutEventCommandPermission() throws Exception {
+        var event = event();
+        this.api.metadata = metadata(Set.of(CHAT));
+        this.api.page = new SearchPage(List.of(event), Optional.empty(), Optional.empty());
+        ConsoleCommandSource console = console(CHAT);
+
+        Assertions.assertEquals(
+            1,
+            this.tester.execute(console, "search action velocity_chat")
+        );
+
+        Mockito.verify(console).sendMessage(
+            SearchCommandMessages.RESULT.apply(
+                SearchCommandSupport.formatEvent(event, false)
+            )
+        );
+        Mockito.verify(console).hasPermission(EventCommand.PERMISSION);
     }
 
     @Test

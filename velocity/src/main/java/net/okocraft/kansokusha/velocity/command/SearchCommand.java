@@ -10,6 +10,7 @@ import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.okocraft.kansokusha.api.Kansokusha;
+import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
@@ -115,7 +116,12 @@ final class SearchCommand {
                     source.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source, invocation.queryText(), page);
+                renderPage(
+                    source,
+                    invocation.queryText(),
+                    page,
+                    source.hasPermission(EventCommandSupport.PERMISSION)
+                );
             });
 
         return Command.SINGLE_SUCCESS;
@@ -183,13 +189,20 @@ final class SearchCommand {
         });
     }
 
-    private static void renderPage(CommandSource source, String query, SearchPage page) {
+    private static void renderPage(
+        CommandSource source,
+        String query,
+        SearchPage page,
+        boolean eventDetailsPermitted
+    ) {
         if (page.events().isEmpty()) {
             source.sendMessage(SearchCommandMessages.NO_RESULTS.asComponent());
         } else {
             for (var event : page.events()) {
                 source.sendMessage(
-                    SearchCommandMessages.RESULT.apply(SearchCommandSupport.formatEvent(event))
+                    SearchCommandMessages.RESULT.apply(
+                        SearchCommandSupport.formatEvent(event, eventDetailsPermitted)
+                    )
                 );
             }
         }
