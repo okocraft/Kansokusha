@@ -204,7 +204,7 @@ class SearchCommandTest {
             this.tester.suggest(source, "search include ")
         );
         Assertions.assertEquals(
-            List.of("player", "entity", "block"),
+            List.of("block", "entity", "player"),
             this.tester.suggest(source, "search actor-kind ")
         );
         Assertions.assertEquals(
@@ -330,9 +330,10 @@ class SearchCommandTest {
             .append(Component.text(" | "))
             .append(Component.text("block_break"))
             .append(Component.text(" | "))
-            .append(actor)
-            .append(Component.text(" -> "))
-            .append(Component.text("minecraft:stone"))
+            .append(
+                actor.append(Component.text(" -> "))
+                    .append(Component.text("minecraft:stone"))
+            )
             .append(Component.text(" | "))
             .append(Component.text("@ minecraft:overworld 1 64 -2"))
             .append(Component.text(" | "))
