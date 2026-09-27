@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
@@ -414,6 +415,11 @@ class SearchCommandTest {
         Assertions.assertTrue(
             properties.stringPropertyNames().containsAll(
                 SearchCommandMessages.DEFINER.getCollectedMessages().keySet()
+            )
+        );
+        Assertions.assertTrue(
+            properties.stringPropertyNames().containsAll(
+                EventCommandMessages.DEFINER.getCollectedMessages().keySet()
             )
         );
     }

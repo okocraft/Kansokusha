@@ -15,14 +15,11 @@ import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -246,26 +243,6 @@ class EventCommandSupportTest {
             line.children().contains(textLabel)
         ));
         Assertions.assertEquals(5, EventCommandSupport.formatEvent(event).size());
-    }
-
-    @Test
-    void testJapaneseBundleContainsEveryEventMessageKey() throws Exception {
-        var properties = new Properties();
-        try (
-            var input = EventCommandSupportTest.class.getClassLoader()
-                .getResourceAsStream("languages/ja.properties")
-        ) {
-            Assertions.assertNotNull(input);
-            try (var reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
-                properties.load(reader);
-            }
-        }
-
-        Assertions.assertTrue(
-            properties.stringPropertyNames().containsAll(
-                EventCommandMessages.DEFINER.getCollectedMessages().keySet()
-            )
-        );
     }
 
     private static EventDetail minimalEvent(Key eventType) {
