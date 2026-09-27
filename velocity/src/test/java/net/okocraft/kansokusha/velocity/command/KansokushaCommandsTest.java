@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.velocity.command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.velocity.testsupport.CommandTester;
 import net.okocraft.kansokusha.velocity.testsupport.TestSources;
@@ -28,7 +29,11 @@ class KansokushaCommandsTest {
     @Test
     void testCommandDefinersAreExposedForLanguageLoading() {
         Assertions.assertEquals(
-            List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER),
+            List.of(
+                CommandMessages.DEFINER,
+                SearchCommandMessages.DEFINER,
+                EventCommandMessages.DEFINER
+            ),
             KansokushaCommands.getDefiners()
         );
     }

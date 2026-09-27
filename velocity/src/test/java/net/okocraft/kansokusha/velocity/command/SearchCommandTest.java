@@ -315,7 +315,9 @@ class SearchCommandTest {
             .append(Component.text(" | "))
             .append(Component.text("@ " + LOBBY.asString()))
             .append(Component.text(" | "))
-            .append(Component.text("\"hello world\""));
+            .append(Component.text("\"hello world\""))
+            .clickEvent(ClickEvent.runCommand("/kansokusha event " + event.eventId()))
+            .hoverEvent(HoverEvent.showText(Component.text(event.eventId().toString())));
 
         Mockito.verify(console).sendMessage(SearchCommandMessages.RESULT.apply(expectedLine));
 

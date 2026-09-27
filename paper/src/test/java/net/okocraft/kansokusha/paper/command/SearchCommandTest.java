@@ -363,7 +363,9 @@ class SearchCommandTest {
             .append(Component.text(" | "))
             .append(Component.text("@ minecraft:overworld 1 64 -2"))
             .append(Component.text(" | "))
-            .append(Component.text("\"/say hello world\""));
+            .append(Component.text("\"/say hello world\""))
+            .clickEvent(ClickEvent.runCommand("/kansokusha event " + event().eventId()))
+            .hoverEvent(HoverEvent.showText(Component.text(event().eventId().toString())));
 
         Mockito.verify(console).sendMessage(SearchCommandMessages.RESULT.apply(expected));
     }
