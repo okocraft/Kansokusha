@@ -5,9 +5,22 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import com.mojang.authlib.GameProfile;
+import net.minecraft.network.HashedStack;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.ContainerSynchronizer;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.RemoteSlot;
+import net.minecraft.world.inventory.SmithingMenu;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
+import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -19,7 +32,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Submits one event through the public API and verifies the API is closed after the server stops.
@@ -125,6 +140,8 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 "Unexpected Kansokusha inspection listener set: " + registeredInspection
             );
 
+            this.verifyContainerRemoteSyncBoundary();
+
             // Plugins are disabled before shutdown hooks run.
             Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> this.verifyAfterShutdown(api, submission), "kansokusha-external-api-fixture")
@@ -151,6 +168,113 @@ public final class ExternalPaperPlugin extends JavaPlugin {
             Files.writeString(this.resultFile, "success");
         } catch (Throwable failure) {
             this.writeFailure(failure);
+        }
+    }
+
+    private void verifyContainerRemoteSyncBoundary() {
+        var minecraftServer = ((CraftServer) Bukkit.getServer()).getServer();
+        var level = minecraftServer.overworld();
+        var player = new ServerPlayer(
+            minecraftServer,
+            level,
+            new GameProfile(
+                UUID.fromString("123e4567-e89b-12d3-a456-4266141745ff"),
+                "KansokushaFixture"
+            ),
+            ClientInformation.createDefault()
+        );
+
+        var inventory = player.getInventory();
+        var menus = List.<AbstractContainerMenu>of(
+            new CraftingMenu(100, inventory),
+            new AnvilMenu(101, inventory),
+            new SmithingMenu(102, inventory)
+        );
+
+        for (var menu : menus) {
+            var synchronizer = new RecordingContainerSynchronizer();
+            menu.setSynchronizer(synchronizer);
+            synchronizer.reset();
+
+            menu.suppressRemoteUpdates();
+            menu.setCarried(new ItemStack(Items.DIAMOND));
+            menu.broadcastChanges();
+            menu.broadcastChanges();
+
+            check(
+                synchronizer.carriedChanges == 0,
+                menu.getClass().getSimpleName()
+                    + " synchronized carried state during suppressed nested broadcast."
+            );
+
+            menu.resumeRemoteUpdates();
+            menu.broadcastChanges();
+
+            check(
+                synchronizer.carriedChanges == 1,
+                menu.getClass().getSimpleName()
+                    + " did not synchronize carried state at packet-end-style broadcast."
+            );
+        }
+    }
+
+    private static final class RecordingContainerSynchronizer implements ContainerSynchronizer {
+
+        private int carriedChanges;
+
+        @Override
+        public void sendInitialData(
+            AbstractContainerMenu container,
+            List<ItemStack> slotItems,
+            ItemStack carried,
+            int[] dataSlots
+        ) {
+        }
+
+        @Override
+        public void sendSlotChange(
+            AbstractContainerMenu container,
+            int slotIndex,
+            ItemStack itemStack
+        ) {
+        }
+
+        @Override
+        public void sendCarriedChange(AbstractContainerMenu container, ItemStack itemStack) {
+            this.carriedChanges++;
+        }
+
+        @Override
+        public void sendDataChange(AbstractContainerMenu container, int id, int value) {
+        }
+
+        @Override
+        public RemoteSlot createSlot() {
+            return new FixtureRemoteSlot();
+        }
+
+        private void reset() {
+            this.carriedChanges = 0;
+        }
+    }
+
+    private static final class FixtureRemoteSlot implements RemoteSlot {
+
+        private ItemStack remote = ItemStack.EMPTY;
+
+        @Override
+        public void force(ItemStack outgoing) {
+            this.remote = outgoing.copy();
+        }
+
+        @Override
+        public void receive(HashedStack incoming) {
+            this.remote = ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean matches(ItemStack local) {
+            return ItemStack.matches(this.remote, local);
         }
     }
 
