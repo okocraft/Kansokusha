@@ -16,7 +16,7 @@ import java.time.Clock;
 import java.util.Objects;
 
 /**
- * Records accepted player deaths without duplicating the full death-drop inventory payload.
+ * Records accepted player deaths together with a detached snapshot of carried equipment.
  */
 @ApiStatus.Internal
 @NotNullByDefault
@@ -50,6 +50,16 @@ public final class PaperPlayerDeathListener implements Listener {
         var player = event.getPlayer();
         var location = PaperPlayerStatePayloadCodec.snapshotLocation(player.getLocation());
         var damageEvent = player.getLastDamageCause();
+        var inventory = player.getInventory();
+        var storageSnapshot = inventory == null
+            ? new net.minecraft.nbt.ListTag()
+            : PaperContainerPayloadCodec.snapshotItems(inventory.getStorageContents());
+        var armorSnapshot = inventory == null
+            ? new net.minecraft.nbt.ListTag()
+            : PaperContainerPayloadCodec.snapshotItems(inventory.getArmorContents());
+        var offhandSnapshot = PaperContainerPayloadCodec.snapshotItem(
+            inventory == null ? null : inventory.getItemInOffHand()
+        );
         this.api.submit(new EventSubmission(
             EVENT_TYPE,
             PayloadGeneration.FIRST,
@@ -72,7 +82,10 @@ public final class PaperPlayerDeathListener implements Listener {
                 event.getNewTotalExp(),
                 event.getNewLevel(),
                 event.getKeepInventory(),
-                event.getKeepLevel()
+                event.getKeepLevel(),
+                storageSnapshot,
+                armorSnapshot,
+                offhandSnapshot
             )
         ));
     }
