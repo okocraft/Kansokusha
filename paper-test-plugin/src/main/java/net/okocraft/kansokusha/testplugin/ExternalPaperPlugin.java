@@ -31,6 +31,8 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         new NamespacedKey("fixture", "custom_event");
     private static final String BUILT_IN_LISTENER_PACKAGE =
         "net.okocraft.kansokusha.paper.builtin";
+    private static final String INSPECTION_LISTENER_PACKAGE =
+        "net.okocraft.kansokusha.paper.inspection";
 
     private static final Set<String> EXPECTED_BUILT_IN_LISTENERS = Set.of(
         "net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener",
@@ -75,6 +77,11 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         "net.okocraft.kansokusha.paper.builtin.PaperWhitelistChangeListener"
     );
 
+    private static final Set<String> EXPECTED_INSPECTION_LISTENERS = Set.of(
+        "net.okocraft.kansokusha.paper.inspection.InspectionInteractionListener",
+        "net.okocraft.kansokusha.paper.inspection.InspectionSessionListener"
+    );
+
     private Path resultFile;
 
     @Override
@@ -102,10 +109,16 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 "NamespacedKey conversion was not lossless."
             );
 
-            var registered = registeredBuiltInListenerClasses();
+            var registeredBuiltIns = registeredListenerClasses(BUILT_IN_LISTENER_PACKAGE);
             check(
-                registered.equals(EXPECTED_BUILT_IN_LISTENERS),
-                "Unexpected Kansokusha built-in listener set: " + registered
+                registeredBuiltIns.equals(EXPECTED_BUILT_IN_LISTENERS),
+                "Unexpected Kansokusha built-in listener set: " + registeredBuiltIns
+            );
+
+            var registeredInspection = registeredListenerClasses(INSPECTION_LISTENER_PACKAGE);
+            check(
+                registeredInspection.equals(EXPECTED_INSPECTION_LISTENERS),
+                "Unexpected Kansokusha inspection listener set: " + registeredInspection
             );
 
             // Plugins are disabled before shutdown hooks run.
@@ -137,14 +150,14 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         }
     }
 
-    private static Set<String> registeredBuiltInListenerClasses() {
+    private static Set<String> registeredListenerClasses(String packageName) {
         var result = new HashSet<String>();
         for (var handlers : HandlerList.getHandlerLists()) {
             for (var registered : handlers.getRegisteredListeners()) {
                 var listenerClass = registered.getListener().getClass();
                 if (
                     registered.getPlugin().getName().equals("Kansokusha") &&
-                        listenerClass.getPackageName().equals(BUILT_IN_LISTENER_PACKAGE)
+                        listenerClass.getPackageName().equals(packageName)
                 ) {
                     result.add(listenerClass.getName());
                 }

@@ -443,6 +443,25 @@ editor state や armor stand data のような状態オブジェクトでは、�
 - clone が必要な mutable value を共有しないこと
 - reset / unload 後に状態が残らないこと
 
+### 6.8 inspection mode
+
+Kansokusha の inspection mode は、unit test、packaged Paper integration、接続プレイヤーを使う
+manual smoke の責務を分けます。
+
+unit test では、session state、permission 再確認、left/right coordinate resolution、main/off
+hand suppression、damage/break cancellation、exact-position `SearchRequest`、event permission
+constraint、result rendering、full-history permission、latest-request-wins を検証します。
+これらを実サーバーだけのテストに寄せません。
+
+packaged Paper integration では、実 plugin lifecycle 上で inspection listener が登録されることと、
+artifact metadata が Folia support を宣言していることを検証します。connected player や world
+interaction を fixture 内の mock で再現して「実サーバー確認済み」とは扱いません。
+
+chest / door / button、block placement、bucket、creative instant break、air になった過去座標、
+rapid click の表示順、Folia region thread 上の並行 interaction は、実 world と connected
+player が必要なので `docs/verification/paper-folia-packaged-smoke.md` の manual smoke を
+authoritative な確認手順とします。
+
 ## 7. 失敗系と境界条件
 
 新しい振る舞いを追加した場合、正常系だけで完了とはしません。

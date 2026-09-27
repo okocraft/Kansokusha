@@ -98,6 +98,13 @@ tasks {
                 check(jar.getEntry("languages/ja.properties") != null) {
                     "Packaged Kansokusha jar must contain the bundled Japanese language file."
                 }
+                val pluginMetadata = jar.getInputStream(
+                    jar.getEntry("paper-plugin.yml")
+                        ?: error("Packaged Kansokusha jar must contain paper-plugin.yml.")
+                ).bufferedReader().use { it.readText() }
+                check(pluginMetadata.lineSequence().any { it.trim() == "folia-supported: true" }) {
+                    "Packaged Kansokusha jar must declare folia-supported: true."
+                }
             }
 
             val libraryDirectory = externalApiTestDirectory.get()

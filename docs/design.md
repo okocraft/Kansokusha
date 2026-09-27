@@ -140,6 +140,51 @@ Paper / Velocity の permission API に問い合わせ、Kansokusha 自身は wi
 payload field search、regex/fuzzy communication search、`server` filter、user-facing
 `payload_generation` / `expires_at` filter を実装しない。
 
+## Inspection mode
+
+Inspection mode は Paper / Folia の現在セッションだけに存在する read-only UI とする。状態は
+player object ではなく UUID を key にした concurrent map で保持し、logout / plugin disable /
+server restart で破棄する。`kansokusha.command.inspect` は自由検索の
+`kansokusha.command.search` と分離し、interaction 時にも再確認する。permission を失った
+player はその場で inspection session から除外する。
+
+block interaction は次の固定 semantics を持つ。
+
+- `LEFT_CLICK_BLOCK`: clicked block 自身の world / X / Y / Z。
+- `RIGHT_CLICK_BLOCK`: `clickedBlock.getRelative(clickedFace)` の world / X / Y / Z。
+- air click は lookup しない。
+- block 種類や held item による special-case は持たない。
+
+inspection 中の block click は world mutation ではなく調査操作なので、
+`PlayerInteractEvent` の interacted block と held item の両方を HIGHEST で deny する。
+main/off hand の両 event を抑止する一方、lookup target を生成するのは main hand だけとする。
+さらに `BlockDamageEvent` と `BlockBreakEvent` を HIGHEST で cancel し、creative instant
+break を含めて破壊を防ぐ。組み込み mutation listener は cancel-aware なので、inspection
+のために抑止された操作から `block_break` / `block_place` / `bucket_*` 等を新規記録しない。
+
+interaction callback から async completion まで Bukkit `Player` / `Block` / event object を
+保持しない。click 時点で player UUID と immutable な world key / integer X/Y/Z
+(`InspectionTarget`) に変換し、その値だけを search adapter へ渡す。
+
+Inspection lookup は専用 SQL や専用 grammar を持たず、既存 `EventSearchBackend` に typed
+`SearchRequest` を渡す。query は exact world/X/Y/Z、NEWEST、cursor なし、player default
+10 件で、target type や current block type では絞らない。閲覧可能 event type は
+`kansokusha.command.search.event.<event-type>` を既存 search metadata に適用した集合として
+backend constraints に渡すため、block event だけでなく、その座標を持つ custom event 等も同じ
+仕組みで表示できる。
+
+result row は既存 `SearchCommandSupport.formatEvent(...)` を再利用する。
+`kansokusha.command.event` があれば既存の `/kansokusha event <event-id>` click が付く。
+10 件を超える結果があり、かつ `kansokusha.command.search` を持つ player だけに
+`[View full history]` を表示し、
+`/kansokusha search position <world> <x> <y> <z>` へ引き渡す。inspection 専用 pagination
+は持たない。
+
+DB read は既存 backend の asynchronous storage path を使う。各 player の最新 inspection
+request を opaque token で置き換え、completion 時に token が現在値と一致する場合だけ表示する。
+これにより複数 query の終了順が click 順と逆転しても、古い target の結果は新しい target の後に
+表示されない。完了した token は map から除去し、player ごとの長期 state として保持しない。
+
 ## 保持期間
 
 - 保持期間は `config.yml` の `retention` で event type ごとに設定する。一覧にない event type は `retention.default` を使う。
