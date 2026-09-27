@@ -26,6 +26,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -100,6 +101,112 @@ class PaperAuditGapListenerTest {
         Assertions.assertEquals(
             3,
             PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("item_before")).getAmount()
+        );
+    }
+
+    @Test
+    void testCollectToCursorFromPlayerInventoryStillRecordsContainerTransaction() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperPlayerContainerTransactionListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            fixedClock()
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var player = player(world, 5, 65, 5);
+
+        var top = Mockito.mock(Inventory.class);
+        Mockito.when(top.getType()).thenReturn(InventoryType.CHEST);
+        Mockito.when(top.getSize()).thenReturn(27);
+        Mockito.when(top.getHolder()).thenReturn(null);
+        Mockito.when(top.getLocation()).thenReturn(new Location(world, 10.25, 64, -2.75));
+
+        var bottom = Mockito.mock(Inventory.class);
+        var view = Mockito.mock(InventoryView.class);
+        Mockito.when(view.getTopInventory()).thenReturn(top);
+
+        var event = Mockito.mock(InventoryClickEvent.class);
+        Mockito.when(event.getWhoClicked()).thenReturn(player);
+        Mockito.when(event.getView()).thenReturn(view);
+        Mockito.when(event.getClickedInventory()).thenReturn(bottom);
+        Mockito.when(event.getAction()).thenReturn(InventoryAction.COLLECT_TO_CURSOR);
+        Mockito.when(event.getClick()).thenReturn(org.bukkit.event.inventory.ClickType.DOUBLE_CLICK);
+        Mockito.when(event.getCurrentItem()).thenReturn(ItemStack.of(Material.DIAMOND, 1));
+        Mockito.when(event.getCursor()).thenReturn(ItemStack.of(Material.DIAMOND, 12));
+        Mockito.when(event.getSlot()).thenReturn(5);
+        Mockito.when(event.getRawSlot()).thenReturn(32);
+        Mockito.when(event.getHotbarButton()).thenReturn(-1);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        var submission = onlySubmission(api);
+        Assertions.assertEquals(PaperPlayerContainerTransactionListener.EVENT_TYPE, submission.eventType());
+        Assertions.assertEquals(Key.key("minecraft", "diamond"), submission.targetType());
+
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("player", payload.getString("clicked_scope").orElseThrow());
+        Assertions.assertEquals("mixed", payload.getString("transfer_direction").orElseThrow());
+        Assertions.assertFalse(payload.contains("exchange_item"));
+    }
+
+    @Test
+    void testHotbarSwapIntoEmptyContainerSlotCapturesExchangeItem() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperPlayerContainerTransactionListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            fixedClock()
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var player = player(world, 5, 65, 5);
+        var playerInventory = Mockito.mock(PlayerInventory.class);
+        Mockito.when(playerInventory.getItem(2)).thenReturn(ItemStack.of(Material.DIAMOND, 4));
+        Mockito.when(player.getInventory()).thenReturn(playerInventory);
+
+        var top = Mockito.mock(Inventory.class);
+        Mockito.when(top.getType()).thenReturn(InventoryType.CHEST);
+        Mockito.when(top.getSize()).thenReturn(27);
+        Mockito.when(top.getHolder()).thenReturn(null);
+        Mockito.when(top.getLocation()).thenReturn(new Location(world, 10.25, 64, -2.75));
+
+        var view = Mockito.mock(InventoryView.class);
+        Mockito.when(view.getTopInventory()).thenReturn(top);
+
+        var event = Mockito.mock(InventoryClickEvent.class);
+        Mockito.when(event.getWhoClicked()).thenReturn(player);
+        Mockito.when(event.getView()).thenReturn(view);
+        Mockito.when(event.getClickedInventory()).thenReturn(top);
+        Mockito.when(event.getAction()).thenReturn(InventoryAction.HOTBAR_SWAP);
+        Mockito.when(event.getClick()).thenReturn(org.bukkit.event.inventory.ClickType.NUMBER_KEY);
+        Mockito.when(event.getCurrentItem()).thenReturn(ItemStack.empty());
+        Mockito.when(event.getCursor()).thenReturn(ItemStack.empty());
+        Mockito.when(event.getSlot()).thenReturn(7);
+        Mockito.when(event.getRawSlot()).thenReturn(7);
+        Mockito.when(event.getHotbarButton()).thenReturn(2);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        var submission = onlySubmission(api);
+        Assertions.assertEquals(Key.key("minecraft", "diamond"), submission.targetType());
+
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals("exchange", payload.getString("transfer_direction").orElseThrow());
+        Assertions.assertEquals(2, payload.getIntOr("hotbar_button", -1));
+        Assertions.assertEquals(
+            4,
+            PaperItemStackPayloadCodec.decode(
+                payload.getCompoundOrEmpty("exchange_item")
+            ).getAmount()
+        );
+        Assertions.assertTrue(
+            PaperItemStackPayloadCodec.decode(
+                payload.getCompoundOrEmpty("item_before")
+            ).isEmpty()
+        );
+        Assertions.assertTrue(
+            PaperItemStackPayloadCodec.decode(
+                payload.getCompoundOrEmpty("cursor")
+            ).isEmpty()
         );
     }
 
