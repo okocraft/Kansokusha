@@ -2,11 +2,13 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import net.kyori.adventure.key.Key;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.ScaffoldingBlock;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
@@ -14,6 +16,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.bukkit.Material;
 import org.bukkit.TreeType;
 import org.bukkit.World;
+import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
@@ -34,7 +37,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 
 class PaperNaturalBlockChangeListenerTest {
 
@@ -46,7 +48,7 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
-    void testNeighbourShapeDestroyRecordsAttachmentBreak() throws Exception {
+    void testUnsupportedWallSignDestroyRecordsSupportLoss() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperNaturalBlockChangeListener.register(
             api,
@@ -55,14 +57,16 @@ class PaperNaturalBlockChangeListenerTest {
         );
         var world = PaperBlockEventTestSupport.world();
         var before = Blocks.OAK_WALL_SIGN.defaultBlockState();
-        var block = PaperBlockEventTestSupport.block(
-            world, 8, 64, 9, before, Material.OAK_WALL_SIGN
-        );
+        var level = Mockito.mock(LevelAccessor.class);
+        Mockito.when(level.getBlockState(Mockito.any(BlockPos.class)))
+            .thenReturn(Blocks.AIR.defaultBlockState());
+        var block = craftBlock(world, level, new BlockPos(8, 64, 9), before);
+
         var event = Mockito.mock(BlockDestroyEvent.class);
         Mockito.when(event.getBlock()).thenReturn(block);
         Mockito.when(event.getNewState()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
 
-        listener.recordPhysicsDestroy(event, true);
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -75,7 +79,7 @@ class PaperNaturalBlockChangeListenerTest {
             naturalPayload(
                 before,
                 Blocks.AIR.defaultBlockState(),
-                "physics_destroy",
+                "support_loss",
                 null,
                 null
             ),
@@ -84,52 +88,26 @@ class PaperNaturalBlockChangeListenerTest {
     }
 
     @Test
-    void testNonNeighbourBlockDestroyIsIgnored() {
+    void testSupportedWallSignDestroyIsIgnored() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperNaturalBlockChangeListener.register(
             api,
             PaperBlockEventTestSupport.SERVER_KEY
         );
-        var event = Mockito.mock(BlockDestroyEvent.class);
+        var world = PaperBlockEventTestSupport.world();
+        var before = Blocks.OAK_WALL_SIGN.defaultBlockState();
+        var level = Mockito.mock(LevelAccessor.class);
+        Mockito.when(level.getBlockState(Mockito.any(BlockPos.class)))
+            .thenReturn(Blocks.STONE.defaultBlockState());
+        var block = craftBlock(world, level, new BlockPos(9, 64, 9), before);
 
-        listener.recordPhysicsDestroy(event, false);
+        var event = Mockito.mock(BlockDestroyEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+
+        PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
-        Mockito.verify(event, Mockito.never()).getBlock();
-    }
-
-    @Test
-    void testNeighbourShapeDestroyStackRequiresBothFrames() {
-        var neighbor = Mockito.mock(StackWalker.StackFrame.class);
-        Mockito.when(neighbor.getClassName())
-            .thenReturn("net.minecraft.world.level.redstone.NeighborUpdater");
-        Mockito.when(neighbor.getMethodName()).thenReturn("executeShapeUpdate");
-
-        var updateOrDestroy = Mockito.mock(StackWalker.StackFrame.class);
-        Mockito.when(updateOrDestroy.getClassName())
-            .thenReturn("net.minecraft.world.level.block.Block");
-        Mockito.when(updateOrDestroy.getMethodName()).thenReturn("updateOrDestroy");
-
-        var piston = Mockito.mock(StackWalker.StackFrame.class);
-        Mockito.when(piston.getClassName())
-            .thenReturn("net.minecraft.world.level.block.piston.PistonMovingBlockEntity");
-        Mockito.when(piston.getMethodName()).thenReturn("finalTick");
-
-        Assertions.assertTrue(
-            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
-                List.of(neighbor, updateOrDestroy).stream()
-            )
-        );
-        Assertions.assertFalse(
-            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
-                List.of(updateOrDestroy, piston).stream()
-            )
-        );
-        Assertions.assertFalse(
-            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
-                List.of(neighbor).stream()
-            )
-        );
+        Mockito.verify(event, Mockito.never()).getNewState();
     }
 
     @Test
@@ -476,6 +454,24 @@ class PaperNaturalBlockChangeListenerTest {
         var newState = PaperBlockEventTestSupport.state(world, block, x, 64, 0, after);
         Mockito.when(event.getBlock()).thenReturn(block);
         Mockito.when(event.getNewState()).thenReturn(newState);
+    }
+
+    private static CraftBlock craftBlock(
+        World world,
+        LevelAccessor level,
+        BlockPos position,
+        BlockState state
+    ) {
+        var block = Mockito.mock(CraftBlock.class);
+        Mockito.when(block.getWorld()).thenReturn(world);
+        Mockito.when(block.getLevel()).thenReturn(level);
+        Mockito.when(block.getPosition()).thenReturn(position);
+        Mockito.when(block.getBlockState()).thenReturn(state);
+        Mockito.when(block.getBlockData()).thenReturn(state.asBlockData());
+        Mockito.when(block.getX()).thenReturn(position.getX());
+        Mockito.when(block.getY()).thenReturn(position.getY());
+        Mockito.when(block.getZ()).thenReturn(position.getZ());
+        return block;
     }
 
     private static CompoundTag naturalPayload(
