@@ -16,6 +16,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.Locale;
@@ -126,7 +127,7 @@ public final class PaperEntityLifecycleAuditListener implements Listener {
 
     private static boolean shouldRecordDeath(
         org.bukkit.entity.LivingEntity entity,
-        org.bukkit.entity.Entity causingEntity
+        @Nullable org.bukkit.entity.Entity causingEntity
     ) {
         if (causingEntity instanceof Player) {
             return true;
