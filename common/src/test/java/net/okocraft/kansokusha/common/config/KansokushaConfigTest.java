@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.Optional;
 
 class KansokushaConfigTest {
@@ -23,6 +24,7 @@ class KansokushaConfigTest {
         Assertions.assertEquals(1_000, config.batchSize());
         Assertions.assertEquals(Duration.ofSeconds(1), config.flushInterval());
         Assertions.assertEquals(Duration.ofHours(1), config.cleanupInterval());
+        Assertions.assertEquals(ZoneId.of("UTC"), config.searchTimeZone());
 
         var retention = config.retention();
         Assertions.assertEquals(Duration.ofDays(180), retention.durationOf(Key.key("kansokusha", "block_break")));
@@ -39,6 +41,7 @@ class KansokushaConfigTest {
             batch-size: 2
             flush-interval: PT0.5S
             cleanup-interval: PT5M
+            search-time-zone: Asia/Tokyo
             retention:
               default: P1D
               policies:
@@ -55,6 +58,7 @@ class KansokushaConfigTest {
         Assertions.assertEquals(2, config.batchSize());
         Assertions.assertEquals(Duration.ofMillis(500), config.flushInterval());
         Assertions.assertEquals(Duration.ofMinutes(5), config.cleanupInterval());
+        Assertions.assertEquals(ZoneId.of("Asia/Tokyo"), config.searchTimeZone());
         Assertions.assertEquals(Duration.ofDays(365), config.retention().durationOf(Key.key("example", "important")));
         Assertions.assertEquals(Duration.ofDays(1), config.retention().durationOf(Key.key("example", "other")));
     }
@@ -66,6 +70,11 @@ class KansokushaConfigTest {
         assertInvalid(dir, "flush-interval", config("''", "1", "1s", ""));
         assertInvalid(dir, "at least 1 millisecond", config("''", "1", "PT0S", ""));
         assertInvalid(dir, "server-key", config("lobby", "1", "PT1S", ""));
+        assertInvalid(
+            dir,
+            "search-time-zone",
+            config("''", "1", "PT1S", "").replace("cleanup-interval: PT1H", "cleanup-interval: PT1H\nsearch-time-zone: Not/AZone")
+        );
         assertInvalid(dir, "more than one retention policy", config("''", "1", "PT1S", """
               policies:
                 a:
