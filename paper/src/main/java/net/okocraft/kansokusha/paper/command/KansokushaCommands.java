@@ -5,6 +5,7 @@ import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -14,7 +15,11 @@ import java.util.List;
 public final class KansokushaCommands {
 
     public static List<DefaultMessageDefiner> getDefiners() {
-        return List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER);
+        return List.of(
+            CommandMessages.DEFINER,
+            SearchCommandMessages.DEFINER,
+            EventCommandMessages.DEFINER
+        );
     }
 
     public static void register(Commands commands) {
@@ -26,6 +31,7 @@ public final class KansokushaCommands {
             .requires(source -> source.getSender().hasPermission("kansokusha.command"))
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand())
+            .then(EventCommand.createEventCommand())
             .build();
     }
 

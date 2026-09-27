@@ -199,7 +199,9 @@ public final class SearchCommandSupport {
             }
             result = result.append(parts.get(index));
         }
-        return result;
+        return result
+            .clickEvent(ClickEvent.runCommand("/kansokusha event " + event.eventId()))
+            .hoverEvent(HoverEvent.showText(Component.text(event.eventId().toString())));
     }
 
     public static @Nullable Component paginationComponent(String query, SearchPage page) {

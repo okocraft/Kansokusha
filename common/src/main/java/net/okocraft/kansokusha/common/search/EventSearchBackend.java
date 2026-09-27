@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -26,6 +27,14 @@ public interface EventSearchBackend {
      * Executes a typed search asynchronously through the runtime's storage-owned read path.
      */
     CompletableFuture<SearchPage> search(SearchRequest request);
+
+    /**
+     * Looks up one persisted event by its internal UUID without exposing this operation publicly.
+     */
+    default CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return CompletableFuture.completedFuture(Optional.empty());
+    }
 
     /**
      * Returns historical values used for platform completion and event permission scoping.

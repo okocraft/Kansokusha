@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -227,6 +228,12 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         Objects.requireNonNull(request, "request");
         // Deliberately do not flush the write queue here. Search only sees committed storage state.
         return this.queryStorage(() -> this.storage.search(request));
+    }
+
+    @Override
+    public CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return this.queryStorage(() -> this.storage.findEvent(eventId));
     }
 
     @Override
