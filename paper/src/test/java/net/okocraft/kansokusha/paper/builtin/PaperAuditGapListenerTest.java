@@ -177,8 +177,9 @@ class PaperAuditGapListenerTest {
 
         var naturalSource = Mockito.mock(DamageSource.class);
         Mockito.when(naturalSource.getDamageType()).thenReturn(DamageType.FALL);
+        var naturallyDyingZombie = zombie(world);
         var natural = Mockito.mock(EntityDeathEvent.class);
-        Mockito.when(natural.getEntity()).thenReturn(zombie(world));
+        Mockito.when(natural.getEntity()).thenReturn(naturallyDyingZombie);
         Mockito.when(natural.getDamageSource()).thenReturn(naturalSource);
 
         PaperListenerTestSupport.fire(listener, natural);
