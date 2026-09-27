@@ -409,16 +409,18 @@ final class SearchCommand {
             return new ParsedInvocation("", Optional.empty());
         }
 
-        var lastSpace = input.lastIndexOf(' ');
-        var lastToken = lastSpace < 0 ? input : input.substring(lastSpace + 1);
-        if (!lastToken.startsWith(CURSOR_PREFIX)) {
+        var lastToken = SearchQueryParser.trailingToken(input).orElseThrow();
+        if (
+            lastToken.quotedOrEscaped()
+                || !lastToken.value().startsWith(CURSOR_PREFIX)
+        ) {
             return new ParsedInvocation(input, Optional.empty());
         }
 
-        var query = lastSpace < 0 ? "" : input.substring(0, lastSpace).stripTrailing();
+        var query = input.substring(0, lastToken.start()).stripTrailing();
         return new ParsedInvocation(
             query,
-            Optional.of(parseCursor(lastToken.substring(CURSOR_PREFIX.length())))
+            Optional.of(parseCursor(lastToken.value().substring(CURSOR_PREFIX.length())))
         );
     }
 
