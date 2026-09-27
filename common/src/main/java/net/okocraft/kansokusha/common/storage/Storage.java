@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -27,6 +28,10 @@ public interface Storage extends AutoCloseable {
     List<UUID> findEventIdsContaining(String literal) throws SQLException;
 
     SearchPage search(SearchRequest request) throws SQLException;
+
+    default SearchMetadata searchMetadata() throws SQLException {
+        return SearchMetadata.empty();
+    }
 
     int deleteExpired(Instant now) throws SQLException;
 

@@ -45,6 +45,7 @@ public record SearchPage(
         OptionalInt z,
         Optional<ActorKind> actorKind,
         Optional<UUID> actorUuid,
+        Optional<String> actorName,
         Optional<Key> actorType,
         Optional<Key> targetType,
         Optional<String> searchText
@@ -61,6 +62,7 @@ public record SearchPage(
             Objects.requireNonNull(z, "z");
             Objects.requireNonNull(actorKind, "actorKind");
             Objects.requireNonNull(actorUuid, "actorUuid");
+            Objects.requireNonNull(actorName, "actorName");
             Objects.requireNonNull(actorType, "actorType");
             Objects.requireNonNull(targetType, "targetType");
             Objects.requireNonNull(searchText, "searchText");

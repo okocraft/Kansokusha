@@ -93,6 +93,49 @@ class DuckDbEventSearchTest {
     }
 
     @Test
+    void testHistoricalSearchMetadataUsesPersistedDistinctValues(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(
+                queued(event(
+                    AUDIT,
+                    NOW,
+                    OVERWORLD,
+                    new BlockPosition(10, 64, 20),
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null),
+                queued(event(
+                    OTHER,
+                    NOW.plusSeconds(1),
+                    NETHER,
+                    new BlockPosition(1, 70, 2),
+                    new EntityActor(ENTITY, Key.key("minecraft", "creeper")),
+                    DIRT
+                ), null)
+            ));
+
+            var metadata = storage.searchMetadata();
+            Assertions.assertEquals(Set.of(AUDIT, OTHER), metadata.eventTypes());
+
+            var audit = metadata.retainEventTypes(Set.of(AUDIT));
+            Assertions.assertEquals(Set.of(OVERWORLD), audit.worlds());
+            Assertions.assertTrue(audit.actorTypes().isEmpty());
+            Assertions.assertEquals(Set.of(STONE), audit.targetTypes());
+
+            var other = metadata.retainEventTypes(Set.of(OTHER));
+            Assertions.assertEquals(Set.of(NETHER), other.worlds());
+            Assertions.assertEquals(
+                Set.of(Key.key("minecraft", "creeper")),
+                other.actorTypes()
+            );
+            Assertions.assertEquals(Set.of(DIRT), other.targetTypes());
+
+            Assertions.assertEquals(Set.of(OVERWORLD, NETHER), metadata.worlds());
+            Assertions.assertEquals(Set.of(STONE, DIRT), metadata.targetTypes());
+        }
+    }
+
+    @Test
     void testTypedConditionsProjectionAndPermissionScope(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(
@@ -185,6 +228,7 @@ class DuckDbEventSearchTest {
             ));
             Assertions.assertEquals(1, shared.events().size());
             Assertions.assertEquals(PLAYER_TWO, shared.events().getFirst().actorUuid().orElseThrow());
+            Assertions.assertEquals(Optional.of("SharedName"), shared.events().getFirst().actorName());
 
             storage.append(List.of(queuedLogin(
                 PLAYER_ONE,

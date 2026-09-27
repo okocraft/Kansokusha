@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
 import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
@@ -30,12 +31,15 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -465,6 +469,70 @@ public final class DuckDbStorageImpl implements Storage {
     @Override
     public SearchPage search(SearchRequest request) throws SQLException {
         return DuckDbEventSearch.search(this.connection, request);
+    }
+
+    @Override
+    public SearchMetadata searchMetadata() throws SQLException {
+        var eventTypes = new LinkedHashSet<Key>();
+        var worlds = new LinkedHashMap<Key, LinkedHashSet<Key>>();
+        var actorTypes = new LinkedHashMap<Key, LinkedHashSet<Key>>();
+        var targetTypes = new LinkedHashMap<Key, LinkedHashSet<Key>>();
+
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery("""
+                 SELECT event_type, category, value
+                 FROM (
+                     SELECT DISTINCT event_type, 'event' AS category, NULL AS value FROM events
+                     UNION
+                     SELECT DISTINCT event_type, 'world', world
+                     FROM events
+                     WHERE world IS NOT NULL
+                     UNION
+                     SELECT DISTINCT event_type, 'actor', actor_type
+                     FROM events
+                     WHERE actor_type IS NOT NULL
+                     UNION
+                     SELECT DISTINCT event_type, 'target', target_type
+                     FROM events
+                     WHERE target_type IS NOT NULL
+                 )
+                 ORDER BY event_type, category, value
+                 """)) {
+            while (rows.next()) {
+                var eventType = Key.key(rows.getString("event_type"));
+                eventTypes.add(eventType);
+                var value = rows.getString("value");
+                switch (rows.getString("category")) {
+                    case "event" -> {
+                        // The event row keeps types with no world/actor/target metadata visible.
+                    }
+                    case "world" -> metadataValues(worlds, eventType).add(Key.key(value));
+                    case "actor" -> metadataValues(actorTypes, eventType).add(Key.key(value));
+                    case "target" -> metadataValues(targetTypes, eventType).add(Key.key(value));
+                    default -> throw new SQLException("Unexpected search metadata category.");
+                }
+            }
+        }
+
+        var events = new LinkedHashMap<Key, SearchMetadata.EventValues>();
+        for (var eventType : eventTypes) {
+            events.put(
+                eventType,
+                new SearchMetadata.EventValues(
+                    Set.copyOf(worlds.getOrDefault(eventType, new LinkedHashSet<>())),
+                    Set.copyOf(actorTypes.getOrDefault(eventType, new LinkedHashSet<>())),
+                    Set.copyOf(targetTypes.getOrDefault(eventType, new LinkedHashSet<>()))
+                )
+            );
+        }
+        return new SearchMetadata(events);
+    }
+
+    private static LinkedHashSet<Key> metadataValues(
+        Map<Key, LinkedHashSet<Key>> values,
+        Key eventType
+    ) {
+        return values.computeIfAbsent(eventType, ignored -> new LinkedHashSet<>());
     }
 
     @Override

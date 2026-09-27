@@ -38,6 +38,45 @@ public final class SearchQueryParser {
 
     private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([mhdw])");
 
+    private static final List<String> MODIFIER_SUGGESTIONS = List.of(
+        "user",
+        "action",
+        "time",
+        "radius",
+        "include",
+        "target",
+        "filter",
+        "actor-uuid",
+        "actor-kind",
+        "actor-type",
+        "world",
+        "position",
+        "around",
+        "from",
+        "to",
+        "exclude",
+        "order",
+        "limit"
+    );
+    private static final List<String> EXCLUDE_SUGGESTIONS = List.of(
+        "user",
+        "action",
+        "time",
+        "radius",
+        "include",
+        "target",
+        "filter",
+        "actor-uuid",
+        "actor-kind",
+        "actor-type",
+        "world",
+        "position",
+        "around"
+    );
+    private static final List<String> ACTOR_KIND_SUGGESTIONS =
+        List.of("player", "entity", "block");
+    private static final List<String> ORDER_SUGGESTIONS = List.of("newest", "oldest");
+
     private SearchQueryParser() {
     }
 
@@ -146,6 +185,145 @@ public final class SearchQueryParser {
         } catch (IllegalArgumentException e) {
             throw error(e.getMessage(), e);
         }
+    }
+
+    /**
+     * Interprets a partially typed query for platform completion without duplicating the query
+     * grammar in a platform module.
+     */
+    public static Completion completion(String input, Clock clock, ZoneId timezone) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(timezone, "timezone");
+
+        var partial = tokenizeForCompletion(input);
+        CompletionKind kind;
+        try {
+            parse(partial.completedArguments(), clock, timezone);
+            kind = CompletionKind.MODIFIER;
+        } catch (SearchQueryParseException e) {
+            kind = completionKind(e.getMessage());
+        }
+
+        return new Completion(
+            kind,
+            partial.prefix(),
+            partial.replacementStart(),
+            staticSuggestions(kind)
+        );
+    }
+
+    private static CompletionKind completionKind(String message) {
+        if (message == null || !message.startsWith("missing ")) {
+            return CompletionKind.NONE;
+        }
+
+        return switch (message.substring("missing ".length())) {
+            case "user", "exclude user" -> CompletionKind.USER;
+            case "action", "exclude action" -> CompletionKind.ACTION;
+            case "include", "target", "exclude include", "exclude target" ->
+                CompletionKind.TARGET;
+            case "actor-kind", "exclude actor-kind" -> CompletionKind.ACTOR_KIND;
+            case "actor-type", "exclude actor-type" -> CompletionKind.ACTOR_TYPE;
+            case "world", "exclude world" -> CompletionKind.WORLD;
+            case "order" -> CompletionKind.ORDER;
+            case "exclude condition" -> CompletionKind.EXCLUDE_CONDITION;
+            default -> CompletionKind.NONE;
+        };
+    }
+
+    private static List<String> staticSuggestions(CompletionKind kind) {
+        return switch (kind) {
+            case MODIFIER -> MODIFIER_SUGGESTIONS;
+            case EXCLUDE_CONDITION -> EXCLUDE_SUGGESTIONS;
+            case ACTOR_KIND -> ACTOR_KIND_SUGGESTIONS;
+            case ORDER -> ORDER_SUGGESTIONS;
+            default -> List.of();
+        };
+    }
+
+    private static CompletionTokens tokenizeForCompletion(String input) {
+        var scanned = scanTokens(input, true);
+        if (!scanned.tokenInProgress()) {
+            return new CompletionTokens(
+                scanned.tokens().stream().map(InputToken::value).toList(),
+                "",
+                input.length()
+            );
+        }
+
+        var current = scanned.tokens().getLast();
+        return new CompletionTokens(
+            scanned.tokens().subList(0, scanned.tokens().size() - 1)
+                .stream()
+                .map(InputToken::value)
+                .toList(),
+            current.value(),
+            current.start()
+        );
+    }
+
+    /**
+     * Returns the final query token using the exact quote and escape rules used by {@link #parse}.
+     */
+    public static Optional<InputToken> trailingToken(String input) {
+        Objects.requireNonNull(input, "input");
+        var scanned = scanTokens(input, false);
+        return scanned.tokens().isEmpty()
+            ? Optional.empty()
+            : Optional.of(scanned.tokens().getLast());
+    }
+
+    public enum CompletionKind {
+        MODIFIER,
+        USER,
+        ACTION,
+        TARGET,
+        ACTOR_KIND,
+        ACTOR_TYPE,
+        WORLD,
+        ORDER,
+        EXCLUDE_CONDITION,
+        NONE
+    }
+
+    public record Completion(
+        CompletionKind kind,
+        String prefix,
+        int replacementStart,
+        List<String> staticSuggestions
+    ) {
+
+        public Completion {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(prefix, "prefix");
+            staticSuggestions = List.copyOf(staticSuggestions);
+        }
+    }
+
+    private record CompletionTokens(
+        List<String> completedArguments,
+        String prefix,
+        int replacementStart
+    ) {
+    }
+
+    public record InputToken(
+        String value,
+        int start,
+        int end,
+        boolean quotedOrEscaped
+    ) {
+
+        public InputToken {
+            Objects.requireNonNull(value, "value");
+        }
+    }
+
+    private record ScanResult(
+        List<InputToken> tokens,
+        boolean tokenInProgress
+    ) {
     }
 
     private static void parseExcluded(
@@ -356,23 +534,35 @@ public final class SearchQueryParser {
     }
 
     static List<String> tokenize(String input) {
-        var tokens = new ArrayList<String>();
+        return scanTokens(input, false).tokens().stream()
+            .map(InputToken::value)
+            .toList();
+    }
+
+    private static ScanResult scanTokens(String input, boolean tolerateIncomplete) {
+        var tokens = new ArrayList<InputToken>();
         var token = new StringBuilder();
         var tokenStarted = false;
+        var tokenStart = input.length();
+        var quotedOrEscaped = false;
         var quote = '\0';
         var escaping = false;
 
         for (var index = 0; index < input.length(); index++) {
             var character = input.charAt(index);
+            if (!tokenStarted && !Character.isWhitespace(character)) {
+                tokenStarted = true;
+                tokenStart = index;
+            }
+
             if (escaping) {
                 token.append(character);
-                tokenStarted = true;
                 escaping = false;
                 continue;
             }
             if (character == '\\') {
                 escaping = true;
-                tokenStarted = true;
+                quotedOrEscaped = true;
                 continue;
             }
             if (quote != '\0') {
@@ -381,36 +571,49 @@ public final class SearchQueryParser {
                 } else {
                     token.append(character);
                 }
-                tokenStarted = true;
                 continue;
             }
             if (character == '"' || character == '\'') {
                 quote = character;
-                tokenStarted = true;
+                quotedOrEscaped = true;
                 continue;
             }
             if (Character.isWhitespace(character)) {
                 if (tokenStarted) {
-                    tokens.add(token.toString());
+                    tokens.add(new InputToken(
+                        token.toString(),
+                        tokenStart,
+                        index,
+                        quotedOrEscaped
+                    ));
                     token.setLength(0);
                     tokenStarted = false;
+                    tokenStart = input.length();
+                    quotedOrEscaped = false;
                 }
                 continue;
             }
             token.append(character);
-            tokenStarted = true;
         }
 
         if (escaping) {
-            throw error("query ends with an incomplete escape");
+            if (!tolerateIncomplete) {
+                throw error("query ends with an incomplete escape");
+            }
+            token.append('\\');
         }
-        if (quote != '\0') {
+        if (quote != '\0' && !tolerateIncomplete) {
             throw error("query contains an unterminated quote");
         }
         if (tokenStarted) {
-            tokens.add(token.toString());
+            tokens.add(new InputToken(
+                token.toString(),
+                tokenStart,
+                input.length(),
+                quotedOrEscaped
+            ));
         }
-        return List.copyOf(tokens);
+        return new ScanResult(List.copyOf(tokens), tokenStarted);
     }
 
     private static SearchQueryParseException error(String message) {
