@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
@@ -33,6 +34,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 class PaperNaturalBlockChangeListenerTest {
 
@@ -41,6 +43,93 @@ class PaperNaturalBlockChangeListenerTest {
     @BeforeAll
     static void bootstrapMinecraft() {
         PaperBlockEventTestSupport.bootstrapMinecraft();
+    }
+
+    @Test
+    void testNeighbourShapeDestroyRecordsAttachmentBreak() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
+        );
+        var world = PaperBlockEventTestSupport.world();
+        var before = Blocks.OAK_WALL_SIGN.defaultBlockState();
+        var block = PaperBlockEventTestSupport.block(
+            world, 8, 64, 9, before, Material.OAK_WALL_SIGN
+        );
+        var event = Mockito.mock(BlockDestroyEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(block);
+        Mockito.when(event.getNewState()).thenReturn(Blocks.AIR.defaultBlockState().asBlockData());
+
+        listener.recordPhysicsDestroy(event, true);
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(PaperNaturalBlockChangeListener.EVENT_TYPE, submission.eventType());
+        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt());
+        Assertions.assertEquals(new BlockPosition(8, 64, 9), submission.position());
+        Assertions.assertNull(submission.actor());
+        Assertions.assertEquals(Key.key("minecraft", "oak_wall_sign"), submission.targetType());
+        Assertions.assertEquals(
+            naturalPayload(
+                before,
+                Blocks.AIR.defaultBlockState(),
+                "physics_destroy",
+                null,
+                null
+            ),
+            PaperPayloadNbtCodec.decode(submission.payload())
+        );
+    }
+
+    @Test
+    void testNonNeighbourBlockDestroyIsIgnored() {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperNaturalBlockChangeListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY
+        );
+        var event = Mockito.mock(BlockDestroyEvent.class);
+
+        listener.recordPhysicsDestroy(event, false);
+
+        Assertions.assertTrue(api.submissions.isEmpty());
+        Mockito.verify(event, Mockito.never()).getBlock();
+    }
+
+    @Test
+    void testNeighbourShapeDestroyStackRequiresBothFrames() {
+        var neighbor = Mockito.mock(StackWalker.StackFrame.class);
+        Mockito.when(neighbor.getClassName())
+            .thenReturn("net.minecraft.world.level.redstone.NeighborUpdater");
+        Mockito.when(neighbor.getMethodName()).thenReturn("executeShapeUpdate");
+
+        var updateOrDestroy = Mockito.mock(StackWalker.StackFrame.class);
+        Mockito.when(updateOrDestroy.getClassName())
+            .thenReturn("net.minecraft.world.level.block.Block");
+        Mockito.when(updateOrDestroy.getMethodName()).thenReturn("updateOrDestroy");
+
+        var piston = Mockito.mock(StackWalker.StackFrame.class);
+        Mockito.when(piston.getClassName())
+            .thenReturn("net.minecraft.world.level.block.piston.PistonMovingBlockEntity");
+        Mockito.when(piston.getMethodName()).thenReturn("finalTick");
+
+        Assertions.assertTrue(
+            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
+                List.of(neighbor, updateOrDestroy).stream()
+            )
+        );
+        Assertions.assertFalse(
+            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
+                List.of(updateOrDestroy, piston).stream()
+            )
+        );
+        Assertions.assertFalse(
+            PaperNaturalBlockChangeListener.isNeighbourShapeDestroy(
+                List.of(neighbor).stream()
+            )
+        );
     }
 
     @Test
