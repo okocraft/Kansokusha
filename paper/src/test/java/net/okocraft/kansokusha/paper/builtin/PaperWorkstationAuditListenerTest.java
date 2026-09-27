@@ -31,6 +31,7 @@ class PaperWorkstationAuditListenerTest {
             InventoryType.BLAST_FURNACE,
             InventoryType.SMOKER,
             InventoryType.BREWING,
+            InventoryType.ENDER_CHEST,
             InventoryType.DISPENSER,
             InventoryType.DROPPER,
             InventoryType.CRAFTER
@@ -67,6 +68,11 @@ class PaperWorkstationAuditListenerTest {
         Assertions.assertFalse(
             PaperPlayerContainerTransactionListener.isStorageContainer(
                 inventory(InventoryType.CHEST, player)
+            )
+        );
+        Assertions.assertTrue(
+            PaperPlayerContainerTransactionListener.isStorageContainer(
+                inventory(InventoryType.ENDER_CHEST, player)
             )
         );
     }
