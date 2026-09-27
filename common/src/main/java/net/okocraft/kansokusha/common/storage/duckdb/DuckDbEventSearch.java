@@ -60,7 +60,7 @@ final class DuckDbEventSearch {
                 excludedUsers,
                 request.radiusCenter()
             );
-            where.add("NOT (" + excluded.sql() + ")");
+            where.add("NOT COALESCE((" + excluded.sql() + "), FALSE)");
             parameters.addAll(excluded.parameters());
         }
 
