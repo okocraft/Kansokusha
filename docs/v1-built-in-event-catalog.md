@@ -386,7 +386,7 @@ common position は lectern block position とし、generation 1 payload は `ac
 
 ## `kansokusha:container_transaction`
 
-located non-player **storage / persistent processing container** を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。対象 inventory type は chest/barrel/shulker/hopper/dispenser/dropper/furnace/blast-furnace/smoker/brewing/crafter に明示限定する。workbench/anvil/smithing/enchanting/loom/cartography/grindstone/stonecutter/beacon/lectern/merchant 等の virtual workstation inventory は対象外とする。
+**storage / persistent processing container** を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。対象 inventory type は chest/barrel/shulker/ender-chest/hopper/dispenser/dropper/furnace/blast-furnace/smoker/brewing/crafter に明示限定する。通常の player-holder inventory は除外するが、ender chest は Paper が active chest location を提供するため例外として対象に含める。workbench/anvil/smithing/enchanting/loom/cartography/grindstone/stonecutter/beacon/lectern/merchant 等の virtual workstation inventory は対象外とする。
 
 MONITOR では top inventory の detached before snapshot と operation metadata だけを保持し、その場では submit しない。listener は player の NMS `AbstractContainerMenu` の cursor 同期用 `RemoteSlot` (`remoteCarried`) を一時的な delegating sentinel で包む。Paper の `ServerGamePacketListenerImpl#handleContainerClick` は Bukkit event dispatch 前から vanilla `clicked(...)` 完了まで `suppressRemoteUpdates = true` とし、その間の nested `broadcastChanges()` では remote synchronization を行わない。`clicked(...)` が完全に戻った後、packet-end の `broadcastChanges()` は必ず `remoteCarried.matches(...)` を呼ぶため、その callback を確定境界として top inventory の after snapshot を取得する。full resync / crafting・smithing の explicit full sync は `remoteCarried.force(...)` を同じく `clicked(...)` 後に観測して確定する。
 
