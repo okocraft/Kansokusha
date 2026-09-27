@@ -194,11 +194,13 @@ final class SearchCommand {
 
         return backend.searchMetadata().handle((metadata, failure) -> {
             if (failure == null) {
+                var visibleMetadata = metadata.retainEventTypes(
+                    allowedEventTypes(source.getSender(), metadata)
+                );
                 dynamicSuggestions(
-                    source,
                     completion.kind(),
                     completion.prefix(),
-                    metadata
+                    visibleMetadata
                 ).forEach(target::suggest);
             }
             return target.build();
@@ -206,14 +208,12 @@ final class SearchCommand {
     }
 
     private static List<String> dynamicSuggestions(
-        CommandSourceStack source,
         SearchQueryParser.CompletionKind kind,
         String prefix,
         SearchMetadata metadata
     ) {
         var values = switch (kind) {
             case ACTION -> metadata.eventTypes().stream()
-                .filter(type -> hasEventPermission(source.getSender(), type))
                 .map(type -> completionEventType(type, prefix))
                 .toList();
             case WORLD -> metadata.worlds().stream().map(Key::asString).toList();
