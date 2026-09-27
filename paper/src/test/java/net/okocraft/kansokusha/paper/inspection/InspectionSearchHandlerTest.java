@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.inspection;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
@@ -189,8 +190,10 @@ class InspectionSearchHandlerTest {
         var click = InspectionSearchOutput.fullHistory(TARGET).clickEvent();
         Assertions.assertNotNull(click);
         Assertions.assertEquals(
-            "/kansokusha search position minecraft:overworld 123 64 -456",
-            click.value()
+            ClickEvent.runCommand(
+                "/kansokusha search position minecraft:overworld 123 64 -456"
+            ),
+            click
         );
 
         var properties = new Properties();
