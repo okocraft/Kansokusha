@@ -27,6 +27,13 @@ public interface EventSearchBackend {
      */
     CompletableFuture<SearchPage> search(SearchRequest request);
 
+    /**
+     * Returns historical values used for platform completion and event permission scoping.
+     */
+    default CompletableFuture<SearchMetadata> searchMetadata() {
+        return CompletableFuture.completedFuture(SearchMetadata.empty());
+    }
+
     CompletableFuture<List<UUID>> findEventIdsContaining(String literal);
 
     static EventSearchBackend require(KansokushaApi api) {
