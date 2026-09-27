@@ -11,6 +11,8 @@ import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchPage;
+import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -111,6 +113,13 @@ final class PaperBlockEventTestSupport {
         public boolean submitSearchable(EventSubmission submission, String searchText) {
             this.searchTexts.add(searchText);
             return this.submit(submission);
+        }
+
+        @Override
+        public CompletableFuture<SearchPage> search(SearchRequest request) {
+            return CompletableFuture.completedFuture(
+                new SearchPage(List.of(), Optional.empty(), Optional.empty())
+            );
         }
 
         @Override

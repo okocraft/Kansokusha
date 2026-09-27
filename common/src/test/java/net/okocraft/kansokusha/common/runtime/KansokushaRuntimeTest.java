@@ -6,6 +6,8 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.search.SearchRequest;
+import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
 import net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl;
 import org.duckdb.DuckDBDriver;
 import org.junit.jupiter.api.Assertions;
@@ -14,12 +16,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -85,6 +90,27 @@ class KansokushaRuntimeTest {
             Assertions.assertEquals(1, runtime.findEventIdsContaining("bAn").join().size());
             Assertions.assertEquals(1, runtime.findEventIdsContaining("%_*").join().size());
             Assertions.assertTrue(runtime.findEventIdsContaining("missing").join().isEmpty());
+        }
+    }
+
+    @Test
+    void testTypedSearchDoesNotForceQueuedWritesToFlush(@TempDir Path dir) throws Exception {
+        try (var runtime = start(dir, 10)) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+            var request = new SearchRequest(
+                SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC),
+                new SearchRequest.Constraints(Set.of(EVENT_TYPE)),
+                Optional.empty(),
+                Optional.empty(),
+                10
+            );
+
+            Assertions.assertTrue(runtime.submit(event(Instant.now())));
+            Assertions.assertTrue(runtime.search(request).join().events().isEmpty());
+            Assertions.assertEquals(0, countEvents(dir));
+
+            Assertions.assertTrue(runtime.submit(event(Instant.now())));
+            Assertions.assertEquals(BATCH_SIZE, runtime.search(request).join().events().size());
         }
     }
 

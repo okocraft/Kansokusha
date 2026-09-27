@@ -1,5 +1,7 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.okocraft.kansokusha.common.search.SearchPage;
+import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.io.IOException;
@@ -367,6 +369,11 @@ public final class DuckDbStorage {
         @Override
         public List<UUID> findEventIdsContaining(String literal) throws SQLException {
             return this.delegate.findEventIdsContaining(literal);
+        }
+
+        @Override
+        public SearchPage search(SearchRequest request) throws SQLException {
+            return this.delegate.search(request);
         }
 
         @Override

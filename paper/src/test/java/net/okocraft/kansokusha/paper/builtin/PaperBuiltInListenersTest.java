@@ -8,6 +8,8 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchPage;
+import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.junit.jupiter.api.Assertions;
@@ -98,6 +100,13 @@ class PaperBuiltInListenersTest {
         @Override
         public boolean submitSearchable(EventSubmission submission, String searchText) {
             return true;
+        }
+
+        @Override
+        public CompletableFuture<SearchPage> search(SearchRequest request) {
+            return CompletableFuture.completedFuture(
+                new SearchPage(java.util.List.of(), Optional.empty(), Optional.empty())
+            );
         }
 
         @Override
