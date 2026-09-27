@@ -67,8 +67,16 @@ Inspection state is held only for the current player session. It is cleared on l
 plugin disable, and server restart. Permission is rechecked when the inspection state is
 consumed, so losing `kansokusha.command.inspect` invalidates an enabled session.
 
-This stage provides the inspection session and command surface only; block-click lookup is
-wired separately.
+While inspection is enabled, left-clicking a block selects that block coordinate and
+right-clicking a block selects the coordinate one block beyond the clicked face. Air
+clicks are ignored. Block and held-item use are denied for both hands, while only the
+main-hand interaction selects a target. Block damage and block break are also cancelled
+as safety guards, so inspection clicks do not mutate the world or create normal
+cancel-aware mutation logs.
+
+The selected coordinate is snapshotted as an immutable world key plus integer X/Y/Z
+target. History lookup and result rendering are connected to that target in the next
+inspection stage.
 
 ## Search
 
