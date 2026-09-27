@@ -133,7 +133,7 @@ permission は `kansokusha.command.search`、`kansokusha.command.event` と
 `kansokusha.command.search.event.<event-type>` を使う。event permission は完全な node を
 Paper / Velocity の permission API に問い合わせ、Kansokusha 自身は wildcard を展開しない。
 そのため permission plugin の wildcard / negative / inheritance の最終判定をそのまま尊重する。
-権限のない event type は completion metadata と backend constraint の双方から除外し、inspect
+権限のない event type は completion metadata と backend constraint の双方から除外し、event detail
 でも対象 event type の権限を再確認する。
 
 初期 search scope では network-wide cross-server DB search、public search API、arbitrary/raw
