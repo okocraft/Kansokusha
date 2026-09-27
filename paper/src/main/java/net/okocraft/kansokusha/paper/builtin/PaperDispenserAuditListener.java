@@ -1,0 +1,66 @@
+package net.okocraft.kansokusha.paper.builtin;
+
+import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.BlockActor;
+import net.okocraft.kansokusha.api.event.EventSubmission;
+import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockDispenseEvent;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NotNullByDefault;
+
+import java.time.Clock;
+import java.util.Objects;
+
+@ApiStatus.Internal
+@NotNullByDefault
+public final class PaperDispenserAuditListener implements Listener {
+
+    static final Key EVENT_TYPE = Key.key("kansokusha", "dispenser_dispense");
+
+    private final KansokushaApi api;
+    private final Key serverKey;
+    private final Clock clock;
+
+    private PaperDispenserAuditListener(KansokushaApi api, Key serverKey, Clock clock) {
+        this.api = Objects.requireNonNull(api, "api");
+        this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    public static PaperDispenserAuditListener register(KansokushaApi api, Key serverKey) {
+        return register(api, serverKey, Clock.systemUTC());
+    }
+
+    static PaperDispenserAuditListener register(
+        KansokushaApi api,
+        Key serverKey,
+        Clock clock
+    ) {
+        PaperBuiltInSupport.register(api, EVENT_TYPE);
+        return new PaperDispenserAuditListener(api, serverKey, clock);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void record(BlockDispenseEvent event) {
+        Objects.requireNonNull(event, "event");
+        var block = event.getBlock();
+        var item = event.getItem();
+
+        this.api.submit(new EventSubmission(
+            EVENT_TYPE,
+            PayloadGeneration.FIRST,
+            this.clock.instant(),
+            this.serverKey,
+            PaperKansokusha.key(block.getWorld().getKey()),
+            PaperBuiltInSupport.position(block),
+            new BlockActor(PaperBuiltInSupport.type(block.getType())),
+            PaperBuiltInSupport.itemType(item),
+            PaperAuditGapPayloadCodec.encodeDispense(item, event.getVelocity())
+        ));
+    }
+}
