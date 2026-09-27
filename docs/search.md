@@ -9,7 +9,7 @@ The search command is available on both platforms:
 ```
 
 `event` loads one persisted event by its UUIDv7 event ID. Search result rows link to
-`inspect` when the sender has event-detail permission. Pagination controls are also clickable.
+`event` when the sender has event-detail permission. Pagination controls are also clickable.
 
 ## Query semantics
 
@@ -103,7 +103,7 @@ The command tree uses the platform permission API for every check:
 
 - `kansokusha.command` — parent command
 - `kansokusha.command.search` — search command
-- `kansokusha.command.event` — inspect command and event-detail links
+- `kansokusha.command.event` — event-detail command and links
 - `kansokusha.command.search.event.<event-type>` — visibility of each event type, for example
   `kansokusha.command.search.event.kansokusha:block_break`
 
