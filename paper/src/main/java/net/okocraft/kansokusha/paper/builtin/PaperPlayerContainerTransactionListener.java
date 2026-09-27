@@ -26,6 +26,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -39,6 +40,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,6 +50,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class PaperPlayerContainerTransactionListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "container_transaction");
+
+    private static final Set<InventoryType> STORAGE_CONTAINER_TYPES = Set.of(
+        InventoryType.CHEST,
+        InventoryType.DISPENSER,
+        InventoryType.DROPPER,
+        InventoryType.FURNACE,
+        InventoryType.BREWING,
+        InventoryType.HOPPER,
+        InventoryType.SHULKER_BOX,
+        InventoryType.BARREL,
+        InventoryType.BLAST_FURNACE,
+        InventoryType.SMOKER,
+        InventoryType.CRAFTER
+    );
 
     private static final String PACKET_LISTENER_CLASS =
         "net.minecraft.server.network.ServerGamePacketListenerImpl";
@@ -284,7 +300,10 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     private static @Nullable PaperContainerPayloadCodec.InventorySnapshot locatedContainer(
         Inventory inventory
     ) {
-        if (inventory.getHolder() instanceof Player) {
+        if (
+            inventory.getHolder() instanceof Player
+                || !STORAGE_CONTAINER_TYPES.contains(inventory.getType())
+        ) {
             return null;
         }
         var snapshot = PaperContainerPayloadCodec.snapshotInventory(inventory);
