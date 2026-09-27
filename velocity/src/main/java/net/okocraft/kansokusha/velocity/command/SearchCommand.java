@@ -62,7 +62,7 @@ final class SearchCommand {
         try {
             invocation = SearchCommandSupport.parseInvocation(rawInput, clock, timezone);
         } catch (IllegalArgumentException e) {
-            source.sendMessage(SearchCommandMessages.PARSE_ERROR);
+            source.sendMessage(SearchCommandMessages.PARSE_ERROR.asComponent());
             return 0;
         }
 
@@ -88,7 +88,7 @@ final class SearchCommand {
         }
 
         if (SearchCommandSupport.hasRadius(query)) {
-            source.sendMessage(SearchCommandMessages.RADIUS_UNAVAILABLE);
+            source.sendMessage(SearchCommandMessages.RADIUS_UNAVAILABLE.asComponent());
             return 0;
         }
 
@@ -96,7 +96,7 @@ final class SearchCommand {
         try {
             backend = EventSearchBackend.require(Kansokusha.api());
         } catch (IllegalStateException | IllegalArgumentException e) {
-            source.sendMessage(SearchCommandMessages.SEARCH_FAILED);
+            source.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
             return 0;
         }
 
@@ -112,7 +112,7 @@ final class SearchCommand {
             )))
             .whenComplete((page, failure) -> {
                 if (failure != null) {
-                    source.sendMessage(SearchCommandMessages.SEARCH_FAILED);
+                    source.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
                 renderPage(source, invocation.queryText(), page);
@@ -185,7 +185,7 @@ final class SearchCommand {
 
     private static void renderPage(CommandSource source, String query, SearchPage page) {
         if (page.events().isEmpty()) {
-            source.sendMessage(SearchCommandMessages.NO_RESULTS);
+            source.sendMessage(SearchCommandMessages.NO_RESULTS.asComponent());
         } else {
             for (var event : page.events()) {
                 source.sendMessage(
