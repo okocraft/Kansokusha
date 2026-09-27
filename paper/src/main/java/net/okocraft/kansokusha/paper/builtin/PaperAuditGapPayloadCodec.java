@@ -1,7 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
@@ -10,9 +9,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
+import java.util.UUID;
 
 @NotNullByDefault
 final class PaperAuditGapPayloadCodec {
@@ -20,62 +18,43 @@ final class PaperAuditGapPayloadCodec {
     private PaperAuditGapPayloadCodec() {
     }
 
-    static EventPayload encodeContainerClick(
+    static EventPayload encodeContainerDelta(
         PaperContainerPayloadCodec.InventorySnapshot container,
+        UUID transactionId,
+        String operation,
         String action,
-        String click,
-        String clickedScope,
+        @Nullable String click,
+        @Nullable String clickedScope,
         int slot,
         int rawSlot,
+        int hotbarButton,
         String direction,
-        @Nullable ItemStack currentItem,
-        @Nullable ItemStack cursor,
-        @Nullable ItemStack exchangeItem,
-        int hotbarButton
+        ItemStack item,
+        int amountDelta
     ) {
         var payload = new CompoundTag();
         payload.put("container", container.payload());
-        payload.putString("operation", "click");
+        payload.putString("transaction_id", transactionId.toString());
+        payload.putString("operation", operation);
         payload.putString("action", normalized(action));
-        payload.putString("click", normalized(click));
-        payload.putString("clicked_scope", clickedScope);
-        payload.putString("transfer_direction", direction);
-        payload.putInt("slot", slot);
-        payload.putInt("raw_slot", rawSlot);
-        payload.put("item_before", PaperContainerPayloadCodec.snapshotItem(currentItem));
-        payload.put("cursor", PaperContainerPayloadCodec.snapshotItem(cursor));
-        if (exchangeItem != null) {
-            payload.put("exchange_item", PaperContainerPayloadCodec.snapshotItem(exchangeItem));
+        if (click != null) {
+            payload.putString("click", normalized(click));
+        }
+        if (clickedScope != null) {
+            payload.putString("clicked_scope", clickedScope);
+        }
+        if (slot >= 0) {
+            payload.putInt("slot", slot);
+        }
+        if (rawSlot >= 0) {
+            payload.putInt("raw_slot", rawSlot);
+        }
+        if (hotbarButton >= 0) {
             payload.putInt("hotbar_button", hotbarButton);
         }
-        return PaperPayloadNbtCodec.encode(payload);
-    }
-
-    static EventPayload encodeContainerDrag(
-        PaperContainerPayloadCodec.InventorySnapshot container,
-        String dragType,
-        ItemStack oldCursor,
-        Map<Integer, ItemStack> newItems,
-        int topInventorySize
-    ) {
-        var payload = new CompoundTag();
-        payload.put("container", container.payload());
-        payload.putString("operation", "drag");
-        payload.putString("action", normalized(dragType));
-        payload.putString("transfer_direction", "player_to_container");
-        payload.put("cursor", PaperContainerPayloadCodec.snapshotItem(oldCursor));
-
-        var slots = new ListTag();
-        for (var entry : new TreeMap<>(newItems).entrySet()) {
-            if (entry.getKey() < 0 || entry.getKey() >= topInventorySize) {
-                continue;
-            }
-            var slot = new CompoundTag();
-            slot.putInt("raw_slot", entry.getKey());
-            slot.put("item_after", PaperContainerPayloadCodec.snapshotItem(entry.getValue()));
-            slots.add(slot);
-        }
-        payload.put("dragged_slots", slots);
+        payload.putString("transfer_direction", direction);
+        payload.put("item", PaperContainerPayloadCodec.snapshotItem(item));
+        payload.putInt("amount_delta", amountDelta);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
