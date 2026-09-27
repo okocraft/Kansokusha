@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.velocity.command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.velocity.testsupport.CommandTester;
 import net.okocraft.kansokusha.velocity.testsupport.TestSources;
 import org.junit.jupiter.api.Assertions;
@@ -26,7 +27,19 @@ class KansokushaCommandsTest {
 
     @Test
     void testCommandDefinersAreExposedForLanguageLoading() {
-        Assertions.assertEquals(List.of(CommandMessages.DEFINER), KansokushaCommands.getDefiners());
+        Assertions.assertEquals(
+            List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER),
+            KansokushaCommands.getDefiners()
+        );
+    }
+
+    @Test
+    void testSearchCommandIsWiredUnderKansokushaRoot() throws Exception {
+        ConsoleCommandSource console = TestSources.console();
+        TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
+
+        Assertions.assertEquals(0, this.tester.execute(console, "kansokusha search"));
+        Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
     }
 
     @Test

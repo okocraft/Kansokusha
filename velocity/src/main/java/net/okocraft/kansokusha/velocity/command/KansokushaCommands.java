@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.List;
 public final class KansokushaCommands {
 
     public static List<DefaultMessageDefiner> getDefiners() {
-        return List.of(CommandMessages.DEFINER);
+        return List.of(CommandMessages.DEFINER, SearchCommandMessages.DEFINER);
     }
 
     public static void register(CommandManager manager, Object plugin) {
@@ -25,6 +26,7 @@ public final class KansokushaCommands {
             BrigadierCommand.literalArgumentBuilder("kansokusha")
                 .requires(source -> source.hasPermission("kansokusha.command"))
                 .then(VersionCommand.createVersionCommand())
+                .then(SearchCommand.createSearchCommand())
         );
     }
 

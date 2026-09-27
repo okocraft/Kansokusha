@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
+import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
