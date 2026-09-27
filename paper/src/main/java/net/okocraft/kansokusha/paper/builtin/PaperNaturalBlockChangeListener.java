@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
@@ -18,11 +19,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
+import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -141,6 +144,83 @@ public final class PaperNaturalBlockChangeListener implements Listener {
             source.getType().name().toLowerCase(Locale.ROOT),
             position(source)
         );
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordDragonEggTeleport(BlockFromToEvent event) {
+        Objects.requireNonNull(event, "event");
+
+        var source = event.getBlock();
+        if (source.getType() != Material.DRAGON_EGG) {
+            return;
+        }
+
+        var destination = event.getToBlock();
+        var occurredAt = this.clock.instant();
+        var eggState = source.getBlockData();
+        var airState = Material.AIR.createBlockData();
+
+        this.submit(
+            occurredAt,
+            PaperKansokusha.key(source.getWorld().getKey()),
+            position(source),
+            null,
+            PaperBuiltInSupport.changedBlockType(eggState, airState),
+            PaperBlockEventPayloadCodec.encodeNaturalChange(
+                eggState,
+                airState,
+                "dragon_egg_teleport",
+                "departure",
+                null
+            )
+        );
+
+        var destinationBefore = destination.getBlockData();
+        this.submit(
+            occurredAt,
+            PaperKansokusha.key(destination.getWorld().getKey()),
+            position(destination),
+            null,
+            PaperBuiltInSupport.changedBlockType(destinationBefore, eggState),
+            PaperBlockEventPayloadCodec.encodeNaturalChange(
+                destinationBefore,
+                eggState,
+                "dragon_egg_teleport",
+                "arrival",
+                null
+            )
+        );
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordPortalCreate(PortalCreateEvent event) {
+        Objects.requireNonNull(event, "event");
+
+        var occurredAt = this.clock.instant();
+        var actor = PaperBuiltInSupport.nullableActor(event.getEntity());
+        var cause = event.getReason().name().toLowerCase(Locale.ROOT);
+        for (var state : event.getBlocks()) {
+            var block = state.getBlock();
+            var before = block.getBlockData();
+            var after = state.getBlockData();
+            if (sameBlockData(before, after)) {
+                continue;
+            }
+            this.submit(
+                occurredAt,
+                PaperKansokusha.key(state.getWorld().getKey()),
+                position(state),
+                actor,
+                PaperBuiltInSupport.changedBlockType(before, after),
+                PaperBlockEventPayloadCodec.encodeNaturalChange(
+                    before,
+                    after,
+                    "portal_create",
+                    cause,
+                    null
+                )
+            );
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
