@@ -289,6 +289,143 @@ class DuckDbEventSearchTest {
     }
 
     @Test
+    void testExclusionsKeepRowsWhoseNullableFieldsDoNotMatch(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            var noTargetAt = NOW;
+            var dirtAt = NOW.plusSeconds(1);
+            var playerAt = NOW.plusSeconds(2);
+            var creeperAt = NOW.plusSeconds(3);
+            var noWorldAt = NOW.plusSeconds(4);
+            var overworldAt = NOW.plusSeconds(5);
+            var worldWithoutPositionAt = NOW.plusSeconds(6);
+            var exactPositionAt = NOW.plusSeconds(7);
+
+            storage.append(List.of(
+                queued(event(
+                    AUDIT,
+                    noTargetAt,
+                    null,
+                    null,
+                    new PlayerActor(PLAYER_ONE),
+                    null
+                ), null),
+                queued(event(
+                    AUDIT,
+                    dirtAt,
+                    null,
+                    null,
+                    new PlayerActor(PLAYER_ONE),
+                    DIRT
+                ), null),
+                queued(event(
+                    AUDIT,
+                    playerAt,
+                    null,
+                    null,
+                    new PlayerActor(PLAYER_TWO),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    creeperAt,
+                    null,
+                    null,
+                    new EntityActor(ENTITY, Key.key("minecraft", "creeper")),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    noWorldAt,
+                    null,
+                    null,
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    overworldAt,
+                    OVERWORLD,
+                    new BlockPosition(5, 64, 5),
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    worldWithoutPositionAt,
+                    OVERWORLD,
+                    null,
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    exactPositionAt,
+                    OVERWORLD,
+                    new BlockPosition(1, 2, 3),
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null)
+            ));
+
+            var excludeTarget = storage.search(request(
+                "exclude target minecraft:dirt",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            ));
+            Assertions.assertTrue(excludeTarget.events().stream().anyMatch(
+                result -> result.occurredAt().equals(noTargetAt)
+            ));
+            Assertions.assertTrue(excludeTarget.events().stream().noneMatch(
+                result -> result.occurredAt().equals(dirtAt)
+            ));
+
+            var excludeActorType = storage.search(request(
+                "exclude actor-type minecraft:creeper",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            ));
+            Assertions.assertTrue(excludeActorType.events().stream().anyMatch(
+                result -> result.occurredAt().equals(playerAt)
+            ));
+            Assertions.assertTrue(excludeActorType.events().stream().noneMatch(
+                result -> result.occurredAt().equals(creeperAt)
+            ));
+
+            var excludeWorld = storage.search(request(
+                "exclude world minecraft:overworld",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            ));
+            Assertions.assertTrue(excludeWorld.events().stream().anyMatch(
+                result -> result.occurredAt().equals(noWorldAt)
+            ));
+            Assertions.assertTrue(excludeWorld.events().stream().noneMatch(
+                result -> result.occurredAt().equals(overworldAt)
+            ));
+
+            var excludePosition = storage.search(request(
+                "exclude position minecraft:overworld 1 2 3",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            ));
+            Assertions.assertTrue(excludePosition.events().stream().anyMatch(
+                result -> result.occurredAt().equals(worldWithoutPositionAt)
+            ));
+            Assertions.assertTrue(excludePosition.events().stream().noneMatch(
+                result -> result.occurredAt().equals(exactPositionAt)
+            ));
+        }
+    }
+
+    @Test
     void testKeysetPaginationRemainsStableAcrossNewInsertAndSupportsBothOrders(
         @TempDir Path dir
     ) throws Exception {
