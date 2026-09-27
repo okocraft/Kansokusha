@@ -243,59 +243,35 @@ public final class SearchQueryParser {
     }
 
     private static CompletionTokens tokenizeForCompletion(String input) {
-        var completed = new ArrayList<String>();
-        var token = new StringBuilder();
-        var tokenStarted = false;
-        var tokenStart = input.length();
-        var quote = '\0';
-        var escaping = false;
-
-        for (var index = 0; index < input.length(); index++) {
-            var character = input.charAt(index);
-            if (!tokenStarted && !Character.isWhitespace(character)) {
-                tokenStarted = true;
-                tokenStart = index;
-            }
-
-            if (escaping) {
-                token.append(character);
-                escaping = false;
-                continue;
-            }
-            if (character == '\\') {
-                escaping = true;
-                continue;
-            }
-            if (quote != '\0') {
-                if (character == quote) {
-                    quote = '\0';
-                } else {
-                    token.append(character);
-                }
-                continue;
-            }
-            if (character == '"' || character == '\'') {
-                quote = character;
-                continue;
-            }
-            if (Character.isWhitespace(character)) {
-                if (tokenStarted) {
-                    completed.add(token.toString());
-                    token.setLength(0);
-                    tokenStarted = false;
-                }
-                continue;
-            }
-            token.append(character);
+        var scanned = scanTokens(input, true);
+        if (!scanned.tokenInProgress()) {
+            return new CompletionTokens(
+                scanned.tokens().stream().map(InputToken::value).toList(),
+                "",
+                input.length()
+            );
         }
 
-        if (escaping) {
-            token.append('\\');
-        }
+        var current = scanned.tokens().getLast();
+        return new CompletionTokens(
+            scanned.tokens().subList(0, scanned.tokens().size() - 1)
+                .stream()
+                .map(InputToken::value)
+                .toList(),
+            current.value(),
+            current.start()
+        );
+    }
 
-        return tokenStarted
-            ? new CompletionTokens(List.copyOf(completed), token.toString(), tokenStart)
-            : new CompletionTokens(List.copyOf(completed), "", input.length());
+    /**
+     * Returns the final query token using the exact quote and escape rules used by {@link #parse}.
+     */
+    public static Optional<InputToken> trailingToken(String input) {
+        Objects.requireNonNull(input, "input");
+        var scanned = scanTokens(input, false);
+        return scanned.tokens().isEmpty()
+            ? Optional.empty()
+            : Optional.of(scanned.tokens().getLast());
     }
 
     public enum CompletionKind {
@@ -329,6 +305,24 @@ public final class SearchQueryParser {
         List<String> completedArguments,
         String prefix,
         int replacementStart
+    ) {
+    }
+
+    public record InputToken(
+        String value,
+        int start,
+        int end,
+        boolean quotedOrEscaped
+    ) {
+
+        public InputToken {
+            Objects.requireNonNull(value, "value");
+        }
+    }
+
+    private record ScanResult(
+        List<InputToken> tokens,
+        boolean tokenInProgress
     ) {
     }
 
@@ -540,23 +534,35 @@ public final class SearchQueryParser {
     }
 
     static List<String> tokenize(String input) {
-        var tokens = new ArrayList<String>();
+        return scanTokens(input, false).tokens().stream()
+            .map(InputToken::value)
+            .toList();
+    }
+
+    private static ScanResult scanTokens(String input, boolean tolerateIncomplete) {
+        var tokens = new ArrayList<InputToken>();
         var token = new StringBuilder();
         var tokenStarted = false;
+        var tokenStart = input.length();
+        var quotedOrEscaped = false;
         var quote = '\0';
         var escaping = false;
 
         for (var index = 0; index < input.length(); index++) {
             var character = input.charAt(index);
+            if (!tokenStarted && !Character.isWhitespace(character)) {
+                tokenStarted = true;
+                tokenStart = index;
+            }
+
             if (escaping) {
                 token.append(character);
-                tokenStarted = true;
                 escaping = false;
                 continue;
             }
             if (character == '\\') {
                 escaping = true;
-                tokenStarted = true;
+                quotedOrEscaped = true;
                 continue;
             }
             if (quote != '\0') {
@@ -565,36 +571,49 @@ public final class SearchQueryParser {
                 } else {
                     token.append(character);
                 }
-                tokenStarted = true;
                 continue;
             }
             if (character == '"' || character == '\'') {
                 quote = character;
-                tokenStarted = true;
+                quotedOrEscaped = true;
                 continue;
             }
             if (Character.isWhitespace(character)) {
                 if (tokenStarted) {
-                    tokens.add(token.toString());
+                    tokens.add(new InputToken(
+                        token.toString(),
+                        tokenStart,
+                        index,
+                        quotedOrEscaped
+                    ));
                     token.setLength(0);
                     tokenStarted = false;
+                    tokenStart = input.length();
+                    quotedOrEscaped = false;
                 }
                 continue;
             }
             token.append(character);
-            tokenStarted = true;
         }
 
         if (escaping) {
-            throw error("query ends with an incomplete escape");
+            if (!tolerateIncomplete) {
+                throw error("query ends with an incomplete escape");
+            }
+            token.append('\\');
         }
-        if (quote != '\0') {
+        if (quote != '\0' && !tolerateIncomplete) {
             throw error("query contains an unterminated quote");
         }
         if (tokenStarted) {
-            tokens.add(token.toString());
+            tokens.add(new InputToken(
+                token.toString(),
+                tokenStart,
+                input.length(),
+                quotedOrEscaped
+            ));
         }
-        return List.copyOf(tokens);
+        return new ScanResult(List.copyOf(tokens), tokenStarted);
     }
 
     private static SearchQueryParseException error(String message) {
