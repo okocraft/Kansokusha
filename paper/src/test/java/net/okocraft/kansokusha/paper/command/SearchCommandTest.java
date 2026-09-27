@@ -100,7 +100,7 @@ class SearchCommandTest {
             )
         );
 
-        var request = Assertions.assertNotNull(this.api.lastRequest);
+        var request = java.util.Objects.requireNonNull(this.api.lastRequest);
         Assertions.assertEquals(Set.of("Alice"), request.query().conditions().users());
         Assertions.assertEquals(Set.of(BREAK), request.query().conditions().actions());
         Assertions.assertEquals(SearchQuery.Order.OLDEST, request.query().order());
@@ -155,7 +155,7 @@ class SearchCommandTest {
 
         Assertions.assertEquals(
             Set.of(BREAK, CUSTOM),
-            Assertions.assertNotNull(this.api.lastRequest).constraints().allowedEventTypes()
+            java.util.Objects.requireNonNull(this.api.lastRequest).constraints().allowedEventTypes()
         );
         Mockito.verify(console).hasPermission(eventPermission(BREAK));
         Mockito.verify(console).hasPermission(eventPermission(CHAT));
@@ -233,7 +233,7 @@ class SearchCommandTest {
             this.tester.execute(TestSources.of(player), "search radius 5")
         );
 
-        var request = Assertions.assertNotNull(this.api.lastRequest);
+        var request = java.util.Objects.requireNonNull(this.api.lastRequest);
         Assertions.assertEquals(10, request.defaultLimit());
         Assertions.assertEquals(Set.of(5), request.query().conditions().radii());
         Assertions.assertEquals(
@@ -262,7 +262,7 @@ class SearchCommandTest {
                 "search around minecraft:overworld 10 20 5"
             )
         );
-        var request = Assertions.assertNotNull(this.api.lastRequest);
+        var request = java.util.Objects.requireNonNull(this.api.lastRequest);
         Assertions.assertTrue(request.radiusCenter().isEmpty());
         Assertions.assertEquals(
             Set.of(new SearchQuery.Around(OVERWORLD, 10, 20, 5)),
@@ -279,7 +279,7 @@ class SearchCommandTest {
             1,
             this.tester.execute(TestSources.of(player), "search limit 50")
         );
-        Assertions.assertEquals(50, Assertions.assertNotNull(this.api.lastRequest).limit());
+        Assertions.assertEquals(50, java.util.Objects.requireNonNull(this.api.lastRequest).limit());
         Assertions.assertEquals(10, this.api.lastRequest.defaultLimit());
 
         this.api.lastRequest = null;
@@ -295,7 +295,7 @@ class SearchCommandTest {
             1,
             this.tester.execute(TestSources.ofSenderOnly(console), "search limit 1000")
         );
-        Assertions.assertEquals(1000, Assertions.assertNotNull(this.api.lastRequest).limit());
+        Assertions.assertEquals(1000, java.util.Objects.requireNonNull(this.api.lastRequest).limit());
         Assertions.assertEquals(50, this.api.lastRequest.defaultLimit());
 
         this.api.lastRequest = null;
@@ -393,7 +393,7 @@ class SearchCommandTest {
         );
         Assertions.assertEquals(
             Optional.of(next),
-            Assertions.assertNotNull(this.api.lastRequest).cursor()
+            java.util.Objects.requireNonNull(this.api.lastRequest).cursor()
         );
         Assertions.assertEquals(Set.of(BREAK), this.api.lastRequest.query().conditions().actions());
     }
