@@ -87,6 +87,13 @@ final class DuckDbEventSearch {
                 e.z,
                 e.actor_kind,
                 e.actor_uuid,
+                (
+                    SELECT pnh.name
+                    FROM player_name_history pnh
+                    WHERE pnh.player_uuid = e.actor_uuid
+                    ORDER BY pnh.last_seen DESC, pnh.last_event_id DESC
+                    LIMIT 1
+                ) AS actor_name,
                 e.actor_type,
                 e.target_type,
                 st.search_text
@@ -424,6 +431,7 @@ final class DuckDbEventSearch {
             optionalInt(rows, "z"),
             optionalActorKind(rows.getString("actor_kind")),
             Optional.ofNullable(rows.getObject("actor_uuid", UUID.class)),
+            Optional.ofNullable(rows.getString("actor_name")),
             optionalKey(rows.getString("actor_type")),
             optionalKey(rows.getString("target_type")),
             Optional.ofNullable(rows.getString("search_text"))
