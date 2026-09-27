@@ -46,6 +46,8 @@ retention:
         - kansokusha:book_edit
         - kansokusha:lectern_change
         - kansokusha:player_trade
+        - kansokusha:container_transaction
+        - kansokusha:block_interaction
         - kansokusha:player_gamemode_change
         - kansokusha:player_spawn_change
         - kansokusha:player_death
@@ -54,6 +56,8 @@ retention:
         - kansokusha:paper_server_command
         - kansokusha:velocity_command
         - kansokusha:entity_place
+        - kansokusha:entity_death
+        - kansokusha:entity_spawn
         - kansokusha:armor_stand_manipulate
         - kansokusha:entity_leash_change
         - kansokusha:item_frame_change
@@ -75,3 +79,4 @@ retention:
         - kansokusha:container_transfer
         - kansokusha:container_pickup
         - kansokusha:container_process
+        - kansokusha:dispenser_dispense
