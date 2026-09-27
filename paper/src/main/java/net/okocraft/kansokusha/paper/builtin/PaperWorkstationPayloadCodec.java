@@ -88,7 +88,8 @@ final class PaperWorkstationPayloadCodec {
 
     static EventPayload encodeEnchant(
         ItemStack item,
-        int expLevelCost,
+        int requiredLevel,
+        int consumedLevels,
         int button,
         Map<Enchantment, Integer> enchantments
     ) {
@@ -97,7 +98,8 @@ final class PaperWorkstationPayloadCodec {
 
         var payload = new CompoundTag();
         payload.put("item", PaperContainerPayloadCodec.snapshotItem(item));
-        payload.putInt("exp_level_cost", expLevelCost);
+        payload.putInt("required_level", requiredLevel);
+        payload.putInt("consumed_levels", consumedLevels);
         payload.putInt("button", button);
 
         var encodedEnchantments = new ListTag();
