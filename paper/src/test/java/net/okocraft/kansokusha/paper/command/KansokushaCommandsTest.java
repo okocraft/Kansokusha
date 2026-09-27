@@ -35,7 +35,8 @@ class KansokushaCommandsTest {
             List.of(
                 CommandMessages.DEFINER,
                 SearchCommandMessages.DEFINER,
-                EventCommandMessages.DEFINER
+                EventCommandMessages.DEFINER,
+                InspectionCommandMessages.DEFINER
             ),
             KansokushaCommands.getDefiners()
         );
@@ -56,6 +57,14 @@ class KansokushaCommandsTest {
     @Test
     void testEventCommandIsWiredUnderKansokushaRoot() {
         Assertions.assertNotNull(KansokushaCommands.createCommand().getChild("event"));
+    }
+
+    @Test
+    void testInspectCommandsAreWiredUnderKansokushaRoot() {
+        var command = KansokushaCommands.createCommand();
+
+        Assertions.assertNotNull(command.getChild("inspect"));
+        Assertions.assertNotNull(command.getChild("i"));
     }
 
     @Test
