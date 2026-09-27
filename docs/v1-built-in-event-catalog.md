@@ -31,7 +31,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block; exploded TNT is owned by `tnt_prime` while `tntExplodes` is true, except for the Ender Dragon |
 | `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement |
 | `kansokusha:entity_block_change` | `EntityChangeBlockEvent` / `EntityBlockFormEvent` | `audit` | entity-caused block mutation |
-| `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent`, `PortalCreateEvent`, dragon-egg `BlockFromToEvent` | `short` | natural/environmental change; dragon-egg teleport emits source removal and destination placement with one timestamp |
+| `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent`, `PortalCreateEvent`, dragon-egg `BlockFromToEvent`, unsupported-state `BlockDestroyEvent` | `short` | natural/environmental change; destruction of blocks that no longer satisfy their NMS survival rule includes support-loss attachment breaks such as wall signs, torches and ladders |
 | `kansokusha:fluid_change` | water/lava `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
@@ -206,6 +206,8 @@ The five communication event types `paper_chat`, `velocity_chat`, `paper_player_
 Search query syntax, permission filtering, pagination, time-zone behavior, and initial-scope limitations are documented in `docs/search.md`.
 
 Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not generally prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, `block_interaction`, `dispenser_dispense`, and `player_trade` are event/attempt observations within the documented boundary. `container_transaction` is the exception: it waits for the same NMS container-click packet processing to apply and records the confirmed top-container net delta observed from `AbstractContainerMenu` slot notification. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
+
+`natural_block_change` also records accepted Paper `BlockDestroyEvent` when the current NMS `BlockState#canSurvive(level, pos)` returns false at the destruction boundary. `BlockDestroyEvent` fires before the replacement state is applied, while the world already reflects the support/environment state that made the block invalid, so this directly captures support-loss attachment breaks without inspecting the JVM call stack. A supported block destroyed directly by a command, piston, entity, or other mechanism is not classified by this path. The payload uses `source_event = support_loss`, the block's pre-destroy state, and `BlockDestroyEvent#getNewState()` as the confirmed replacement state.
 
 ## Explicit exclusions
 

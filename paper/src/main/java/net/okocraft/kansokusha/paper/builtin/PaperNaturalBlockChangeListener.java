@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -12,6 +13,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.Scaffolding;
@@ -67,6 +69,39 @@ public final class PaperNaturalBlockChangeListener implements Listener {
     ) {
         PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperNaturalBlockChangeListener(api, serverKey, clock);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordPhysicsDestroy(BlockDestroyEvent event) {
+        Objects.requireNonNull(event, "event");
+
+        var block = event.getBlock();
+        if (canSurvive(block)) {
+            return;
+        }
+
+        this.submitIfChanged(
+            block,
+            null,
+            block.getBlockData(),
+            event.getNewState(),
+            "support_loss",
+            null,
+            null
+        );
+    }
+
+    static boolean canSurvive(Block block) {
+        Objects.requireNonNull(block, "block");
+        if (!(block instanceof CraftBlock craftBlock)) {
+            throw new IllegalArgumentException(
+                "Paper block is not backed by CraftBlock: " + block.getClass().getName()
+            );
+        }
+        return craftBlock.getBlockState().canSurvive(
+            craftBlock.getLevel(),
+            craftBlock.getPosition()
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
