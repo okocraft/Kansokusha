@@ -49,8 +49,11 @@ class SearchCommandTest {
     private static final Key CHAT = Key.key("kansokusha", "paper_chat");
     private static final Key CUSTOM = Key.key("example", "custom");
     private static final Key OVERWORLD = Key.key("minecraft", "overworld");
+    private static final Key NETHER = Key.key("minecraft", "the_nether");
     private static final Key STONE = Key.key("minecraft", "stone");
+    private static final Key DIRT = Key.key("minecraft", "dirt");
     private static final Key CREEPER = Key.key("minecraft", "creeper");
+    private static final Key ZOMBIE = Key.key("minecraft", "zombie");
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174301");
 
@@ -165,12 +168,22 @@ class SearchCommandTest {
     @Test
     void testContextAwareCompletionUsesHistoricalDataAndPermissions() {
         this.api.playerNames = List.of("Alice", "Bob");
-        this.api.metadata = new SearchMetadata(
-            Set.of(BREAK, CHAT, CUSTOM),
-            Set.of(OVERWORLD),
-            Set.of(CREEPER),
-            Set.of(STONE)
-        );
+        this.api.metadata = new SearchMetadata(java.util.Map.of(
+            BREAK,
+            new SearchMetadata.EventValues(
+                Set.of(OVERWORLD),
+                Set.of(CREEPER),
+                Set.of(STONE)
+            ),
+            CHAT,
+            new SearchMetadata.EventValues(
+                Set.of(NETHER),
+                Set.of(ZOMBIE),
+                Set.of(DIRT)
+            ),
+            CUSTOM,
+            SearchMetadata.EventValues.empty()
+        ));
         ConsoleCommandSender console = console(BREAK, CUSTOM);
         TestSources.deny(console, eventPermission(CHAT));
         var source = TestSources.ofSenderOnly(console);
@@ -217,6 +230,18 @@ class SearchCommandTest {
         Assertions.assertFalse(this.tester.suggest(source, "search ").contains("radius"));
         Assertions.assertFalse(
             this.tester.suggest(source, "search action ").contains("paper_chat")
+        );
+        Assertions.assertFalse(
+            this.tester.suggest(source, "search world ").contains("minecraft:the_nether")
+        );
+        Assertions.assertFalse(
+            this.tester.suggest(source, "search actor-type ").contains("minecraft:zombie")
+        );
+        Assertions.assertFalse(
+            this.tester.suggest(source, "search target ").contains("minecraft:dirt")
+        );
+        Assertions.assertFalse(
+            this.tester.suggest(source, "search include ").contains("minecraft:dirt")
         );
     }
 
@@ -400,6 +425,27 @@ class SearchCommandTest {
     }
 
     @Test
+    void testQuotedFilterContainingCursorPrefixIsNotTreatedAsPagination() throws Exception {
+        this.api.metadata = metadata(Set.of(BREAK));
+        ConsoleCommandSender console = console(BREAK);
+
+        Assertions.assertEquals(
+            1,
+            this.tester.execute(
+                TestSources.ofSenderOnly(console),
+                "search filter \"foo __cursor=bar\""
+            )
+        );
+
+        var request = java.util.Objects.requireNonNull(this.api.lastRequest);
+        Assertions.assertEquals(
+            Set.of("foo __cursor=bar"),
+            request.query().conditions().filters()
+        );
+        Assertions.assertTrue(request.cursor().isEmpty());
+    }
+
+    @Test
     void testNoResultAndBackendFailureMessages() throws Exception {
         this.api.metadata = metadata(Set.of(BREAK));
         ConsoleCommandSender noResult = console(BREAK);
@@ -462,7 +508,11 @@ class SearchCommandTest {
     }
 
     private static SearchMetadata metadata(Set<Key> eventTypes) {
-        return new SearchMetadata(eventTypes, Set.of(), Set.of(), Set.of());
+        var events = new java.util.LinkedHashMap<Key, SearchMetadata.EventValues>();
+        for (var eventType : eventTypes) {
+            events.put(eventType, SearchMetadata.EventValues.empty());
+        }
+        return new SearchMetadata(events);
     }
 
     private static SearchPage.Event event() {
