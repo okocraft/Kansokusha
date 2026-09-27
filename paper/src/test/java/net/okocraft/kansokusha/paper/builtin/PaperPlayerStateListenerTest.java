@@ -10,6 +10,7 @@ import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.damage.DamageSource;
@@ -22,6 +23,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -305,7 +308,7 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testDeathRecordsFinalContextWithoutFullDrops() throws Exception {
+    void testDeathRecordsFinalContextAndInventorySnapshot() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerDeathListener.register(
             api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
@@ -314,6 +317,16 @@ class PaperPlayerStateListenerTest {
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
         Mockito.when(player.getLocation()).thenReturn(location);
+        var inventory = Mockito.mock(PlayerInventory.class);
+        Mockito.when(inventory.getStorageContents()).thenReturn(new ItemStack[]{
+            ItemStack.of(Material.DIAMOND, 2),
+            null
+        });
+        Mockito.when(inventory.getArmorContents()).thenReturn(new ItemStack[]{
+            ItemStack.of(Material.DIAMOND_BOOTS, 1)
+        });
+        Mockito.when(inventory.getItemInOffHand()).thenReturn(ItemStack.of(Material.SHIELD, 1));
+        Mockito.when(player.getInventory()).thenReturn(inventory);
         var lastDamage = Mockito.mock(EntityDamageEvent.class);
         Mockito.when(lastDamage.getCause()).thenReturn(EntityDamageEvent.DamageCause.FALL);
         Mockito.when(player.getLastDamageCause()).thenReturn(lastDamage);
@@ -357,6 +370,22 @@ class PaperPlayerStateListenerTest {
             payload.getString("killer_type").orElseThrow()
         );
         Assertions.assertEquals("fall", payload.getString("last_damage_cause").orElseThrow());
+        var storage = payload.getListOrEmpty("inventory");
+        Assertions.assertEquals(2, storage.size());
+        Assertions.assertEquals(
+            Material.DIAMOND,
+            PaperItemStackPayloadCodec.decode((CompoundTag) storage.getFirst()).getType()
+        );
+        var armor = payload.getListOrEmpty("armor");
+        Assertions.assertEquals(1, armor.size());
+        Assertions.assertEquals(
+            Material.DIAMOND_BOOTS,
+            PaperItemStackPayloadCodec.decode((CompoundTag) armor.getFirst()).getType()
+        );
+        Assertions.assertEquals(
+            Material.SHIELD,
+            PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("offhand")).getType()
+        );
         Mockito.verify(event, Mockito.never()).getDrops();
     }
 
