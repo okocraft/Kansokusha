@@ -52,6 +52,24 @@ retention periods recommended by `docs/v1-built-in-event-catalog.md` and
 server or proxy to apply changes. See `docs/design.md` for the recording pipeline and
 storage layout.
 
+## Inspection mode
+
+Paper/Folia provides session-scoped inspection mode commands:
+
+- `/kansokusha inspect` toggles inspection mode.
+- `/kansokusha inspect on` enables it idempotently.
+- `/kansokusha inspect off` disables it idempotently.
+- `/kansokusha i` is an alias for `inspect`.
+- `kansokusha.command.inspect` controls access independently of
+  `kansokusha.command.search`.
+
+Inspection state is held only for the current player session. It is cleared on logout,
+plugin disable, and server restart. Permission is rechecked when the inspection state is
+consumed, so losing `kansokusha.command.inspect` invalidates an enabled session.
+
+This stage provides the inspection session and command surface only; block-click lookup is
+wired separately.
+
 ## Search
 
 - `/kansokusha search ...` searches persisted events in the current instance's DuckDB database.

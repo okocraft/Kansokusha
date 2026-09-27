@@ -8,6 +8,8 @@ import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
+import net.okocraft.kansokusha.paper.inspection.InspectionSessionListener;
+import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,6 +20,7 @@ import java.util.logging.Level;
 
 public final class KansokushaPaperPlugin extends JavaPlugin {
 
+    private final InspectionSessionManager inspectionSessions = new InspectionSessionManager();
     private @Nullable KansokushaRuntime runtime;
 
     @Override
@@ -37,8 +40,13 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             this.runtime = runtime;
             this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
                 Commands commands = event.registrar();
-                KansokushaCommands.register(commands, config.searchTimeZone());
+                KansokushaCommands.register(
+                    commands,
+                    config.searchTimeZone(),
+                    this.inspectionSessions
+                );
             });
+            InspectionSessionListener.register(this, this.inspectionSessions);
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
@@ -51,6 +59,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        this.inspectionSessions.clear();
         LanguageProvider.unload();
 
         var runtime = this.runtime;
