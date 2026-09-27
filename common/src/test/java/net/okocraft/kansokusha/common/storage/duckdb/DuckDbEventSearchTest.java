@@ -513,6 +513,87 @@ class DuckDbEventSearchTest {
     }
 
     @Test
+    void testRepeatedValuesAreOrGroupsAndDifferentFieldsAreAnded(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(
+                queued(event(
+                    AUDIT,
+                    NOW,
+                    OVERWORLD,
+                    new BlockPosition(1, 64, 1),
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null),
+                queued(event(
+                    AUDIT,
+                    NOW.plusSeconds(1),
+                    OVERWORLD,
+                    new BlockPosition(2, 64, 2),
+                    new PlayerActor(PLAYER_TWO),
+                    DIRT
+                ), null),
+                queued(event(
+                    OTHER,
+                    NOW.plusSeconds(2),
+                    NETHER,
+                    new BlockPosition(3, 64, 3),
+                    new PlayerActor(PLAYER_ONE),
+                    STONE
+                ), null)
+            ));
+
+            var page = storage.search(request(
+                "action example:audit action example:other "
+                    + "target minecraft:stone target minecraft:dirt "
+                    + "actor-uuid " + PLAYER_ONE,
+                Set.of(AUDIT, OTHER),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            ));
+
+            Assertions.assertEquals(2, page.events().size());
+            Assertions.assertTrue(page.events().stream().allMatch(
+                result -> result.actorUuid().orElseThrow().equals(PLAYER_ONE)
+            ));
+            Assertions.assertEquals(
+                Set.of(AUDIT, OTHER),
+                page.events().stream().map(SearchPage.Event::eventType).collect(
+                    java.util.stream.Collectors.toSet()
+                )
+            );
+        }
+    }
+
+    @Test
+    void testFilterDoesNotScanRawPayload(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            var submission = new EventSubmission(
+                AUDIT,
+                PayloadGeneration.FIRST,
+                NOW,
+                SERVER,
+                null,
+                null,
+                new PlayerActor(PLAYER_ONE),
+                null,
+                EventPayload.copyOf(
+                    "payload-only-needle".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                )
+            );
+            storage.append(List.of(queued(submission, null)));
+
+            Assertions.assertTrue(storage.search(request(
+                "filter needle",
+                Set.of(AUDIT),
+                Optional.empty(),
+                Optional.empty(),
+                20
+            )).events().isEmpty());
+        }
+    }
+
+    @Test
     void testKeysetPaginationRemainsStableAcrossNewInsertAndSupportsBothOrders(
         @TempDir Path dir
     ) throws Exception {
