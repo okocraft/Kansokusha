@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.command;
 
 import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import dev.siroshun.mcmsgdef.MessageKey;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.translation.Argument;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -10,9 +11,8 @@ final class SearchCommandMessages {
 
     static final DefaultMessageDefiner DEFINER = DefaultMessageDefiner.create();
 
-    static final MessageKey.Arg1<String> PARSE_ERROR = DEFINER
-        .define("kansokusha.command.search.parse-error", "Invalid search query.<unused>")
-        .with(unused -> Argument.string("unused", unused));
+    static final MessageKey PARSE_ERROR = DEFINER
+        .define("kansokusha.command.search.parse-error", "Invalid search query.");
 
     static final MessageKey.Arg1<String> EVENT_PERMISSION = DEFINER
         .define(
@@ -21,12 +21,11 @@ final class SearchCommandMessages {
         )
         .with(event -> Argument.string("event", event));
 
-    static final MessageKey.Arg1<String> RADIUS_PLAYER_ONLY = DEFINER
+    static final MessageKey RADIUS_PLAYER_ONLY = DEFINER
         .define(
             "kansokusha.command.search.radius-player-only",
-            "radius is only available to players.<unused>"
-        )
-        .with(unused -> Argument.string("unused", unused));
+            "radius is only available to players."
+        );
 
     static final MessageKey.Arg1<String> LIMIT_RANGE = DEFINER
         .define(
@@ -35,25 +34,21 @@ final class SearchCommandMessages {
         )
         .with(max -> Argument.string("max", max));
 
-    static final MessageKey.Arg1<String> SEARCH_FAILED = DEFINER
-        .define("kansokusha.command.search.failed", "Search failed.<unused>")
-        .with(unused -> Argument.string("unused", unused));
+    static final MessageKey SEARCH_FAILED = DEFINER
+        .define("kansokusha.command.search.failed", "Search failed.");
 
-    static final MessageKey.Arg1<String> NO_RESULTS = DEFINER
-        .define("kansokusha.command.search.no-results", "No matching events.<unused>")
-        .with(unused -> Argument.string("unused", unused));
+    static final MessageKey NO_RESULTS = DEFINER
+        .define("kansokusha.command.search.no-results", "No matching events.");
 
-    static final MessageKey.Arg1<String> RESULT = DEFINER
+    static final MessageKey.Arg1<Component> RESULT = DEFINER
         .define("kansokusha.command.search.result", "<line>")
-        .with(line -> Argument.string("line", line));
+        .with(line -> Argument.component("line", line));
 
-    static final MessageKey.Arg1<String> PREVIOUS = DEFINER
-        .define("kansokusha.command.search.previous", "Previous<unused>")
-        .with(unused -> Argument.string("unused", unused));
+    static final MessageKey PREVIOUS = DEFINER
+        .define("kansokusha.command.search.previous", "Previous");
 
-    static final MessageKey.Arg1<String> NEXT = DEFINER
-        .define("kansokusha.command.search.next", "Next<unused>")
-        .with(unused -> Argument.string("unused", unused));
+    static final MessageKey NEXT = DEFINER
+        .define("kansokusha.command.search.next", "Next");
 
     private SearchCommandMessages() {
         throw new UnsupportedOperationException();
