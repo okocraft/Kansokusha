@@ -11,6 +11,7 @@ import io.papermc.paper.command.brigadier.Commands;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
@@ -23,6 +24,7 @@ import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -81,8 +83,8 @@ final class SearchCommand {
         try {
             invocation = parseInvocation(rawInput);
             query = SearchQueryParser.parse(invocation.query(), clock, timezone);
-        } catch (SearchQueryParseException | IllegalArgumentException e) {
-            sender.sendMessage(SearchCommandMessages.PARSE_ERROR.apply(""));
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(SearchCommandMessages.PARSE_ERROR.asComponent());
             return 0;
         }
 
@@ -107,7 +109,7 @@ final class SearchCommand {
         Optional<SearchRequest.RadiusCenter> radiusCenter = Optional.empty();
         if (hasRadius(query)) {
             if (player == null) {
-                sender.sendMessage(SearchCommandMessages.RADIUS_PLAYER_ONLY.apply(""));
+                sender.sendMessage(SearchCommandMessages.RADIUS_PLAYER_ONLY.asComponent());
                 return 0;
             }
             var location = player.getLocation();
@@ -123,7 +125,7 @@ final class SearchCommand {
         try {
             backend = EventSearchBackend.require(Kansokusha.api());
         } catch (IllegalStateException | IllegalArgumentException e) {
-            sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.apply(""));
+            sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
             return 0;
         }
 
@@ -138,7 +140,7 @@ final class SearchCommand {
             )))
             .whenComplete((page, failure) -> {
                 if (failure != null) {
-                    sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.apply(""));
+                    sender.sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
                 renderPage(sender, invocation.query(), page);
@@ -271,7 +273,7 @@ final class SearchCommand {
         SearchPage page
     ) {
         if (page.events().isEmpty()) {
-            sender.sendMessage(SearchCommandMessages.NO_RESULTS.apply(""));
+            sender.sendMessage(SearchCommandMessages.NO_RESULTS.asComponent());
         } else {
             for (var event : page.events()) {
                 sender.sendMessage(SearchCommandMessages.RESULT.apply(formatEvent(event)));
@@ -284,20 +286,20 @@ final class SearchCommand {
         }
     }
 
-    static String formatEvent(SearchPage.Event event) {
-        var parts = new ArrayList<String>();
-        parts.add(event.occurredAt().toString());
-        parts.add(displayEventType(event.eventType()));
+    static Component formatEvent(SearchPage.Event event) {
+        var parts = new ArrayList<Component>();
+        parts.add(Component.text(event.occurredAt().toString()));
+        parts.add(Component.text(displayEventType(event.eventType())));
 
         var actor = formatActor(event);
-        var target = event.targetType().map(Key::asString).orElse("");
-        if (!actor.isEmpty() || !target.isEmpty()) {
-            if (!actor.isEmpty() && !target.isEmpty()) {
-                parts.add(actor + " -> " + target);
-            } else if (!actor.isEmpty()) {
+        var target = event.targetType().map(type -> Component.text(type.asString())).orElse(null);
+        if (actor != null || target != null) {
+            if (actor != null && target != null) {
+                parts.add(actor.append(Component.text(" -> ")).append(target));
+            } else if (actor != null) {
                 parts.add(actor);
             } else {
-                parts.add("-> " + target);
+                parts.add(Component.text("-> ").append(target));
             }
         }
 
@@ -311,38 +313,54 @@ final class SearchCommand {
                     .append(' ')
                     .append(event.z().getAsInt());
             }
-            parts.add(location.toString());
+            parts.add(Component.text(location.toString()));
         });
 
         event.searchText()
             .map(SearchCommand::singleLine)
             .filter(text -> !text.isEmpty())
-            .ifPresent(text -> parts.add('"' + text + '"'));
+            .ifPresent(text -> parts.add(Component.text('"' + text + '"')));
 
-        return String.join(" | ", parts);
+        var result = Component.empty();
+        for (var index = 0; index < parts.size(); index++) {
+            if (index > 0) {
+                result = result.append(Component.text(" | "));
+            }
+            result = result.append(parts.get(index));
+        }
+        return result;
     }
 
-    private static String formatActor(SearchPage.Event event) {
+    private static @Nullable Component formatActor(SearchPage.Event event) {
         if (event.actorKind().isEmpty()) {
-            return "";
+            return null;
         }
 
         return switch (event.actorKind().get()) {
             case PLAYER -> {
                 var uuid = event.actorUuid().map(Object::toString).orElse("");
-                yield event.actorName()
-                    .map(name -> uuid.isEmpty() ? name : name + " (" + uuid + ")")
-                    .orElse(uuid);
+                if (event.actorName().isPresent()) {
+                    var name = Component.text(event.actorName().get());
+                    yield uuid.isEmpty()
+                        ? name
+                        : name.hoverEvent(HoverEvent.showText(Component.text(uuid)));
+                }
+                yield uuid.isEmpty() ? null : Component.text(uuid);
             }
             case ENTITY -> {
                 var type = event.actorType().map(Key::asString).orElse("");
                 var uuid = event.actorUuid().map(Object::toString).orElse("");
                 if (type.isEmpty()) {
-                    yield uuid;
+                    yield uuid.isEmpty() ? null : Component.text(uuid);
                 }
-                yield uuid.isEmpty() ? type : type + " (" + uuid + ")";
+                var component = Component.text(type);
+                yield uuid.isEmpty()
+                    ? component
+                    : component.hoverEvent(HoverEvent.showText(Component.text(uuid)));
             }
-            case BLOCK -> event.actorType().map(Key::asString).orElse("");
+            case BLOCK -> event.actorType()
+                .map(type -> Component.text(type.asString()))
+                .orElse(null);
         };
     }
 
@@ -350,13 +368,13 @@ final class SearchCommand {
         return text.replace('\r', ' ').replace('\n', ' ');
     }
 
-    static Component paginationComponent(String query, SearchPage page) {
+    static @Nullable Component paginationComponent(String query, SearchPage page) {
         Component result = Component.empty();
         var present = false;
 
         if (page.previousCursor().isPresent()) {
             result = result.append(
-                SearchCommandMessages.PREVIOUS.apply("")
+                SearchCommandMessages.PREVIOUS.asComponent()
                     .clickEvent(ClickEvent.runCommand(pageCommand(query, page.previousCursor().get())))
             );
             present = true;
@@ -367,7 +385,7 @@ final class SearchCommand {
                 result = result.append(Component.text(" | "));
             }
             result = result.append(
-                SearchCommandMessages.NEXT.apply("")
+                SearchCommandMessages.NEXT.asComponent()
                     .clickEvent(ClickEvent.runCommand(pageCommand(query, page.nextCursor().get())))
             );
             present = true;
