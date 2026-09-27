@@ -88,7 +88,10 @@ class KansokushaConfigTest {
         assertInvalid(
             dir,
             "search-time-zone",
-            config("''", "1", "PT1S", "").replace(\n                "cleanup-interval: PT1H",\n                "cleanup-interval: PT1H\\nsearch-time-zone: Not/AZone"\n            )
+            config("''", "1", "PT1S", "").replace(
+                "cleanup-interval: PT1H",
+                "cleanup-interval: PT1H\nsearch-time-zone: Not/AZone"
+            )
         );
         assertInvalid(dir, "more than one retention policy", config("''", "1", "PT1S", """
               policies:
