@@ -5,6 +5,7 @@ import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import net.okocraft.kansokusha.common.command.CommandMessages;
+import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.List;
