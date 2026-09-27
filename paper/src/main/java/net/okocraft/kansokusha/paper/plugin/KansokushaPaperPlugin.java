@@ -6,9 +6,11 @@ import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
 import net.okocraft.kansokusha.paper.inspection.InspectionInteractionListener;
+import net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -51,9 +53,10 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             InspectionInteractionListener.register(
                 this,
                 this.inspectionSessions,
-                (playerId, target) -> {
-                    // I3 connects immutable inspection targets to the existing async search backend.
-                }
+                new InspectionSearchHandler(
+                    this.getServer(),
+                    EventSearchBackend.require(runtime)
+                )
             );
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);

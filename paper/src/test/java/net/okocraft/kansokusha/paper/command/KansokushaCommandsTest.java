@@ -4,6 +4,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
+import net.okocraft.kansokusha.paper.inspection.InspectionSearchMessages;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
@@ -37,7 +38,8 @@ class KansokushaCommandsTest {
                 CommandMessages.DEFINER,
                 SearchCommandMessages.DEFINER,
                 EventCommandMessages.DEFINER,
-                InspectionCommandMessages.DEFINER
+                InspectionCommandMessages.DEFINER,
+                InspectionSearchMessages.DEFINER
             ),
             KansokushaCommands.getDefiners()
         );

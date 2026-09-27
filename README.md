@@ -74,9 +74,18 @@ main-hand interaction selects a target. Block damage and block break are also ca
 as safety guards, so inspection clicks do not mutate the world or create normal
 cancel-aware mutation logs.
 
-The selected coordinate is snapshotted as an immutable world key plus integer X/Y/Z
-target. History lookup and result rendering are connected to that target in the next
-inspection stage.
+The selected coordinate is searched through the existing asynchronous search backend
+using an exact world/X/Y/Z condition, newest first, with the normal player default of
+10 results. Event visibility is restricted by
+`kansokusha.command.search.event.<event-type>`; free-form
+`kansokusha.command.search` is not required for inspection itself. Result rows reuse
+the normal search formatter and remain clickable to `/kansokusha event <event-id>`
+when `kansokusha.command.event` is available.
+
+If more than 10 results exist and the player has `kansokusha.command.search`, inspection
+shows a clickable `[View full history]` link that opens the existing exact-position
+search and its normal pagination. Rapid clicks use latest-request-wins behavior, so a
+slower older lookup is not displayed after a newer target.
 
 ## Search
 
