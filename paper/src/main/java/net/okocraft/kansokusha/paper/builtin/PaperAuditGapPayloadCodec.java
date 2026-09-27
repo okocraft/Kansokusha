@@ -29,7 +29,9 @@ final class PaperAuditGapPayloadCodec {
         int rawSlot,
         String direction,
         @Nullable ItemStack currentItem,
-        @Nullable ItemStack cursor
+        @Nullable ItemStack cursor,
+        @Nullable ItemStack exchangeItem,
+        int hotbarButton
     ) {
         var payload = new CompoundTag();
         payload.put("container", container.payload());
@@ -42,6 +44,10 @@ final class PaperAuditGapPayloadCodec {
         payload.putInt("raw_slot", rawSlot);
         payload.put("item_before", PaperContainerPayloadCodec.snapshotItem(currentItem));
         payload.put("cursor", PaperContainerPayloadCodec.snapshotItem(cursor));
+        if (exchangeItem != null) {
+            payload.put("exchange_item", PaperContainerPayloadCodec.snapshotItem(exchangeItem));
+            payload.putInt("hotbar_button", hotbarButton);
+        }
         return PaperPayloadNbtCodec.encode(payload);
     }
 
