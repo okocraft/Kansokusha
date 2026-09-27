@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
@@ -100,6 +101,40 @@ final class PaperPlayerStatePayloadCodec {
         boolean keepInventory,
         boolean keepLevel
     ) {
+        return encodeDeath(
+            deathMessage,
+            killer,
+            lastDamageCause,
+            droppedExp,
+            newExp,
+            newTotalExp,
+            newLevel,
+            keepInventory,
+            keepLevel,
+            new ListTag(),
+            new ListTag(),
+            new CompoundTag()
+        );
+    }
+
+    static EventPayload encodeDeath(
+        @Nullable Component deathMessage,
+        @Nullable KillerSnapshot killer,
+        @Nullable String lastDamageCause,
+        int droppedExp,
+        int newExp,
+        int newTotalExp,
+        int newLevel,
+        boolean keepInventory,
+        boolean keepLevel,
+        ListTag inventory,
+        ListTag armor,
+        CompoundTag offhand
+    ) {
+        Objects.requireNonNull(inventory, "inventory");
+        Objects.requireNonNull(armor, "armor");
+        Objects.requireNonNull(offhand, "offhand");
+
         var payload = new CompoundTag();
         if (deathMessage != null) {
             payload.putString("death_message", PaperComponentPayloadCodec.encode(deathMessage));
@@ -120,6 +155,9 @@ final class PaperPlayerStatePayloadCodec {
         payload.putInt("new_level", newLevel);
         payload.putBoolean("keep_inventory", keepInventory);
         payload.putBoolean("keep_level", keepLevel);
+        payload.put("inventory", inventory);
+        payload.put("armor", armor);
+        payload.put("offhand", offhand);
         return PaperPayloadNbtCodec.encode(payload);
     }
 
