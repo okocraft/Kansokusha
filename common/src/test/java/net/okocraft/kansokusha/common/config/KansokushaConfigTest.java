@@ -41,7 +41,6 @@ class KansokushaConfigTest {
             batch-size: 2
             flush-interval: PT0.5S
             cleanup-interval: PT5M
-            search-time-zone: Asia/Tokyo
             retention:
               default: P1D
               policies:
@@ -58,9 +57,25 @@ class KansokushaConfigTest {
         Assertions.assertEquals(2, config.batchSize());
         Assertions.assertEquals(Duration.ofMillis(500), config.flushInterval());
         Assertions.assertEquals(Duration.ofMinutes(5), config.cleanupInterval());
-        Assertions.assertEquals(ZoneId.of("Asia/Tokyo"), config.searchTimeZone());
+        Assertions.assertEquals(ZoneId.of("UTC"), config.searchTimeZone());
         Assertions.assertEquals(Duration.ofDays(365), config.retention().durationOf(Key.key("example", "important")));
         Assertions.assertEquals(Duration.ofDays(1), config.retention().durationOf(Key.key("example", "other")));
+    }
+
+    @Test
+    void testConfiguredSearchTimeZoneIsLoaded(@TempDir Path dir) throws IOException {
+        Files.writeString(
+            dir.resolve("config.yml"),
+            config("''", "1", "PT1S", "")
+                .replace(
+                    "cleanup-interval: PT1H",
+                    "cleanup-interval: PT1H\nsearch-time-zone: Asia/Tokyo"
+                )
+        );
+
+        var config = KansokushaConfig.load(dir);
+
+        Assertions.assertEquals(ZoneId.of("Asia/Tokyo"), config.searchTimeZone());
     }
 
     @Test
@@ -73,7 +88,7 @@ class KansokushaConfigTest {
         assertInvalid(
             dir,
             "search-time-zone",
-            config("''", "1", "PT1S", "").replace("cleanup-interval: PT1H", "cleanup-interval: PT1H\nsearch-time-zone: Not/AZone")
+            config("''", "1", "PT1S", "").replace(\n                "cleanup-interval: PT1H",\n                "cleanup-interval: PT1H\\nsearch-time-zone: Not/AZone"\n            )
         );
         assertInvalid(dir, "more than one retention policy", config("''", "1", "PT1S", """
               policies:
