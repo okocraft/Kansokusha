@@ -4,6 +4,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
+import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.command.ConsoleCommandSender;
@@ -60,8 +61,16 @@ class KansokushaCommandsTest {
     }
 
     @Test
-    void testInspectCommandsAreWiredUnderKansokushaRoot() {
+    void testLegacyCommandCreationDoesNotExposeInspectionWithoutSessionLifecycle() {
         var command = KansokushaCommands.createCommand();
+
+        Assertions.assertNull(command.getChild("inspect"));
+        Assertions.assertNull(command.getChild("i"));
+    }
+
+    @Test
+    void testInspectCommandsAreWiredWhenSessionManagerIsProvided() {
+        var command = KansokushaCommands.createCommand(new InspectionSessionManager());
 
         Assertions.assertNotNull(command.getChild("inspect"));
         Assertions.assertNotNull(command.getChild("i"));
