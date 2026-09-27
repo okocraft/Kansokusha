@@ -54,6 +54,11 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testEventCommandIsWiredUnderKansokushaRoot() {
+        Assertions.assertNotNull(KansokushaCommands.createCommand().getChild("event"));
+    }
+
+    @Test
     void testRootCommandIsHiddenWithoutPermission() {
         ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
         TestSources.grant(console, "kansokusha.command.version");

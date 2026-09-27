@@ -48,6 +48,11 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testEventCommandIsWiredUnderKansokushaRoot() {
+        Assertions.assertNotNull(KansokushaCommands.createCommand().getNode().getChild("event"));
+    }
+
+    @Test
     void testRootCommandIsHiddenWithoutPermission() {
         ConsoleCommandSource console = TestSources.console();
         TestSources.grant(console, "kansokusha.command.version");
