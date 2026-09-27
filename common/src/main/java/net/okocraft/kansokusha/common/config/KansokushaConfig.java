@@ -10,7 +10,9 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DateTimeException;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +30,7 @@ public record KansokushaConfig(
     int batchSize,
     Duration flushInterval,
     Duration cleanupInterval,
+    ZoneId searchTimeZone,
     Retention retention
 ) {
 
@@ -77,6 +80,8 @@ public record KansokushaConfig(
         int batchSize = 0;
         String flushInterval = "";
         String cleanupInterval = "";
+        @Setting("search-time-zone")
+        String searchTimeZone = "UTC";
         RawRetention retention = new RawRetention();
 
         KansokushaConfig validate() throws IOException {
@@ -94,6 +99,7 @@ public record KansokushaConfig(
                 this.batchSize,
                 parseDuration(this.flushInterval, "flush-interval"),
                 parseDuration(this.cleanupInterval, "cleanup-interval"),
+                parseZoneId(this.searchTimeZone, "search-time-zone"),
                 Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate()
             );
         }
@@ -138,6 +144,14 @@ public record KansokushaConfig(
             return duration;
         } catch (DateTimeParseException e) {
             throw invalid(path + " must be an ISO-8601 duration such as PT1S or P30D: " + value);
+        }
+    }
+
+    private static ZoneId parseZoneId(String value, String path) throws IOException {
+        try {
+            return ZoneId.of(Objects.requireNonNullElse(value, ""));
+        } catch (DateTimeException e) {
+            throw invalid(path + " must be a valid IANA time zone such as UTC or Asia/Tokyo: " + value);
         }
     }
 

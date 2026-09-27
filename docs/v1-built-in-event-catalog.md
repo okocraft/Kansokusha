@@ -193,6 +193,8 @@ Chat and command event types persist only the original raw activity observed at 
 
 The five communication event types `paper_chat`, `velocity_chat`, `paper_player_command`, `paper_server_command`, and `velocity_command` also create a derived `event_search_text` row keyed by the persisted UUIDv7 `event_id`. Paper chat projects the original Adventure Component to plain text; command events project the original raw command unchanged. The audit payload remains the source of truth. Search compares this projection as a case-insensitive literal substring; it does not decode every payload and does not interpret `%`, `_`, or `*` as wildcards.
 
+Search query syntax, permission filtering, pagination, time-zone behavior, and initial-scope limitations are documented in `docs/search.md`.
+
 Cancellable Paper events are submitted only when they are not cancelled at MONITOR, but that does not prove later vanilla processing completed successfully. In particular `block_break`, `block_place`, `container_transfer`, and `player_trade` are event/attempt observations within the documented boundary. Completed session/state events such as join, quit, post-login, server-connected, and player-world-change represent transitions that have already occurred.
 
 ## Explicit exclusions
@@ -441,6 +443,7 @@ target backend name は common `server` field から復元可能なため payloa
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |
 | lifecycle | the platform unregisters listeners when the plugin stops; a startup failure disables the plugin |
 | ingestion | ordinary callbacks use bounded `KansokushaApi.submit`; Paper join / Velocity post-login use internal `PlayerNameDirectory.submitPlayerLogin`; the five communication events use internal `EventSearchBackend.submitSearchable` so event and derived text projection share one queue item and transaction |
+| search | Paper / Velocity share the common typed parser/backend/formatting support; reads use `(occurred_at, event_id)` keyset pagination, exact platform permission checks, and the instance-local DuckDB only |
 | Folia | listeners keep no state shared between events; each platform event is recorded within one MONITOR handler call |
 | coalescing | no generic coalescing/repeated-log suppression mechanism is part of this expansion |
 
@@ -448,3 +451,4 @@ target backend name は common `server` field から復元可能なため payloa
 
 - `docs/initial-requirements.md`
 - `docs/design.md`
+- `docs/search.md`

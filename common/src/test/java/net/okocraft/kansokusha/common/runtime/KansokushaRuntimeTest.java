@@ -135,6 +135,45 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testTypedSearchRunsOnStorageThreadWithoutBlockingCaller() throws Exception {
+        var storage = new BlockingLookupStorage();
+        var runtime = KansokushaRuntime.start(
+            storage,
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            ignored -> {
+            },
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        var request = new SearchRequest(
+            SearchQueryParser.parse("", Clock.systemUTC(), ZoneOffset.UTC),
+            new SearchRequest.Constraints(Set.of(EVENT_TYPE)),
+            Optional.empty(),
+            Optional.empty(),
+            10
+        );
+
+        try {
+            var callerThread = Thread.currentThread();
+            var result = runtime.search(request);
+
+            Assertions.assertTrue(storage.searchStarted.await(5, TimeUnit.SECONDS));
+            Assertions.assertFalse(result.isDone());
+            Assertions.assertNotSame(callerThread, storage.searchThread.get());
+            Assertions.assertEquals("kansokusha-storage", storage.searchThread.get().getName());
+            Assertions.assertSame(request, storage.searchRequest.get());
+
+            storage.searchRelease.countDown();
+            Assertions.assertTrue(result.get(5, TimeUnit.SECONDS).events().isEmpty());
+        } finally {
+            storage.searchRelease.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
     void testTypedSearchDoesNotForceQueuedWritesToFlush(@TempDir Path dir) throws Exception {
         try (var runtime = start(dir, 10)) {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
@@ -318,6 +357,10 @@ class KansokushaRuntimeTest {
         private final CountDownLatch lookupRelease = new CountDownLatch(1);
         private final AtomicReference<Thread> lookupThread = new AtomicReference<>();
         private final AtomicReference<UUID> lookupEventId = new AtomicReference<>();
+        private final CountDownLatch searchStarted = new CountDownLatch(1);
+        private final CountDownLatch searchRelease = new CountDownLatch(1);
+        private final AtomicReference<Thread> searchThread = new AtomicReference<>();
+        private final AtomicReference<SearchRequest> searchRequest = new AtomicReference<>();
 
         @Override
         public void append(List<QueuedEvent> events) {
@@ -353,7 +396,16 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public SearchPage search(SearchRequest request) {
+        public SearchPage search(SearchRequest request) throws SQLException {
+            this.searchThread.set(Thread.currentThread());
+            this.searchRequest.set(request);
+            this.searchStarted.countDown();
+            try {
+                this.searchRelease.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("Interrupted while waiting in test storage.", e);
+            }
             return new SearchPage(List.of(), Optional.empty(), Optional.empty());
         }
 
@@ -410,6 +462,7 @@ class KansokushaRuntimeTest {
             batchSize,
             Duration.ofHours(1),
             Duration.ofHours(1),
+            java.time.ZoneOffset.UTC,
             new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1))
         );
     }

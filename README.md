@@ -46,16 +46,23 @@ contained in the packaged artifact and verifies the flushed event.
 ## Configuration
 
 `config.yml` is created in the plugin data directory on first start. It contains the
-retention periods recommended by `docs/v1-built-in-event-catalog.md`. Restart the server
-or proxy to apply changes. See `docs/design.md` for the recording pipeline and storage
-layout.
+retention periods recommended by `docs/v1-built-in-event-catalog.md` and
+`search-time-zone` (default `UTC`) for search expressions such as `today`,
+`yesterday`, date-only bounds, and datetimes without an explicit offset. Restart the
+server or proxy to apply changes. See `docs/design.md` for the recording pipeline and
+storage layout.
 
-## Commands
+## Search
 
-- `/kansokusha search ...` searches multiple persisted events by conditions.
+- `/kansokusha search ...` searches persisted events in the current instance's DuckDB database.
 - `/kansokusha event <event-id>` displays one persisted event by its UUIDv7 event ID.
-- `inspect` is reserved for a future Paper block-click inspection mode and is not an event-detail
-  subcommand.
+- `kansokusha.command.search`, `kansokusha.command.event`, and
+  `kansokusha.command.search.event.<event-type>` control search, event detail, and per-event
+  visibility. Kansokusha delegates exact permission nodes to the platform permission API rather
+  than implementing wildcard expansion itself.
+
+See `docs/search.md` for query syntax, time-zone behavior, pagination, permissions, output, and
+the intentionally unsupported initial search scope.
 
 ## License
 

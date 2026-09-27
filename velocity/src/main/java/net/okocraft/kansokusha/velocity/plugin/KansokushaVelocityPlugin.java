@@ -41,12 +41,14 @@ public final class KansokushaVelocityPlugin {
 
     @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyInitialize(ProxyInitializeEvent event) {
+        final KansokushaConfig config;
         final KansokushaRuntime runtime;
         try {
             LanguageProvider.load(this.dataDirectory.resolve("languages"), KansokushaCommands.getDefiners());
+            config = KansokushaConfig.load(this.dataDirectory);
             runtime = KansokushaRuntime.start(
                 this.dataDirectory,
-                KansokushaConfig.load(this.dataDirectory),
+                config,
                 null,
                 this.logger::info,
                 (message, failure) -> this.logger.error(message, failure)
@@ -69,7 +71,11 @@ public final class KansokushaVelocityPlugin {
             this.proxyServer.getEventManager().register(this, listener);
         }
 
-        KansokushaCommands.register(this.proxyServer.getCommandManager(), this);
+        KansokushaCommands.register(
+            this.proxyServer.getCommandManager(),
+            this,
+            config.searchTimeZone()
+        );
         Kansokusha.setApi(runtime);
     }
 

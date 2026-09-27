@@ -33,6 +33,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -114,6 +115,35 @@ class SearchCommandTest {
         Assertions.assertEquals(50, request.defaultLimit());
         Assertions.assertEquals(Set.of(CHAT), request.constraints().allowedEventTypes());
         Assertions.assertTrue(request.radiusCenter().isEmpty());
+    }
+
+    @Test
+    void testConfiguredTimeZoneIsUsedForDateExpressions() throws Exception {
+        this.api.metadata = metadata(Set.of(CHAT));
+        ConsoleCommandSource console = console(CHAT);
+        var tokyoTester = CommandTester.of(
+            SearchCommand.createSearchCommand(CLOCK, ZoneId.of("Asia/Tokyo"))
+        );
+
+        Assertions.assertEquals(
+            1,
+            tokyoTester.execute(console, "search time today")
+        );
+
+        var range = java.util.Objects.requireNonNull(this.api.lastRequest)
+            .query()
+            .conditions()
+            .timeRanges()
+            .iterator()
+            .next();
+        Assertions.assertEquals(
+            Optional.of(Instant.parse("2026-09-26T15:00:00Z")),
+            range.fromInclusive()
+        );
+        Assertions.assertEquals(
+            Optional.of(Instant.parse("2026-09-27T15:00:00Z")),
+            range.toExclusive()
+        );
     }
 
     @Test
