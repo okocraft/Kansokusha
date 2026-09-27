@@ -28,13 +28,16 @@ public record SearchRequest(
     int defaultLimit
 ) {
 
+    public static final int MAX_LIMIT = 1000;
+
     public SearchRequest {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(constraints, "constraints");
         Objects.requireNonNull(radiusCenter, "radiusCenter");
         Objects.requireNonNull(cursor, "cursor");
-        if (defaultLimit <= 0) {
-            throw new IllegalArgumentException("defaultLimit must be greater than zero");
+        validateLimit("defaultLimit", defaultLimit);
+        if (query.limit().isPresent()) {
+            validateLimit("query limit", query.limit().getAsInt());
         }
         if (hasRadius(query) && radiusCenter.isEmpty()) {
             throw new IllegalArgumentException("radius requires a radius center");
@@ -43,6 +46,14 @@ public record SearchRequest(
 
     public int limit() {
         return this.query.limit().orElse(this.defaultLimit);
+    }
+
+    private static void validateLimit(String name, int limit) {
+        if (limit <= 0 || limit > MAX_LIMIT) {
+            throw new IllegalArgumentException(
+                name + " must be between 1 and " + MAX_LIMIT + ": " + limit
+            );
+        }
     }
 
     private static boolean hasRadius(SearchQuery query) {
