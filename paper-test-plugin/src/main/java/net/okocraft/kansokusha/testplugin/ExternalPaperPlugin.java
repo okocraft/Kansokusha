@@ -29,6 +29,8 @@ public final class ExternalPaperPlugin extends JavaPlugin {
 
     private static final NamespacedKey EVENT_TYPE =
         new NamespacedKey("fixture", "custom_event");
+    private static final String BUILT_IN_LISTENER_PACKAGE =
+        "net.okocraft.kansokusha.paper.builtin";
 
     private static final Set<String> EXPECTED_BUILT_IN_LISTENERS = Set.of(
         "net.okocraft.kansokusha.paper.builtin.PaperBlockBreakListener",
@@ -100,7 +102,7 @@ public final class ExternalPaperPlugin extends JavaPlugin {
                 "NamespacedKey conversion was not lossless."
             );
 
-            var registered = registeredKansokushaListenerClasses();
+            var registered = registeredBuiltInListenerClasses();
             check(
                 registered.equals(EXPECTED_BUILT_IN_LISTENERS),
                 "Unexpected Kansokusha built-in listener set: " + registered
@@ -135,12 +137,16 @@ public final class ExternalPaperPlugin extends JavaPlugin {
         }
     }
 
-    private static Set<String> registeredKansokushaListenerClasses() {
+    private static Set<String> registeredBuiltInListenerClasses() {
         var result = new HashSet<String>();
         for (var handlers : HandlerList.getHandlerLists()) {
             for (var registered : handlers.getRegisteredListeners()) {
-                if (registered.getPlugin().getName().equals("Kansokusha")) {
-                    result.add(registered.getListener().getClass().getName());
+                var listenerClass = registered.getListener().getClass();
+                if (
+                    registered.getPlugin().getName().equals("Kansokusha") &&
+                        listenerClass.getPackageName().equals(BUILT_IN_LISTENER_PACKAGE)
+                ) {
+                    result.add(listenerClass.getName());
                 }
             }
         }
