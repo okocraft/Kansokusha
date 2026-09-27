@@ -15,6 +15,10 @@ flush-interval: PT1S
 # Interval (ISO-8601 duration) at which expired events are deleted.
 cleanup-interval: PT1H
 
+# Time zone used by search date/time expressions such as today, yesterday, and offset-less datetimes.
+# Use an IANA zone ID such as UTC, Asia/Tokyo, or Europe/London.
+search-time-zone: UTC
+
 retention:
   # Retention period for event types that are not listed in any policy below.
   default: P30D
