@@ -8,6 +8,8 @@ import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.List;
 
 @NotNullByDefault
@@ -26,12 +28,21 @@ public final class KansokushaCommands {
         manager.register(manager.metaBuilder(command).plugin(plugin).build(), command);
     }
 
+    public static void register(CommandManager manager, Object plugin, ZoneId searchTimeZone) {
+        BrigadierCommand command = createCommand(Clock.systemUTC(), searchTimeZone);
+        manager.register(manager.metaBuilder(command).plugin(plugin).build(), command);
+    }
+
     static BrigadierCommand createCommand() {
+        return createCommand(Clock.systemUTC(), ZoneId.systemDefault());
+    }
+
+    static BrigadierCommand createCommand(Clock clock, ZoneId searchTimeZone) {
         return new BrigadierCommand(
             BrigadierCommand.literalArgumentBuilder("kansokusha")
                 .requires(source -> source.hasPermission("kansokusha.command"))
                 .then(VersionCommand.createVersionCommand())
-                .then(SearchCommand.createSearchCommand())
+                .then(SearchCommand.createSearchCommand(clock, searchTimeZone))
                 .then(EventCommand.createEventCommand())
         );
     }
