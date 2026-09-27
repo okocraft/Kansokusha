@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.paper.builtin;
 
+import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import net.kyori.adventure.key.Key;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -37,6 +38,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position;
 
@@ -45,6 +47,11 @@ import static net.okocraft.kansokusha.paper.builtin.PaperBuiltInSupport.position
 public final class PaperNaturalBlockChangeListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "natural_block_change");
+
+    private static final String NEIGHBOR_UPDATER_CLASS =
+        "net.minecraft.world.level.redstone.NeighborUpdater";
+    private static final String BLOCK_CLASS =
+        "net.minecraft.world.level.block.Block";
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -67,6 +74,58 @@ public final class PaperNaturalBlockChangeListener implements Listener {
     ) {
         PaperBuiltInSupport.register(api, EVENT_TYPE);
         return new PaperNaturalBlockChangeListener(api, serverKey, clock);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void recordPhysicsDestroy(BlockDestroyEvent event) {
+        Objects.requireNonNull(event, "event");
+        this.recordPhysicsDestroy(event, isNeighbourShapeDestroy());
+    }
+
+    void recordPhysicsDestroy(BlockDestroyEvent event, boolean neighbourShapeDestroy) {
+        Objects.requireNonNull(event, "event");
+        if (!neighbourShapeDestroy) {
+            return;
+        }
+
+        var block = event.getBlock();
+        this.submitIfChanged(
+            block,
+            null,
+            block.getBlockData(),
+            event.getNewState(),
+            "physics_destroy",
+            null,
+            null
+        );
+    }
+
+    private static boolean isNeighbourShapeDestroy() {
+        return StackWalker.getInstance().walk(
+            PaperNaturalBlockChangeListener::isNeighbourShapeDestroy
+        );
+    }
+
+    static boolean isNeighbourShapeDestroy(Stream<StackWalker.StackFrame> frames) {
+        var sawNeighborShapeUpdate = false;
+        var sawUpdateOrDestroy = false;
+        var iterator = frames.iterator();
+        while (iterator.hasNext()) {
+            var frame = iterator.next();
+            if (
+                frame.getClassName().equals(NEIGHBOR_UPDATER_CLASS)
+                    && frame.getMethodName().equals("executeShapeUpdate")
+            ) {
+                sawNeighborShapeUpdate = true;
+            }
+            if (
+                frame.getClassName().equals(BLOCK_CLASS)
+                    && frame.getMethodName().equals("updateOrDestroy")
+            ) {
+                sawUpdateOrDestroy = true;
+            }
+        }
+        return sawNeighborShapeUpdate && sawUpdateOrDestroy;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
