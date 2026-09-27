@@ -9,6 +9,8 @@ import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.List;
 
 @NotNullByDefault
@@ -26,11 +28,19 @@ public final class KansokushaCommands {
         commands.register(createCommand());
     }
 
+    public static void register(Commands commands, ZoneId searchTimeZone) {
+        commands.register(createCommand(Clock.systemUTC(), searchTimeZone));
+    }
+
     static LiteralCommandNode<CommandSourceStack> createCommand() {
+        return createCommand(Clock.systemUTC(), ZoneId.systemDefault());
+    }
+
+    static LiteralCommandNode<CommandSourceStack> createCommand(Clock clock, ZoneId searchTimeZone) {
         return Commands.literal("kansokusha")
             .requires(source -> source.getSender().hasPermission("kansokusha.command"))
             .then(VersionCommand.createVersionCommand())
-            .then(SearchCommand.createSearchCommand())
+            .then(SearchCommand.createSearchCommand(clock, searchTimeZone))
             .then(EventCommand.createEventCommand())
             .build();
     }
