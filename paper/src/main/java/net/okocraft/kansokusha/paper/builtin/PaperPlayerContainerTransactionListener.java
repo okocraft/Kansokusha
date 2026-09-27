@@ -2,7 +2,8 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerListener;
+import net.minecraft.network.HashedStack;
+import net.minecraft.world.inventory.RemoteSlot;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
@@ -22,6 +23,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -39,6 +41,9 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
 
     private static final String PACKET_LISTENER_CLASS =
         "net.minecraft.server.network.ServerGamePacketListenerImpl";
+    private static final String CONTAINER_MENU_CLASS =
+        "net.minecraft.world.inventory.AbstractContainerMenu";
+    private static final Field REMOTE_CARRIED_FIELD = findRemoteCarriedField();
 
     private final KansokushaApi api;
     private final Key serverKey;
@@ -163,10 +168,10 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
             this.clock.instant(),
             UUID.randomUUID()
         );
-        var tracking = new Tracking(this, menu, pending);
+        var tracking = new Tracking(this, menu, pending, remoteCarried(menu));
         this.activeTracking.put(playerId, tracking);
         try {
-            menu.addSlotListener(tracking);
+            setRemoteCarried(menu, tracking);
         } catch (RuntimeException exception) {
             this.activeTracking.remove(playerId, tracking);
             throw exception;
@@ -276,7 +281,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         return snapshot.worldKey() == null || snapshot.position() == null ? null : snapshot;
     }
 
-    private static boolean isPostEventContainerClick() {
+    private static boolean isPostVanillaContainerClick() {
         return StackWalker.getInstance().walk(frames -> {
             var packetHandlerPresent = false;
             var iterator = frames.iterator();
@@ -297,6 +302,13 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
                 }
 
                 if (
+                    className.equals(CONTAINER_MENU_CLASS)
+                        && methodName.equals("clicked")
+                ) {
+                    return false;
+                }
+
+                if (
                     className.equals(PACKET_LISTENER_CLASS)
                         && methodName.equals("handleContainerClick")
                 ) {
@@ -305,6 +317,45 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
             }
             return packetHandlerPresent;
         });
+    }
+
+    private static Field findRemoteCarriedField() {
+        for (var field : AbstractContainerMenu.class.getDeclaredFields()) {
+            if (field.getType() != RemoteSlot.class) {
+                continue;
+            }
+            if (!field.trySetAccessible()) {
+                throw new IllegalStateException(
+                    "Cannot access AbstractContainerMenu RemoteSlot field"
+                );
+            }
+            return field;
+        }
+        throw new IllegalStateException(
+            "AbstractContainerMenu RemoteSlot field was not found"
+        );
+    }
+
+    private static RemoteSlot remoteCarried(AbstractContainerMenu menu) {
+        try {
+            return (RemoteSlot) REMOTE_CARRIED_FIELD.get(menu);
+        } catch (IllegalAccessException exception) {
+            throw new IllegalStateException(
+                "Cannot read AbstractContainerMenu remote carried state",
+                exception
+            );
+        }
+    }
+
+    private static void setRemoteCarried(AbstractContainerMenu menu, RemoteSlot remoteSlot) {
+        try {
+            REMOTE_CARRIED_FIELD.set(menu, remoteSlot);
+        } catch (IllegalAccessException exception) {
+            throw new IllegalStateException(
+                "Cannot replace AbstractContainerMenu remote carried state",
+                exception
+            );
+        }
     }
 
     record ContainerDelta(ItemStack item, int amountDelta) {
@@ -349,60 +400,63 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         }
     }
 
-    private static final class Tracking implements ContainerListener {
+    private static final class Tracking implements RemoteSlot {
 
         private final PaperPlayerContainerTransactionListener owner;
         private final AbstractContainerMenu menu;
         private final PendingTransaction pending;
+        private final RemoteSlot delegate;
         private final AtomicBoolean completed = new AtomicBoolean();
 
         private Tracking(
             PaperPlayerContainerTransactionListener owner,
             AbstractContainerMenu menu,
-            PendingTransaction pending
+            PendingTransaction pending,
+            RemoteSlot delegate
         ) {
             this.owner = owner;
             this.menu = menu;
             this.pending = pending;
+            this.delegate = delegate;
         }
 
         @Override
-        public void slotChanged(
-            AbstractContainerMenu menu,
-            int slotIndex,
-            net.minecraft.world.item.ItemStack item
-        ) {
-            this.complete(menu);
+        public void force(net.minecraft.world.item.ItemStack outgoing) {
+            this.delegate.force(outgoing);
+            this.complete();
         }
 
         @Override
-        public void slotChanged(
-            AbstractContainerMenu menu,
-            int slotIndex,
-            net.minecraft.world.item.ItemStack oldItem,
-            net.minecraft.world.item.ItemStack item
-        ) {
-            this.complete(menu);
+        public void receive(HashedStack incoming) {
+            this.delegate.receive(incoming);
         }
 
         @Override
-        public void dataChanged(AbstractContainerMenu menu, int id, int value) {
+        public boolean matches(net.minecraft.world.item.ItemStack local) {
+            var matches = this.delegate.matches(local);
+            this.complete();
+            return matches;
         }
 
-        private void complete(AbstractContainerMenu menu) {
+        private void complete() {
             if (
-                menu != this.menu
-                    || this.completed.get()
-                    || !isPostEventContainerClick()
+                this.completed.get()
+                    || !isPostVanillaContainerClick()
                     || !this.completed.compareAndSet(false, true)
             ) {
                 return;
             }
+
+            this.owner.activeTracking.remove(this.pending.playerId(), this);
+            this.detach();
             this.owner.resolve(this.pending);
         }
 
         private void detach() {
-            this.menu.removeSlotListener(this);
+            if (remoteCarried(this.menu) == this) {
+                setRemoteCarried(this.menu, this.delegate);
+            }
         }
     }
+
 }
