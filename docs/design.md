@@ -89,7 +89,7 @@ CREATE TABLE event_search_text (
 
 `event_search_text.event_id` には unique index を張り、1 event につき高々1件の本文 projection とする。対象は `paper_chat`、`velocity_chat`、`paper_player_command`、`paper_server_command`、`velocity_command`。Paper chat は Adventure Component の監査 payload を変更せず、projection だけ plain text 化する。command は platform event で最初に観測した original raw command をそのまま projection に保存する。その他の event は row を作らない。
 
-本文検索は payload BLOB を decode せず `event_search_text` だけを走査し、`contains(lower(search_text), lower(?))` で case-insensitive literal substring を評価する。`LIKE` / regex は使わないため、`%`、`_`、`*` その他の記号に wildcard semantics はない。fuzzy search も行わない。将来の common search backend は internal `EventSearchBackend.findEventIdsContaining` で候補 event ID を取得し、公開 `KansokushaApi` にはこの機構を追加しない。
+本文検索は payload BLOB を decode せず `event_search_text` だけを走査し、`contains(lower(search_text), lower(?))` で case-insensitive literal substring を評価する。`LIKE` / regex は使わないため、`%`、`_`、`*` その他の記号に wildcard semantics はない。fuzzy search も行わない。typed search backend は internal `EventSearchBackend` として common に実装し、公開 `KansokushaApi` には検索 API を追加しない。
 
 event と本文 projection の insert は同一 transaction で commit する。retention cleanup は期限切れ event ID に対応する `event_search_text` row を先に削除し、その後 `events` row を削除して同一 transaction で commit する。このため supported lifecycle では event のない検索 row を残さない。projection は ingestion 時に生成し、検索時や cleanup 時に payload を再 decode しない。
 
@@ -99,11 +99,46 @@ event と本文 projection の insert は同一 transaction で commit する。
 
 Paper `paper_join` は payload generation 1 のまま、`username` を backward-compatible な optional field として追加する。T2 より前の generation-1 empty compound は引き続き有効で、欠落は username 未 capture を意味する。これは既存 field の意味を変えない optional field の追加であり、非互換変更ではないため generation は上げない。
 
-- `event_id` は保存時に生成する UUIDv7 で、event identity、同一 `occurred_at` 内の tie-break、将来の cursor pagination / inspect に使う。安定した時系列順は `(occurred_at, event_id)` とする。UUIDv7 に含まれる生成時刻は event の発生時刻として扱わず、`occurred_at` は引き続き `EventSubmission.occurredAt()` を正とする。
+- `event_id` は保存時に生成する UUIDv7 で、event identity、同一 `occurred_at` 内の tie-break、cursor pagination / event detail に使う。安定した時系列順は `(occurred_at, event_id)` とする。UUIDv7 に含まれる生成時刻は event の発生時刻として扱わず、`occurred_at` は引き続き `EventSubmission.occurredAt()` を正とする。
 - key は `namespace:value` 文字列のまま保存する。DuckDB は列ごとに辞書圧縮を行うため、種類の少ない文字列を整数 ID の辞書テーブルへ正規化しなくても保存効率は十分であり、プラグインが削除されても識別子は失われない（要件 §7.2）。
 - actor は `actor_kind`（`player` / `entity` / `block`）、`actor_uuid`（player と entity）、`actor_type`（entity type または block type の key。player では NULL）の 3 列に保存する。種類ごとの列にせず 1 組の列にまとめることで、「このプレイヤー / このエンティティ個体（`actor_uuid`）」「クリーパー全般 / ピストン全般（`actor_type`）」のどちらも 1 列の条件で検索できる。
 - `target_type` と `actor_type` も key 文字列のまま保存する。
 - 起動時に `events` / `player_name_history` / `event_search_text` を `CREATE TABLE IF NOT EXISTS` で用意し、各列構成が期待と一致しなければ起動を失敗させる。player-name projection には UUID/name と case-insensitive lookup 用 index、本文 projection には event ID unique index を張る。本番運用前のため `event_id` 追加を含む旧 `events` schema からの migration compatibility は用意せず、旧 DB は拒否する。運用開始後にスキーマ変更が必要になった時点で、バージョン管理と migration を導入する（要件 §15）。
+
+## 検索 read path
+
+`/kansokusha search` は platform-neutral parser と DuckDB backend を common に置き、Paper /
+Velocity は command source、現在位置、permission API への接続だけを担当する。検索条件は同一
+field 内を OR、異なる field 間を AND とし、exclude も同じ grouped predicate を反転して適用する。
+event type、player name、actor、target、world / position、time、communication text を typed column /
+projection から検索し、opaque payload BLOB 全体の走査は行わない。詳細は
+`docs/search.md` に記載する。
+
+検索と event detail の DB read は write と同じ `kansokusha-storage` executor に投入し、Paper /
+Velocity の command/event thread では待機しない。検索開始時に write queue を強制 flush せず、
+その時点で commit 済みの row だけを見るため、検索追加によって bounded write path の挙動を
+変えない。
+
+ページ順序は `(occurred_at, event_id)` で固定し、Next / Previous はこの pair の keyset cursor
+を用いる。OFFSET は使わない。検索中に新規 row が追加されても既に通過した境界からの相対
+offset はずれない。result formatting、cursor serialization、event permission filtering、
+localization message は common support を Paper / Velocity で共有する。
+
+player-name search は `player_name_history` を case-insensitive に引き、同一 historical name を
+複数 UUID が持つ場合は最新 `(last_seen, last_event_id)` の UUID を選ぶ。communication
+`filter` は `event_search_text` に対する case-insensitive literal substring のみで、
+regex / wildcard / fuzzy semantics は持たない。
+
+permission は `kansokusha.command.search`、`kansokusha.command.event` と
+`kansokusha.command.search.event.<event-type>` を使う。event permission は完全な node を
+Paper / Velocity の permission API に問い合わせ、Kansokusha 自身は wildcard を展開しない。
+そのため permission plugin の wildcard / negative / inheritance の最終判定をそのまま尊重する。
+権限のない event type は completion metadata と backend constraint の双方から除外し、inspect
+でも対象 event type の権限を再確認する。
+
+初期 search scope では network-wide cross-server DB search、public search API、arbitrary/raw
+payload field search、regex/fuzzy communication search、`server` filter、user-facing
+`payload_generation` / `expires_at` filter を実装しない。
 
 ## 保持期間
 
@@ -123,6 +158,7 @@ Paper `paper_join` は payload generation 1 のまま、`username` を backward-
 | `batch-size` | 1 トランザクションで書き込む最大件数。この件数がキューにたまると間隔を待たずに書き込む |
 | `flush-interval` | キューを DuckDB へ書き込む間隔 |
 | `cleanup-interval` | 保持期限切れイベントを削除する間隔 |
+| `search-time-zone` | `today` / `yesterday`、date-only bound、offset なし datetime の解釈に使う IANA timezone。bundled default は `UTC` |
 | `retention.default` | 一覧にない event type の保持期間 |
 | `retention.policies.<name>` | `duration` と、それを適用する `event-types` の一覧 |
 
