@@ -10,6 +10,8 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
 import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
 import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.SearchPage;
+import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import net.okocraft.kansokusha.common.storage.StorageHealth;
@@ -458,6 +460,11 @@ public final class DuckDbStorageImpl implements Storage {
             }
         }
         return List.copyOf(eventIds);
+    }
+
+    @Override
+    public SearchPage search(SearchRequest request) throws SQLException {
+        return DuckDbEventSearch.search(this.connection, request);
     }
 
     @Override
