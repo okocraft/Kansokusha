@@ -382,9 +382,9 @@ common position は lectern block position とし、generation 1 payload は `ac
 
 located non-player container を開いている player の accepted `InventoryClickEvent` / `InventoryDragEvent` を transaction boundary として扱う。
 
-MONITOR では top inventory の detached before snapshot と operation metadata だけを保持し、その場では submit しない。listener は player の NMS `AbstractContainerMenu` に一時的な `ContainerListener` を登録する。Paper の `ServerGamePacketListenerImpl#handleContainerClick` が Bukkit event dispatch を終えて vanilla click/drag を適用した後、同じ packet 処理内の slot notification を観測した時点で top inventory の after snapshot を取得する。
+MONITOR では top inventory の detached before snapshot と operation metadata だけを保持し、その場では submit しない。listener は player の NMS `AbstractContainerMenu` の cursor 同期用 `RemoteSlot` (`remoteCarried`) を一時的な delegating sentinel で包む。Paper の `ServerGamePacketListenerImpl#handleContainerClick` は Bukkit event dispatch 前から vanilla `clicked(...)` 完了まで `suppressRemoteUpdates = true` とし、その間の nested `broadcastChanges()` では remote synchronization を行わない。`clicked(...)` が完全に戻った後、packet-end の `broadcastChanges()` は必ず `remoteCarried.matches(...)` を呼ぶため、その callback を確定境界として top inventory の after snapshot を取得する。full resync / crafting・smithing の explicit full sync は `remoteCarried.force(...)` を同じく `clicked(...)` 後に観測して確定する。
 
-slot notification が別 tick の hopper、別 player、通常の container tick 等から来た場合は `handleContainerClick` の packet stack 外なので transaction 完了には使用しない。Bukkit event dispatch 中に plugin が明示的に synchronization を起こした notification も final boundary として扱わない。
+`RemoteSlot` callback が別 tick の hopper、別 player、通常の container tick 等から来た場合は `handleContainerClick` の packet stack 外なので transaction 完了には使用しない。Bukkit event dispatch 中、または NMS `AbstractContainerMenu#clicked(...)` が stack 上に残っている callback も final boundary として扱わない。これにより crafting grid、anvil/smithing、bundle 等が click 処理途中で起こす nested `broadcastChanges()` の中間状態を確定値として保存しない。
 
 before/after は永続化せず、`ItemStack#isSimilar` 相当の item identity ごとに amount を集約して net delta のみを生成する。container 内の slot rearrangement だけで item identity ごとの総量が変わらなければ submission は作らない。
 
