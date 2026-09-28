@@ -5,9 +5,6 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -37,164 +34,6 @@ public record SearchQuery(
         if (limit.isPresent() && limit.getAsInt() <= 0) {
             throw new IllegalArgumentException("limit must be greater than zero");
         }
-
-        if (isContradiction(conditions, exclusions)) {
-            throw new IllegalArgumentException(
-                "query inclusion predicate is fully excluded by the exclusion predicate"
-            );
-        }
-    }
-
-    private static boolean isContradiction(Conditions included, Conditions excluded) {
-        if (!hasConditions(excluded)) {
-            return false;
-        }
-        return implies(included.users(), excluded.users())
-            && implies(included.actions(), excluded.actions())
-            && timeRangesImply(included.timeRanges(), excluded.timeRanges())
-            && implies(included.radii(), excluded.radii())
-            && implies(included.targets(), excluded.targets())
-            && implies(included.filters(), excluded.filters())
-            && implies(included.actorUuids(), excluded.actorUuids())
-            && implies(included.actorKinds(), excluded.actorKinds())
-            && implies(included.actorTypes(), excluded.actorTypes())
-            && implies(included.worlds(), excluded.worlds())
-            && implies(included.positions(), excluded.positions())
-            && implies(included.around(), excluded.around());
-    }
-
-    private static boolean hasConditions(Conditions conditions) {
-        return !conditions.users().isEmpty()
-            || !conditions.actions().isEmpty()
-            || !conditions.timeRanges().isEmpty()
-            || !conditions.radii().isEmpty()
-            || !conditions.targets().isEmpty()
-            || !conditions.filters().isEmpty()
-            || !conditions.actorUuids().isEmpty()
-            || !conditions.actorKinds().isEmpty()
-            || !conditions.actorTypes().isEmpty()
-            || !conditions.worlds().isEmpty()
-            || !conditions.positions().isEmpty()
-            || !conditions.around().isEmpty();
-    }
-
-    private static <T> boolean implies(Set<T> included, Set<T> excluded) {
-        return excluded.isEmpty() || (!included.isEmpty() && excluded.containsAll(included));
-    }
-
-    private static boolean timeRangesImply(Set<TimeRange> included, Set<TimeRange> excluded) {
-        if (excluded.isEmpty()) {
-            return true;
-        }
-        if (included.isEmpty()) {
-            return false;
-        }
-
-        var excludedUnion = mergeTimeRanges(excluded);
-        for (var includedRange : included) {
-            if (!isCoveredByUnion(includedRange, excludedUnion)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static List<Interval> mergeTimeRanges(Set<TimeRange> ranges) {
-        var sorted = ranges.stream()
-            .map(range -> new Interval(range.fromInclusive(), range.toExclusive()))
-            .sorted(Comparator.comparing(
-                Interval::fromInclusive,
-                SearchQuery::compareLowerBounds
-            ))
-            .toList();
-
-        var merged = new ArrayList<Interval>();
-        for (var next : sorted) {
-            if (merged.isEmpty()) {
-                merged.add(next);
-                continue;
-            }
-
-            var lastIndex = merged.size() - 1;
-            var current = merged.get(lastIndex);
-            if (overlapsOrTouches(current, next)) {
-                merged.set(
-                    lastIndex,
-                    new Interval(
-                        current.fromInclusive(),
-                        laterUpperBound(current.toExclusive(), next.toExclusive())
-                    )
-                );
-            } else {
-                merged.add(next);
-            }
-        }
-        return List.copyOf(merged);
-    }
-
-    private static boolean isCoveredByUnion(TimeRange included, List<Interval> excludedUnion) {
-        for (var excluded : excludedUnion) {
-            if (
-                lowerBoundAtOrBefore(excluded.fromInclusive(), included.fromInclusive())
-                    && upperBoundAtOrAfter(excluded.toExclusive(), included.toExclusive())
-            ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static int compareLowerBounds(Optional<Instant> first, Optional<Instant> second) {
-        if (first.isEmpty()) {
-            return second.isEmpty() ? 0 : -1;
-        }
-        if (second.isEmpty()) {
-            return 1;
-        }
-        return first.get().compareTo(second.get());
-    }
-
-    private static boolean overlapsOrTouches(Interval current, Interval next) {
-        if (current.toExclusive().isEmpty() || next.fromInclusive().isEmpty()) {
-            return true;
-        }
-        return !current.toExclusive().get().isBefore(next.fromInclusive().get());
-    }
-
-    private static Optional<Instant> laterUpperBound(
-        Optional<Instant> first,
-        Optional<Instant> second
-    ) {
-        if (first.isEmpty() || second.isEmpty()) {
-            return Optional.empty();
-        }
-        return first.get().isAfter(second.get()) ? first : second;
-    }
-
-    private static boolean lowerBoundAtOrBefore(
-        Optional<Instant> outer,
-        Optional<Instant> inner
-    ) {
-        if (outer.isEmpty()) {
-            return true;
-        }
-        return inner.isPresent() && !outer.get().isAfter(inner.get());
-    }
-
-    private static boolean upperBoundAtOrAfter(
-        Optional<Instant> outer,
-        Optional<Instant> inner
-    ) {
-        if (outer.isEmpty()) {
-            return true;
-        }
-        return inner.isPresent() && !outer.get().isBefore(inner.get());
-    }
-
-    private record Interval(
-        Optional<Instant> fromInclusive,
-        Optional<Instant> toExclusive
-    ) {
     }
 
     public enum Order {
@@ -215,7 +54,6 @@ public record SearchQuery(
         Set<String> users,
         Set<Key> actions,
         Set<TimeRange> timeRanges,
-        Set<Integer> radii,
         Set<Key> targets,
         Set<String> filters,
         Set<UUID> actorUuids,
@@ -230,7 +68,6 @@ public record SearchQuery(
             users = Set.copyOf(users);
             actions = Set.copyOf(actions);
             timeRanges = Set.copyOf(timeRanges);
-            radii = Set.copyOf(radii);
             targets = Set.copyOf(targets);
             filters = Set.copyOf(filters);
             actorUuids = Set.copyOf(actorUuids);
@@ -239,29 +76,24 @@ public record SearchQuery(
             worlds = Set.copyOf(worlds);
             positions = Set.copyOf(positions);
             around = Set.copyOf(around);
-
-            for (var radius : radii) {
-                if (radius <= 0) {
-                    throw new IllegalArgumentException("radius must be greater than zero");
-                }
-            }
         }
 
         public static Conditions empty() {
             return new Conditions(
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of(),
-                Set.of()
+                Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
+                Set.of(), Set.of(), Set.of(), Set.of(), Set.of()
             );
+        }
+
+        public static Conditions position(Position position) {
+            return new Conditions(
+                Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
+                Set.of(), Set.of(), Set.of(), Set.of(position), Set.of()
+            );
+        }
+
+        public boolean isEmpty() {
+            return this.equals(empty());
         }
     }
 
@@ -300,6 +132,9 @@ public record SearchQuery(
         }
     }
 
+    /**
+     * Inclusive X/Z square around a center. Y is not bounded.
+     */
     public record Around(Key world, int x, int z, int radius) {
 
         public Around {

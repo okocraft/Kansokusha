@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.velocity.command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
-import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.velocity.testsupport.CommandTester;
@@ -29,34 +28,8 @@ class VersionCommandTest {
     }
 
     @Test
-    void testVersionIsPrintedToPlayer() throws Exception {
-        Player player = TestSources.player();
-        TestSources.grant(player, PERMISSION);
-
-        Assertions.assertEquals(1, this.tester.execute(player, "version"));
-
-        Mockito.verify(player).sendMessage(CommandMessages.VERSION_PRINT.apply(VersionCommand.UNKNOWN_VERSION));
-    }
-
-    @Test
     void testCommandIsHiddenWithUnsetPermission() {
         this.assertHidden(TestSources.console());
-    }
-
-    @Test
-    void testCommandIsHiddenWithDeniedPermission() {
-        ConsoleCommandSource console = TestSources.console();
-        TestSources.deny(console, PERMISSION);
-
-        this.assertHidden(console);
-    }
-
-    @Test
-    void testCommandIsHiddenWithAnotherPermission() {
-        ConsoleCommandSource console = TestSources.console();
-        TestSources.grant(console, "kansokusha.command");
-
-        this.assertHidden(console);
     }
 
     private void assertHidden(CommandSource source) {

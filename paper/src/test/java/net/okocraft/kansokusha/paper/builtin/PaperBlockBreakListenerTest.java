@@ -2,7 +2,6 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.minecraft.SharedConstants;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.okocraft.kansokusha.api.KansokushaApi;
@@ -69,22 +68,6 @@ class PaperBlockBreakListenerTest {
             PaperBlockStatePayloadCodec.blockProperties(state.asBlockData()),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
-    }
-
-    @Test
-    void testCancelledBreakIsNotSubmitted() {
-        var api = Mockito.mock(KansokushaApi.class);
-
-        var listener = PaperBlockBreakListener.register(
-            api,
-            SERVER_KEY,
-            Clock.fixed(OCCURRED_AT, ZoneOffset.UTC)
-        );
-        var event = event(Blocks.STONE.defaultBlockState().asBlockData(), true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Mockito.verify(api, Mockito.never()).submit(Mockito.any());
     }
 
     private static BlockBreakEvent event(

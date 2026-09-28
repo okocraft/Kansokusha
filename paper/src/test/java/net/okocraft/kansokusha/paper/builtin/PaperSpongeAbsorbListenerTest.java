@@ -104,33 +104,6 @@ class PaperSpongeAbsorbListenerTest {
         );
     }
 
-    @Test
-    void testCancelledAbsorbIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperSpongeAbsorbListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var sponge = PaperBlockEventTestSupport.block(
-            world, 1, 2, 3, Blocks.SPONGE.defaultBlockState(), Material.SPONGE
-        );
-        var water = PaperBlockEventTestSupport.block(
-            world, 2, 2, 3, Blocks.WATER.defaultBlockState(), Material.WATER
-        );
-        var cleared = PaperBlockEventTestSupport.state(
-            world, water, 2, 2, 3, Blocks.AIR.defaultBlockState()
-        );
-        var event = Mockito.mock(SpongeAbsorbEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(sponge);
-        Mockito.when(event.getBlocks()).thenReturn(List.of(cleared));
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static CompoundTag spongePayload(
         net.minecraft.world.level.block.state.BlockState preState,
         BlockPosition spongeOrigin

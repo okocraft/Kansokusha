@@ -2,9 +2,7 @@ package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.okocraft.kansokusha.common.command.CommandMessages;
-import net.okocraft.kansokusha.common.command.EventCommandMessages;
-import net.okocraft.kansokusha.common.command.SearchCommandMessages;
-import net.okocraft.kansokusha.paper.inspection.InspectionSearchMessages;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
@@ -13,11 +11,22 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Properties;
 
 class KansokushaCommandsTest {
 
-    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand());
+    private final EventSearchBackend backend = Mockito.mock(EventSearchBackend.class);
+    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand(
+        this.backend,
+        Clock.systemUTC(),
+        ZoneOffset.UTC,
+        new InspectionSessionManager()
+    ));
 
     @Test
     void testVersionCommandIsWiredUnderKansokushaRoot() throws Exception {
@@ -32,50 +41,17 @@ class KansokushaCommandsTest {
     }
 
     @Test
-    void testCommandDefinersAreExposedForLanguageLoading() {
-        Assertions.assertEquals(
-            List.of(
-                CommandMessages.DEFINER,
-                SearchCommandMessages.DEFINER,
-                EventCommandMessages.DEFINER,
-                InspectionCommandMessages.DEFINER,
-                InspectionSearchMessages.DEFINER
-            ),
-            KansokushaCommands.getDefiners()
+    void testSubcommandsAreWiredUnderKansokushaRoot() {
+        var command = KansokushaCommands.createCommand(
+            this.backend,
+            Clock.systemUTC(),
+            ZoneOffset.UTC,
+            new InspectionSessionManager()
         );
-    }
 
-    @Test
-    void testSearchCommandIsWiredUnderKansokushaRoot() throws Exception {
-        ConsoleCommandSender console = Mockito.mock(ConsoleCommandSender.class);
-        TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
-
-        Assertions.assertEquals(
-            0,
-            this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha search")
-        );
-        Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
-    }
-
-    @Test
-    void testEventCommandIsWiredUnderKansokushaRoot() {
-        Assertions.assertNotNull(KansokushaCommands.createCommand().getChild("event"));
-    }
-
-    @Test
-    void testLegacyCommandCreationDoesNotExposeInspectionWithoutSessionLifecycle() {
-        var command = KansokushaCommands.createCommand();
-
-        Assertions.assertNull(command.getChild("inspect"));
-        Assertions.assertNull(command.getChild("i"));
-    }
-
-    @Test
-    void testInspectCommandsAreWiredWhenSessionManagerIsProvided() {
-        var command = KansokushaCommands.createCommand(new InspectionSessionManager());
-
-        Assertions.assertNotNull(command.getChild("inspect"));
-        Assertions.assertNotNull(command.getChild("i"));
+        for (var name : List.of("version", "search", "event", "inspect", "i")) {
+            Assertions.assertNotNull(command.getChild(name), name);
+        }
     }
 
     @Test
@@ -87,5 +63,20 @@ class KansokushaCommandsTest {
             CommandSyntaxException.class,
             () -> this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha version")
         );
+    }
+
+    @Test
+    void testJapaneseBundleContainsEveryMessageKey() throws Exception {
+        var properties = new Properties();
+        try (var input = KansokushaCommandsTest.class.getClassLoader().getResourceAsStream("languages/ja.properties")) {
+            Assertions.assertNotNull(input);
+            try (var reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                properties.load(reader);
+            }
+        }
+
+        for (var definer : KansokushaCommands.getDefiners()) {
+            Assertions.assertTrue(properties.stringPropertyNames().containsAll(definer.getCollectedMessages().keySet()));
+        }
     }
 }

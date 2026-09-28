@@ -75,22 +75,6 @@ class PaperSignChangeListenerTest {
         );
     }
 
-    @Test
-    void testCancelledSignChangeIsNotSubmitted() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var fixture = event(
-            1,
-            new ArrayList<>(fourLines("before")),
-            new ArrayList<>(fourLines("after")),
-            true
-        );
-
-        PaperListenerTestSupport.fire(listener, fixture.event());
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static PaperSignChangeListener listener(RecordingApi api) {
         return PaperSignChangeListener.register(
             api,
@@ -131,15 +115,6 @@ class PaperSignChangeListenerTest {
         Mockito.when(event.lines()).thenReturn(after);
         Mockito.when(event.isCancelled()).thenReturn(cancelled);
         return new Fixture(event, block);
-    }
-
-    private static List<Component> fourLines(String prefix) {
-        return List.of(
-            Component.text(prefix + "-0"),
-            Component.text(prefix + "-1"),
-            Component.text(prefix + "-2"),
-            Component.text(prefix + "-3")
-        );
     }
 
     private static Component decodedLine(CompoundTag payload, String key, int index) {

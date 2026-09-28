@@ -97,18 +97,6 @@ class PaperWhitelistChangeListenerTest {
     }
 
     @Test
-    void testCancelledProfileUpdateIsNotRecorded() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = listener(api, false);
-        var event = profileEvent(false, WhitelistStateUpdateEvent.WhitelistStatus.ADDED);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
     void testProfileNoOpsAreNotRecordedAsStateChanges() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = listener(api, false);

@@ -26,14 +26,14 @@ matching the resulting exclusion predicate.
 | `time today`, `time yesterday` | Calendar-day range in `search-time-zone`. |
 | `from <date-or-datetime>`, `to <date-or-datetime>` | Absolute bounds. A date-only `to` includes that whole local date by using the next day as the exclusive bound. |
 | `include <key>`, `target <key>` | Target type; `include` and `target` are aliases. |
-| `filter <text>` | Case-insensitive literal substring in the communication-text projection. Quote values containing spaces. |
+| `filter <text>` | Case-insensitive literal substring in the communication text. Quote values containing spaces. |
 | `actor-uuid <uuid>` | Actor UUID directly. |
 | `actor-kind player\|entity\|block` | Actor kind. |
 | `actor-type <key>` | Entity/block actor type. |
 | `world <key>` | World key. |
 | `position <world> <x> <y> <z>` | Exact block position. |
 | `around <world> <x> <z> <radius>` | Inclusive X/Z square around an explicit center; Y is not bounded. |
-| `radius <radius>` | Same X/Z square around the executing Paper player's current block position. |
+| `radius <radius>` | Shorthand for `around` centered on the executing Paper player's current block position. |
 | `order newest\|oldest` | Result order. Default is `newest`. |
 | `limit <count>` | Page size. Paper/Velocity players default to 10 and may request at most 50; non-player senders default to 50 and may request at most 1000. |
 
@@ -41,8 +41,9 @@ matching the resulting exclusion predicate.
 Velocity players, and Velocity console must use `around` or `position` instead.
 
 `time` cannot be combined with `from` / `to`. A duplicate singleton modifier such as
-`from`, `to`, `order`, or `limit`, an empty/inverted time range, or another invalid or
-contradictory condition is rejected.
+`from`, `to`, `order`, or `limit`, an empty/inverted time range, or another invalid condition is
+rejected, and the error message states the reason. Conditions that exclude everything they
+include are not rejected; they simply match no events.
 
 Examples:
 
@@ -63,15 +64,14 @@ offset keep that offset. Configuration changes take effect after restart.
 
 ## Player names
 
-Paper join and Velocity post-login observations maintain an internal historical name projection.
-The first observation does not create a name-change event. When a newer observation for the same
-UUID has a different exact username, Kansokusha records `kansokusha:player_name_change` with the
-previous and new names. Stale observations do not roll the current name backwards.
+Paper join and Velocity post-login observations record each `(UUID, username)` pair with the time
+it was last seen. Older observations processed later do not roll `last_seen` backwards. Name
+changes are not recorded as separate events; the login events themselves keep the username.
 
 `user` lookup is case-insensitive. If a historical name has been used by multiple UUIDs, the UUID
-with the newest `(last_seen, last_event_id)` observation is selected. `actor-uuid` bypasses name
-resolution. Offline `user` completion is also populated from the historical projection and keeps
-the newest casing for each case-insensitive name.
+that most recently logged in with that name is selected. `actor-uuid` bypasses name resolution.
+Offline `user` completion uses the same names and keeps the newest casing for each
+case-insensitive name.
 
 ## Communication text
 

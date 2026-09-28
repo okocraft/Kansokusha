@@ -1,7 +1,8 @@
 package net.okocraft.kansokusha.common.search;
 
 import net.kyori.adventure.key.Key;
-import net.okocraft.kansokusha.common.search.query.SearchQuery.ActorKind;
+import net.okocraft.kansokusha.api.actor.EventActor;
+import net.okocraft.kansokusha.api.position.BlockPosition;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -9,7 +10,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 
 /**
@@ -33,6 +33,8 @@ public record SearchPage(
      * Common event fields needed by platform search rendering.
      *
      * <p>Payload generation, expiry and raw payload are intentionally not exposed here.</p>
+     *
+     * @param actorName the latest observed name of a player actor
      */
     public record Event(
         UUID eventId,
@@ -40,13 +42,9 @@ public record SearchPage(
         Instant occurredAt,
         Optional<Key> server,
         Optional<Key> world,
-        OptionalInt x,
-        OptionalInt y,
-        OptionalInt z,
-        Optional<ActorKind> actorKind,
-        Optional<UUID> actorUuid,
+        Optional<BlockPosition> position,
+        Optional<EventActor> actor,
         Optional<String> actorName,
-        Optional<Key> actorType,
         Optional<Key> targetType,
         Optional<String> searchText
     ) {
@@ -57,13 +55,9 @@ public record SearchPage(
             Objects.requireNonNull(occurredAt, "occurredAt");
             Objects.requireNonNull(server, "server");
             Objects.requireNonNull(world, "world");
-            Objects.requireNonNull(x, "x");
-            Objects.requireNonNull(y, "y");
-            Objects.requireNonNull(z, "z");
-            Objects.requireNonNull(actorKind, "actorKind");
-            Objects.requireNonNull(actorUuid, "actorUuid");
+            Objects.requireNonNull(position, "position");
+            Objects.requireNonNull(actor, "actor");
             Objects.requireNonNull(actorName, "actorName");
-            Objects.requireNonNull(actorType, "actorType");
             Objects.requireNonNull(targetType, "targetType");
             Objects.requireNonNull(searchText, "searchText");
         }

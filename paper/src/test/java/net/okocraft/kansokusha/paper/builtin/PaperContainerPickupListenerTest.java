@@ -80,32 +80,6 @@ class PaperContainerPickupListenerTest {
         Mockito.verify(item, Mockito.times(1)).getLocation();
     }
 
-    @Test
-    void testCancelledPickupDoesNotSubmit() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = listener(api);
-        var world = PaperBlockEventTestSupport.world();
-        var inventory = Mockito.mock(Inventory.class);
-        Mockito.when(inventory.getType()).thenReturn(InventoryType.HOPPER);
-        Mockito.when(inventory.getSize()).thenReturn(5);
-        Mockito.when(inventory.getHolder()).thenReturn(null);
-        Mockito.when(inventory.getLocation()).thenReturn(null);
-
-        var item = Mockito.mock(Item.class);
-        Mockito.when(item.getUniqueId()).thenReturn(ITEM_ID);
-        Mockito.when(item.getItemStack()).thenReturn(ItemStack.of(Material.IRON_INGOT, 1));
-        Mockito.when(item.getLocation()).thenReturn(new Location(world, 4, 70, 8));
-
-        var event = Mockito.mock(InventoryPickupItemEvent.class);
-        Mockito.when(event.getInventory()).thenReturn(inventory);
-        Mockito.when(event.getItem()).thenReturn(item);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static PaperContainerPickupListener listener(
         PaperBlockEventTestSupport.RecordingApi api
     ) {

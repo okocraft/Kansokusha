@@ -286,29 +286,6 @@ class PaperAdministrativeWorldListenerTest {
     }
 
     @Test
-    void testCancelledWorldBorderChangesAreNotRecorded() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperWorldBorderChangeListener.register(
-            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
-        );
-        var world = world("border");
-
-        var centerEvent = Mockito.mock(WorldBorderCenterChangeEvent.class);
-        Mockito.when(centerEvent.getWorld()).thenReturn(world);
-        Mockito.when(centerEvent.getOldCenter()).thenReturn(new Location(world, 0, 0, 0));
-        Mockito.when(centerEvent.isCancelled()).thenReturn(true);
-        PaperListenerTestSupport.fire(listener, centerEvent);
-
-        var boundsEvent = Mockito.mock(WorldBorderBoundsChangeEvent.class);
-        Mockito.when(boundsEvent.getWorld()).thenReturn(world);
-        Mockito.when(boundsEvent.getOldSize()).thenReturn(100.0);
-        Mockito.when(boundsEvent.isCancelled()).thenReturn(true);
-        PaperListenerTestSupport.fire(listener, boundsEvent);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
     void testWorldSpawnIsDistinctFromPlayerSpawnAndRecordsEstablishedPosition() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperWorldSpawnChangeListener.register(

@@ -1,5 +1,7 @@
 package net.okocraft.kansokusha.paper.inspection;
 
+import net.okocraft.kansokusha.common.search.query.SearchQuery;
+import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -8,6 +10,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -15,12 +18,12 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.util.Objects;
 
 @NotNullByDefault
-public final class InspectionInteractionListener implements Listener {
+public final class InspectionListener implements Listener {
 
     private final InspectionSessionManager sessions;
     private final InspectionTargetHandler targetHandler;
 
-    public InspectionInteractionListener(
+    public InspectionListener(
         InspectionSessionManager sessions,
         InspectionTargetHandler targetHandler
     ) {
@@ -34,7 +37,7 @@ public final class InspectionInteractionListener implements Listener {
         InspectionTargetHandler targetHandler
     ) {
         Objects.requireNonNull(plugin, "plugin").getServer().getPluginManager().registerEvents(
-            new InspectionInteractionListener(sessions, targetHandler),
+            new InspectionListener(sessions, targetHandler),
             plugin
         );
     }
@@ -77,7 +80,12 @@ public final class InspectionInteractionListener implements Listener {
             ? clickedBlock.getRelative(event.getBlockFace())
             : clickedBlock;
 
-        this.targetHandler.inspect(player.getUniqueId(), InspectionTarget.from(targetBlock));
+        this.targetHandler.inspect(player.getUniqueId(), new SearchQuery.Position(
+            PaperKansokusha.key(targetBlock.getWorld().getKey()),
+            targetBlock.getX(),
+            targetBlock.getY(),
+            targetBlock.getZ()
+        ));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -94,5 +102,10 @@ public final class InspectionInteractionListener implements Listener {
         if (this.sessions.isEnabled(event.getPlayer())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void cleanup(PlayerQuitEvent event) {
+        this.sessions.disable(event.getPlayer().getUniqueId());
     }
 }

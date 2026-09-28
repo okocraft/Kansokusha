@@ -22,9 +22,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
@@ -44,37 +41,6 @@ class PaperCommunicationListenerTest {
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-25T00:00:00Z");
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174005");
-
-    @Test
-    void testListenersImplementBukkitListenerAndUseLowestWithoutIgnoringCancelled() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperChatListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperPlayerCommandListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperServerCommandListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-
-        assertRawHandler(PaperChatListener.class, "record", AsyncChatEvent.class);
-        assertRawHandler(
-            PaperPlayerCommandListener.class,
-            "record",
-            PlayerCommandPreprocessEvent.class
-        );
-        assertRawHandler(PaperServerCommandListener.class, "record", ServerCommandEvent.class);
-        assertRawHandler(
-            PaperServerCommandListener.class,
-            "recordRemote",
-            RemoteServerCommandEvent.class
-        );
-    }
 
     @Test
     void testChatRecordsOriginalComponentWithoutReadingDeliveryState() throws Exception {
@@ -259,17 +225,6 @@ class PaperCommunicationListenerTest {
             null
         );
         Assertions.assertEquals("list", onlySearchText(api));
-    }
-
-    private static void assertRawHandler(
-        Class<?> listenerClass,
-        String methodName,
-        Class<?> eventClass
-    ) throws Exception {
-        var annotation = listenerClass.getMethod(methodName, eventClass).getAnnotation(EventHandler.class);
-        Assertions.assertNotNull(annotation);
-        Assertions.assertEquals(EventPriority.LOWEST, annotation.priority());
-        Assertions.assertFalse(annotation.ignoreCancelled());
     }
 
     private static PaperServerCommandListener serverListener(

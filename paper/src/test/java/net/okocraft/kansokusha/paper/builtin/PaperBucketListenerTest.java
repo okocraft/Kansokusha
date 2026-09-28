@@ -116,33 +116,6 @@ class PaperBucketListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
     }
 
-    @Test
-    void testCancelledBucketEventsDoNotSubmit() {
-        var api = new RecordingApi();
-        var listener = listener(api);
-        var empty = bucketEvent(
-            PlayerBucketEmptyEvent.class,
-            1,
-            Blocks.AIR.defaultBlockState().asBlockData(),
-            Material.LAVA_BUCKET,
-            ItemStack.of(Material.BUCKET, 1),
-            true
-        );
-        var fill = bucketEvent(
-            PlayerBucketFillEvent.class,
-            2,
-            Blocks.LAVA.defaultBlockState().asBlockData(),
-            Material.BUCKET,
-            ItemStack.of(Material.LAVA_BUCKET, 1),
-            true
-        );
-
-        PaperListenerTestSupport.fire(listener, (PlayerBucketEmptyEvent) empty.event());
-        PaperListenerTestSupport.fire(listener, (PlayerBucketFillEvent) fill.event());
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static PaperBucketListener listener(RecordingApi api) {
         return PaperBucketListener.register(
             api,

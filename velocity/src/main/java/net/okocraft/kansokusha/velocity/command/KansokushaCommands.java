@@ -6,6 +6,7 @@ import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
@@ -23,27 +24,23 @@ public final class KansokushaCommands {
         );
     }
 
-    public static void register(CommandManager manager, Object plugin) {
-        BrigadierCommand command = createCommand();
+    public static void register(
+        CommandManager manager,
+        Object plugin,
+        EventSearchBackend backend,
+        ZoneId searchTimeZone
+    ) {
+        BrigadierCommand command = createCommand(backend, Clock.systemUTC(), searchTimeZone);
         manager.register(manager.metaBuilder(command).plugin(plugin).build(), command);
     }
 
-    public static void register(CommandManager manager, Object plugin, ZoneId searchTimeZone) {
-        BrigadierCommand command = createCommand(Clock.systemUTC(), searchTimeZone);
-        manager.register(manager.metaBuilder(command).plugin(plugin).build(), command);
-    }
-
-    static BrigadierCommand createCommand() {
-        return createCommand(Clock.systemUTC(), ZoneId.systemDefault());
-    }
-
-    static BrigadierCommand createCommand(Clock clock, ZoneId searchTimeZone) {
+    static BrigadierCommand createCommand(EventSearchBackend backend, Clock clock, ZoneId searchTimeZone) {
         return new BrigadierCommand(
             BrigadierCommand.literalArgumentBuilder("kansokusha")
                 .requires(source -> source.hasPermission("kansokusha.command"))
                 .then(VersionCommand.createVersionCommand())
-                .then(SearchCommand.createSearchCommand(clock, searchTimeZone))
-                .then(EventCommand.createEventCommand())
+                .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
+                .then(EventCommand.createEventCommand(backend))
         );
     }
 

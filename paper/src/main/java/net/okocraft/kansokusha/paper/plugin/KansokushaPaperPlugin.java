@@ -6,12 +6,10 @@ import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
-import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
-import net.okocraft.kansokusha.paper.inspection.InspectionInteractionListener;
+import net.okocraft.kansokusha.paper.inspection.InspectionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler;
-import net.okocraft.kansokusha.paper.inspection.InspectionSessionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Nullable;
@@ -37,7 +35,6 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                 this.getDataPath(),
                 config,
                 serverKey,
-                message -> this.getLogger().info(message),
                 (message, failure) -> this.getLogger().log(Level.SEVERE, message, failure)
             );
             this.runtime = runtime;
@@ -45,18 +42,15 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                 Commands commands = event.registrar();
                 KansokushaCommands.register(
                     commands,
+                    runtime,
                     config.searchTimeZone(),
                     this.inspectionSessions
                 );
             });
-            InspectionSessionListener.register(this, this.inspectionSessions);
-            InspectionInteractionListener.register(
+            InspectionListener.register(
                 this,
                 this.inspectionSessions,
-                new InspectionSearchHandler(
-                    this.getServer(),
-                    EventSearchBackend.require(runtime)
-                )
+                new InspectionSearchHandler(this.getServer(), runtime)
             );
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);

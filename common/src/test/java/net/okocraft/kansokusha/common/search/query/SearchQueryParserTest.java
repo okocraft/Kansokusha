@@ -22,6 +22,7 @@ import java.util.UUID;
 class SearchQueryParserTest {
 
     private static final Instant NOW = Instant.parse("2026-09-27T01:00:00Z");
+    private static final Position ORIGIN = new Position(Key.key("minecraft", "overworld"), 100, 64, 200);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final ZoneId TOKYO = ZoneId.of("Asia/Tokyo");
 
@@ -82,60 +83,6 @@ class SearchQueryParserTest {
     }
 
     @Test
-    void testIdenticalIncludeAndExcludeConditionIsRejected() {
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse("target minecraft:dirt exclude target minecraft:dirt")
-        );
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse("action block_break exclude action kansokusha:block_break")
-        );
-    }
-
-    @Test
-    void testPartialIncludeExcludeOverlapRemainsValid() {
-        var query = parse("user Alice user Bob exclude user Alice");
-
-        Assertions.assertEquals(Set.of("Alice", "Bob"), query.conditions().users());
-        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
-    }
-
-    @Test
-    void testCrossFieldExclusionDoesNotCreateFalseContradiction() {
-        var query = parse(
-            "user Alice action block_break "
-                + "exclude user Alice exclude action block_place"
-        );
-
-        Assertions.assertEquals(Set.of("Alice"), query.conditions().users());
-        Assertions.assertEquals(
-            Set.of(Key.key("kansokusha", "block_break")),
-            query.conditions().actions()
-        );
-        Assertions.assertEquals(Set.of("Alice"), query.exclusions().users());
-        Assertions.assertEquals(
-            Set.of(Key.key("kansokusha", "block_place")),
-            query.exclusions().actions()
-        );
-    }
-
-    @Test
-    void testIncludePredicateFullyCoveredByExcludePredicateIsRejected() {
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse("user Alice exclude user Alice exclude user Bob")
-        );
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse(
-                "user Alice action block_break "
-                    + "exclude user Alice exclude action block_break exclude action block_place"
-            )
-        );
-    }
-
-    @Test
     void testActionNamespaceOmissionOnlyDefaultsToKansokusha() {
         var query = parse("action block_break action example:custom_event");
 
@@ -182,10 +129,24 @@ class SearchQueryParserTest {
             query.conditions().positions()
         );
         Assertions.assertEquals(
-            Set.of(new Around(Key.key("minecraft", "the_nether"), -5, 8, 12)),
+            Set.of(
+                new Around(Key.key("minecraft", "the_nether"), -5, 8, 12),
+                new Around(Key.key("minecraft", "overworld"), 100, 200, 30)
+            ),
             query.conditions().around()
         );
-        Assertions.assertEquals(Set.of(30), query.conditions().radii());
+    }
+
+    @Test
+    void testRadiusRequiresOrigin() {
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> SearchQueryParser.parse("radius 5", CLOCK, TOKYO, null)
+        );
+        Assertions.assertThrows(
+            SearchQueryParseException.class,
+            () -> SearchQueryParser.parse("exclude radius 5", CLOCK, TOKYO, null)
+        );
     }
 
     @Test
@@ -267,12 +228,14 @@ class SearchQueryParserTest {
         var tokyo = SearchQueryParser.parse(
             "from 2026-09-27T10:30",
             CLOCK,
-            ZoneId.of("Asia/Tokyo")
+            ZoneId.of("Asia/Tokyo"),
+            null
         );
         var utc = SearchQueryParser.parse(
             "from 2026-09-27T10:30",
             CLOCK,
-            ZoneOffset.UTC
+            ZoneOffset.UTC,
+            null
         );
 
         Assertions.assertEquals(
@@ -283,44 +246,6 @@ class SearchQueryParserTest {
             Instant.parse("2026-09-27T10:30:00Z"),
             onlyTime(utc).fromInclusive().orElseThrow()
         );
-    }
-
-    @Test
-    void testIncludedTimeRangeFullyCoveredByExcludedRangeIsRejected() {
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse("time 1h exclude time 2h")
-        );
-    }
-
-    @Test
-    void testIncludedTimeRangePartiallyCoveredByExcludedRangeRemainsValid() {
-        var query = parse("time 2h exclude time 1h");
-
-        Assertions.assertEquals(
-            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(2)), NOW)),
-            query.conditions().timeRanges()
-        );
-        Assertions.assertEquals(
-            Set.of(TimeRange.bounded(NOW.minus(Duration.ofHours(1)), NOW)),
-            query.exclusions().timeRanges()
-        );
-    }
-
-    @Test
-    void testExcludedTimeRangeUnionCanFullyCoverIncludedRange() {
-        Assertions.assertThrows(
-            SearchQueryParseException.class,
-            () -> parse("time 1h-3h exclude time 1h-2h exclude time 2h-3h")
-        );
-    }
-
-    @Test
-    void testOneUncoveredIncludedTimeAlternativePreventsContradiction() {
-        var query = parse("time 1h time 3h-4h exclude time 2h");
-
-        Assertions.assertEquals(2, query.conditions().timeRanges().size());
-        Assertions.assertEquals(1, query.exclusions().timeRanges().size());
     }
 
     @Test
@@ -425,10 +350,12 @@ class SearchQueryParserTest {
             query.exclusions().positions()
         );
         Assertions.assertEquals(
-            Set.of(new Around(Key.key("minecraft", "overworld"), 4, 5, 6)),
+            Set.of(
+                new Around(Key.key("minecraft", "overworld"), 4, 5, 6),
+                new Around(Key.key("minecraft", "overworld"), 100, 200, 7)
+            ),
             query.exclusions().around()
         );
-        Assertions.assertEquals(Set.of(7), query.exclusions().radii());
         Assertions.assertEquals(
             Set.of(TimeRange.bounded(NOW.minus(Duration.ofMinutes(30)), NOW)),
             query.exclusions().timeRanges()
@@ -438,66 +365,49 @@ class SearchQueryParserTest {
 
     @Test
     void testCompletionContextComesFromParserGrammar() {
-        var modifier = SearchQueryParser.completion("act", CLOCK, TOKYO);
+        var modifier = SearchQueryParser.completion("act", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.MODIFIER, modifier.kind());
         Assertions.assertEquals("act", modifier.prefix());
         Assertions.assertTrue(modifier.staticSuggestions().contains("action"));
 
-        var action = SearchQueryParser.completion("user Alice action blo", CLOCK, TOKYO);
+        var action = SearchQueryParser.completion("user Alice action blo", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.ACTION, action.kind());
         Assertions.assertEquals("blo", action.prefix());
         Assertions.assertEquals(18, action.replacementStart());
 
-        var exclude = SearchQueryParser.completion("exclude ", CLOCK, TOKYO);
+        var exclude = SearchQueryParser.completion("exclude ", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.EXCLUDE_CONDITION, exclude.kind());
         Assertions.assertTrue(exclude.staticSuggestions().contains("actor-kind"));
 
-        var actorKind = SearchQueryParser.completion("exclude actor-kind ", CLOCK, TOKYO);
+        var actorKind = SearchQueryParser.completion("exclude actor-kind ", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.ACTOR_KIND, actorKind.kind());
         Assertions.assertEquals(
             List.of("player", "entity", "block"),
             actorKind.staticSuggestions()
         );
 
-        var world = SearchQueryParser.completion("world mine", CLOCK, TOKYO);
+        var world = SearchQueryParser.completion("world mine", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.WORLD, world.kind());
         Assertions.assertEquals("mine", world.prefix());
 
-        var target = SearchQueryParser.completion("include mine", CLOCK, TOKYO);
+        var target = SearchQueryParser.completion("include mine", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.TARGET, target.kind());
 
-        var order = SearchQueryParser.completion("order ", CLOCK, TOKYO);
+        var order = SearchQueryParser.completion("order ", CLOCK, TOKYO, true);
         Assertions.assertEquals(SearchQueryParser.CompletionKind.ORDER, order.kind());
         Assertions.assertEquals(List.of("newest", "oldest"), order.staticSuggestions());
-    }
 
-    @Test
-    void testTrailingTokenUsesParserQuoteAndEscapeRules() {
-        var quoted = SearchQueryParser.trailingToken(
-            "filter \"foo __cursor=bar\""
-        ).orElseThrow();
-        Assertions.assertEquals("foo __cursor=bar", quoted.value());
-        Assertions.assertTrue(quoted.quotedOrEscaped());
-        Assertions.assertEquals(7, quoted.start());
-
-        var escaped = SearchQueryParser.trailingToken(
-            "filter foo\\ __cursor=bar"
-        ).orElseThrow();
-        Assertions.assertEquals("foo __cursor=bar", escaped.value());
-        Assertions.assertTrue(escaped.quotedOrEscaped());
-
-        var plain = SearchQueryParser.trailingToken(
-            "filter foo __cursor=next,1,123e4567-e89b-12d3-a456-426614174000"
-        ).orElseThrow();
+        Assertions.assertTrue(SearchQueryParser.completion("", CLOCK, TOKYO, true).staticSuggestions().contains("radius"));
+        var withoutRadius = SearchQueryParser.completion("", CLOCK, TOKYO, false);
+        Assertions.assertFalse(withoutRadius.staticSuggestions().contains("radius"));
         Assertions.assertEquals(
-            "__cursor=next,1,123e4567-e89b-12d3-a456-426614174000",
-            plain.value()
+            SearchQueryParser.CompletionKind.NONE,
+            SearchQueryParser.completion("radius 5 ", CLOCK, TOKYO, false).kind()
         );
-        Assertions.assertFalse(plain.quotedOrEscaped());
     }
 
     private static SearchQuery parse(String input) {
-        return SearchQueryParser.parse(input, CLOCK, TOKYO);
+        return SearchQueryParser.parse(input, CLOCK, TOKYO, ORIGIN);
     }
 
     private static TimeRange onlyTime(SearchQuery query) {

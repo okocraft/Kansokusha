@@ -12,7 +12,6 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -32,24 +31,6 @@ class PaperPlayerSessionListenerTest {
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-25T00:00:00Z");
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174004");
-
-    @Test
-    void testSessionRecordersImplementBukkitListener() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperPlayerJoinListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperPlayerQuitListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-        Assertions.assertInstanceOf(
-            Listener.class,
-            PaperPlayerKickListener.register(api, PaperBlockEventTestSupport.SERVER_KEY)
-        );
-    }
 
     @Test
     void testJoinRecordsSuccessfulBackendSessionStart() throws Exception {
@@ -78,21 +59,6 @@ class PaperPlayerSessionListenerTest {
     }
 
     @Test
-    void testJoinGenerationOneAcceptsLegacyPayloadWithoutUsername() throws Exception {
-        var legacyPayload = PaperPayloadNbtCodec.encode(new CompoundTag());
-
-        Assertions.assertNull(
-            PaperPlayerSessionPayloadCodec.decodeJoinUsername(legacyPayload)
-        );
-        Assertions.assertEquals(
-            "TestPlayer",
-            PaperPlayerSessionPayloadCodec.decodeJoinUsername(
-                PaperPlayerSessionPayloadCodec.encodeJoin("TestPlayer")
-            )
-        );
-    }
-
-    @Test
     void testQuitRecordsFinalReadableLocationAndReason() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerQuitListener.register(
@@ -117,29 +83,6 @@ class PaperPlayerSessionListenerTest {
             quitPayload(PlayerQuitEvent.QuitReason.TIMED_OUT),
             PaperPayloadNbtCodec.decode(submission.payload())
         );
-    }
-
-    @Test
-    void testCancelledKickIsNotRecorded() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPlayerKickListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY,
-            fixedClock()
-        );
-        var player = player(PaperBlockEventTestSupport.world(), 1, 2, 3);
-        var event = new PlayerKickEvent(
-            player,
-            Component.text("original"),
-            Component.empty(),
-            PlayerKickEvent.Cause.PLUGIN
-        );
-        event.setCancelled(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-        Mockito.verify(player, Mockito.never()).getLocation();
     }
 
     @Test

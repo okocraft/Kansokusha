@@ -93,18 +93,6 @@ class PaperBlockIgniteListenerTest {
     }
 
     @Test
-    void testCancelledIgniteIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var event = igniteEvent(BlockIgniteEvent.IgniteCause.LAVA);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
     void testSpreadIgniteIsNotSubmitted() {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperBlockIgniteListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);

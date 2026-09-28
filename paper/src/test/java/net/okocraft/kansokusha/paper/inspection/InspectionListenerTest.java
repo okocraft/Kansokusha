@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.inspection;
 
 import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -12,17 +13,17 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-class InspectionInteractionListenerTest {
+class InspectionListenerTest {
 
     private static final UUID PLAYER_ID =
         UUID.fromString("123e4567-e89b-12d3-a456-426614174100");
@@ -37,7 +38,7 @@ class InspectionInteractionListenerTest {
 
         assertSuppressed(event);
         Assertions.assertEquals(
-            List.of(new InspectionTarget(Key.key("example", "world"), 10, 64, -3)),
+            List.of(new SearchQuery.Position(Key.key("example", "world"), 10, 64, -3)),
             fixture.targets()
         );
     }
@@ -72,7 +73,7 @@ class InspectionInteractionListenerTest {
 
             assertSuppressed(event);
             Assertions.assertEquals(
-                List.of(new InspectionTarget(
+                List.of(new SearchQuery.Position(
                     Key.key("example", "world"),
                     10 + face.getModX(),
                     64 + face.getModY(),
@@ -116,8 +117,8 @@ class InspectionInteractionListenerTest {
     @Test
     void testInspectionOffLeavesInteractionUntouched() {
         var sessions = new InspectionSessionManager();
-        var targets = new CopyOnWriteArrayList<InspectionTarget>();
-        var listener = new InspectionInteractionListener(
+        var targets = new CopyOnWriteArrayList<SearchQuery.Position>();
+        var listener = new InspectionListener(
             sessions,
             (playerId, target) -> targets.add(target)
         );
@@ -134,8 +135,8 @@ class InspectionInteractionListenerTest {
     @Test
     void testRevokedPermissionDisablesSessionAndLeavesInteractionUntouched() {
         var sessions = new InspectionSessionManager();
-        var targets = new CopyOnWriteArrayList<InspectionTarget>();
-        var listener = new InspectionInteractionListener(
+        var targets = new CopyOnWriteArrayList<SearchQuery.Position>();
+        var listener = new InspectionListener(
             sessions,
             (playerId, target) -> targets.add(target)
         );
@@ -168,7 +169,7 @@ class InspectionInteractionListenerTest {
 
         assertSuppressed(event);
         Assertions.assertEquals(
-            List.of(new InspectionTarget(Key.key("example", "world"), 4, 5, 6)),
+            List.of(new SearchQuery.Position(Key.key("example", "world"), 4, 5, 6)),
             fixture.targets()
         );
     }
@@ -191,7 +192,7 @@ class InspectionInteractionListenerTest {
     @Test
     void testDamageAndBreakAreUntouchedWhenInspectionIsOff() {
         var sessions = new InspectionSessionManager();
-        var listener = new InspectionInteractionListener(sessions, (playerId, target) -> {
+        var listener = new InspectionListener(sessions, (playerId, target) -> {
         });
         var player = player();
 
@@ -207,38 +208,28 @@ class InspectionInteractionListenerTest {
     }
 
     @Test
-    void testCallbackReceivesOnlyPlayerIdAndImmutableSnapshot() {
+    void testQuitDisablesInspectionForPlayer() {
         var sessions = new InspectionSessionManager();
         var player = player();
         sessions.enable(PLAYER_ID);
+        var event = Mockito.mock(PlayerQuitEvent.class);
+        Mockito.when(event.getPlayer()).thenReturn(player);
 
-        var ids = new CopyOnWriteArrayList<UUID>();
-        var targets = new CopyOnWriteArrayList<InspectionTarget>();
-        var listener = new InspectionInteractionListener(sessions, (playerId, target) -> {
-            ids.add(playerId);
-            targets.add(target);
-        });
-        var clicked = block(9, 70, 11);
-        var event = interaction(player, Action.LEFT_CLICK_BLOCK, clicked, BlockFace.UP, EquipmentSlot.HAND);
+        new InspectionListener(sessions, (playerId, target) -> {
+        }).cleanup(event);
 
-        listener.inspect(event);
-
-        Assertions.assertEquals(List.of(PLAYER_ID), ids);
-        Assertions.assertEquals(
-            List.of(new InspectionTarget(Key.key("example", "world"), 9, 70, 11)),
-            targets
-        );
+        Assertions.assertFalse(sessions.isEnabled(PLAYER_ID));
     }
 
     private static Fixture fixture() {
         var sessions = new InspectionSessionManager();
         var player = player();
         sessions.enable(PLAYER_ID);
-        var targets = new CopyOnWriteArrayList<InspectionTarget>();
+        var targets = new CopyOnWriteArrayList<SearchQuery.Position>();
         return new Fixture(
             player,
             targets,
-            new InspectionInteractionListener(
+            new InspectionListener(
                 sessions,
                 (playerId, target) -> {
                     Assertions.assertEquals(PLAYER_ID, playerId);
@@ -290,8 +281,8 @@ class InspectionInteractionListenerTest {
 
     private record Fixture(
         Player player,
-        CopyOnWriteArrayList<InspectionTarget> targets,
-        InspectionInteractionListener listener
+        CopyOnWriteArrayList<SearchQuery.Position> targets,
+        InspectionListener listener
     ) {
     }
 }

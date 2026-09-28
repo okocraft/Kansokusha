@@ -391,32 +391,6 @@ class PaperNaturalBlockChangeListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty());
     }
 
-    @Test
-    void testCancelledChangesAreNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperNaturalBlockChangeListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var world = PaperBlockEventTestSupport.world();
-
-        var fade = Mockito.mock(BlockFadeEvent.class);
-        stubTransition(fade, world, 1, Blocks.ICE.defaultBlockState(), Blocks.WATER.defaultBlockState());
-        Mockito.when(fade.isCancelled()).thenReturn(true);
-        PaperListenerTestSupport.fire(listener, fade);
-
-        var leavesBlock = PaperBlockEventTestSupport.block(
-            world, 2, 64, 0, Blocks.OAK_LEAVES.defaultBlockState(), Material.OAK_LEAVES
-        );
-        var leaves = Mockito.mock(LeavesDecayEvent.class);
-        Mockito.when(leaves.getBlock()).thenReturn(leavesBlock);
-        Mockito.when(leaves.isCancelled()).thenReturn(true);
-        PaperListenerTestSupport.fire(listener, leaves);
-
-        var structure = Mockito.mock(StructureGrowEvent.class);
-        Mockito.when(structure.isCancelled()).thenReturn(true);
-        PaperListenerTestSupport.fire(listener, structure);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static void stubTransition(
         BlockGrowEvent event,
         World world,

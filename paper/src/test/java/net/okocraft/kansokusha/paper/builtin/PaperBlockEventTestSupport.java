@@ -9,8 +9,9 @@ import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.bukkit.Material;
@@ -94,7 +95,7 @@ final class PaperBlockEventTestSupport {
         return result;
     }
 
-    static final class RecordingApi implements KansokushaApi, PlayerNameDirectory, EventSearchBackend {
+    static class RecordingApi implements KansokushaApi, EventSearchBackend {
 
         final ConcurrentLinkedQueue<EventSubmission> submissions = new ConcurrentLinkedQueue<>();
         final ConcurrentLinkedQueue<String> playerLoginNames = new ConcurrentLinkedQueue<>();
@@ -129,19 +130,19 @@ final class PaperBlockEventTestSupport {
         }
 
         @Override
-        public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
-            return CompletableFuture.completedFuture(List.of());
-        }
-
-        @Override
         public boolean submitPlayerLogin(EventSubmission submission, String username) {
             this.playerLoginNames.add(username);
             return this.submit(submission);
         }
 
         @Override
-        public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
+        public CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
             return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        @Override
+        public CompletableFuture<SearchMetadata> searchMetadata() {
+            return CompletableFuture.completedFuture(SearchMetadata.empty());
         }
 
         @Override

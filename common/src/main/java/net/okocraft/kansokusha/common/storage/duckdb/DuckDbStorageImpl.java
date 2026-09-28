@@ -5,18 +5,13 @@ import net.okocraft.kansokusha.api.actor.BlockActor;
 import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
-import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
-import net.okocraft.kansokusha.common.player.PlayerNameChangePayloadCodec;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
-import net.okocraft.kansokusha.common.storage.StorageHealth;
 import org.duckdb.DuckDBAppender;
 import org.duckdb.DuckDBConnection;
 import org.duckdb.DuckDBDriver;
@@ -35,7 +30,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -65,7 +59,8 @@ public final class DuckDbStorageImpl implements Storage {
             actor_type VARCHAR,
             target_type VARCHAR,
             expires_at TIMESTAMP_MS NOT NULL,
-            payload BLOB NOT NULL
+            payload BLOB NOT NULL,
+            search_text VARCHAR
         )
         """;
 
@@ -84,39 +79,23 @@ public final class DuckDbStorageImpl implements Storage {
         "actor_type",
         "target_type",
         "expires_at",
-        "payload"
+        "payload",
+        "search_text"
     );
 
-    private static final String CREATE_PLAYER_NAME_HISTORY_TABLE = """
-        CREATE TABLE IF NOT EXISTS player_name_history (
+    private static final String CREATE_PLAYER_NAMES_TABLE = """
+        CREATE TABLE IF NOT EXISTS player_names (
             player_uuid UUID NOT NULL,
             name VARCHAR NOT NULL,
-            normalized_name VARCHAR NOT NULL,
-            first_seen TIMESTAMP_MS NOT NULL,
             last_seen TIMESTAMP_MS NOT NULL,
-            last_event_id UUID NOT NULL
+            PRIMARY KEY (player_uuid, name)
         )
         """;
 
-    private static final List<String> PLAYER_NAME_HISTORY_COLUMNS = List.of(
+    private static final List<String> PLAYER_NAMES_COLUMNS = List.of(
         "player_uuid",
         "name",
-        "normalized_name",
-        "first_seen",
-        "last_seen",
-        "last_event_id"
-    );
-
-    private static final String CREATE_EVENT_SEARCH_TEXT_TABLE = """
-        CREATE TABLE IF NOT EXISTS event_search_text (
-            event_id UUID NOT NULL,
-            search_text VARCHAR NOT NULL
-        )
-        """;
-
-    private static final List<String> EVENT_SEARCH_TEXT_COLUMNS = List.of(
-        "event_id",
-        "search_text"
+        "last_seen"
     );
 
     private static final byte[] PLAYER_ACTOR_KIND = "player".getBytes(StandardCharsets.UTF_8);
@@ -147,26 +126,8 @@ public final class DuckDbStorageImpl implements Storage {
         try (var statement = connection.createStatement()) {
             statement.execute(CREATE_EVENTS_TABLE);
             verifyColumns(statement, "events", EVENTS_COLUMNS);
-            statement.execute(CREATE_PLAYER_NAME_HISTORY_TABLE);
-            verifyColumns(statement, "player_name_history", PLAYER_NAME_HISTORY_COLUMNS);
-            statement.execute(CREATE_EVENT_SEARCH_TEXT_TABLE);
-            verifyColumns(statement, "event_search_text", EVENT_SEARCH_TEXT_COLUMNS);
-            statement.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS event_search_text_event_id
-                ON event_search_text(event_id)
-                """);
-            statement.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS player_name_history_uuid_name
-                ON player_name_history(player_uuid, name)
-                """);
-            statement.execute("""
-                CREATE INDEX IF NOT EXISTS player_name_history_name_lookup
-                ON player_name_history(normalized_name, last_seen, last_event_id)
-                """);
-            statement.execute("""
-                CREATE INDEX IF NOT EXISTS player_name_history_uuid_latest
-                ON player_name_history(player_uuid, last_seen, last_event_id)
-                """);
+            statement.execute(CREATE_PLAYER_NAMES_TABLE);
+            verifyColumns(statement, "player_names", PLAYER_NAMES_COLUMNS);
         } catch (SQLException e) {
             connection.close();
             throw e;
@@ -178,13 +139,12 @@ public final class DuckDbStorageImpl implements Storage {
     @Override
     public void append(List<QueuedEvent> events) throws SQLException {
         try {
-            var storedEvents = this.prepareStoredEvents(events);
             var appender = this.appender();
-            for (var stored : storedEvents) {
-                this.appendEvent(appender, stored);
+            for (var queued : events) {
+                this.appendEvent(appender, queued);
             }
             appender.flush();
-            this.appendSearchText(storedEvents);
+            this.recordPlayerNames(events);
             this.connection.commit();
         } catch (SQLException | RuntimeException e) {
             this.discardAppender(e);
@@ -193,70 +153,10 @@ public final class DuckDbStorageImpl implements Storage {
         }
     }
 
-    private List<StoredEvent> prepareStoredEvents(List<QueuedEvent> events) throws SQLException {
-        var storedEvents = new ArrayList<StoredEvent>(events.size());
-        for (var queued : events) {
-            var eventId = TimeBasedUUID.generate();
-            storedEvents.add(new StoredEvent(queued, eventId));
-
-            var observation = queued.playerNameObservation();
-            if (observation == null) {
-                continue;
-            }
-
-            if (!(queued.submission().actor() instanceof PlayerActor player)) {
-                throw new IllegalArgumentException("A player-name observation requires a PlayerActor.");
-            }
-
-            var previous = this.latestPlayerName(player.uniqueId()).orElse(null);
-            var advancesLatest = previous == null
-                || isNewerObservation(queued.occurredAtMillis(), eventId, previous);
-            if (
-                advancesLatest
-                    && previous != null
-                    && !previous.name().equals(observation.username())
-            ) {
-                var nameChange = new EventSubmission(
-                    PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE,
-                    PayloadGeneration.FIRST,
-                    Instant.ofEpochMilli(queued.occurredAtMillis()),
-                    null,
-                    null,
-                    null,
-                    player,
-                    null,
-                    PlayerNameChangePayloadCodec.encode(
-                        previous.name(),
-                        observation.username()
-                    )
-                );
-                storedEvents.add(new StoredEvent(
-                    new QueuedEvent(
-                        nameChange,
-                        queued.occurredAtMillis(),
-                        observation.nameChangeExpiresAtMillis(),
-                        null,
-                        null
-                    ),
-                    TimeBasedUUID.generate()
-                ));
-            }
-
-            this.recordPlayerName(
-                player.uniqueId(),
-                observation.username(),
-                queued.occurredAtMillis(),
-                eventId
-            );
-        }
-        return storedEvents;
-    }
-
-    private void appendEvent(DuckDBAppender appender, StoredEvent stored) throws SQLException {
-        var queued = stored.queued();
+    private void appendEvent(DuckDBAppender appender, QueuedEvent queued) throws SQLException {
         var event = queued.submission();
         appender.beginRow()
-            .append(stored.eventId())
+            .append(TimeBasedUUID.generate())
             .append(this.encode(event.eventType()))
             .append(event.payloadGeneration().value())
             .appendEpochMillis(queued.occurredAtMillis());
@@ -274,145 +174,30 @@ public final class DuckDbStorageImpl implements Storage {
         this.appendNullable(appender, event.targetType());
 
         appender.appendEpochMillis(queued.expiresAtMillis())
-            .append(event.payload().unsafeBytes())
-            .endRow();
-    }
-
-    private void appendSearchText(List<StoredEvent> storedEvents) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
-            "INSERT INTO event_search_text (event_id, search_text) VALUES (?, ?)"
-        )) {
-            var hasRows = false;
-            for (var stored : storedEvents) {
-                var searchText = stored.queued().searchText();
-                if (searchText == null) {
-                    continue;
-                }
-                statement.setObject(1, stored.eventId());
-                statement.setString(2, searchText);
-                statement.addBatch();
-                hasRows = true;
-            }
-            if (hasRows) {
-                statement.executeBatch();
-            }
+            .append(event.payload().unsafeBytes());
+        var searchText = queued.searchText();
+        if (searchText == null) {
+            appender.appendNull();
+        } else {
+            appender.append(searchText);
         }
+        appender.endRow();
     }
 
-    private Optional<PlayerNameState> latestPlayerName(UUID playerId) throws SQLException {
+    private void recordPlayerNames(List<QueuedEvent> events) throws SQLException {
         try (var statement = this.connection.prepareStatement("""
-            SELECT name, epoch_ms(last_seen), last_event_id
-            FROM player_name_history
-            WHERE player_uuid = ?
-            ORDER BY last_seen DESC, last_event_id DESC
-            LIMIT 1
+            INSERT INTO player_names (player_uuid, name, last_seen)
+            VALUES (?, ?, epoch_ms(?))
+            ON CONFLICT DO UPDATE SET last_seen = greatest(last_seen, excluded.last_seen)
             """)) {
-            statement.setObject(1, playerId);
-            try (var rows = statement.executeQuery()) {
-                return rows.next()
-                    ? Optional.of(new PlayerNameState(
-                        rows.getString(1),
-                        rows.getLong(2),
-                        rows.getObject(3, UUID.class)
-                    ))
-                    : Optional.empty();
-            }
-        }
-    }
-
-    private static boolean isNewerObservation(
-        long observedAtMillis,
-        UUID eventId,
-        PlayerNameState previous
-    ) {
-        var timestampComparison = Long.compare(
-            observedAtMillis,
-            previous.lastSeenMillis()
-        );
-        return timestampComparison > 0
-            || timestampComparison == 0
-            && eventId.compareTo(previous.lastEventId()) > 0;
-    }
-
-    private void recordPlayerName(
-        UUID playerId,
-        String username,
-        long observedAtMillis,
-        UUID eventId
-    ) throws SQLException {
-        var normalizedName = normalizeName(username);
-        try (var updateFirstSeen = this.connection.prepareStatement("""
-            UPDATE player_name_history
-            SET
-                normalized_name = ?,
-                first_seen = least(first_seen, epoch_ms(?))
-            WHERE player_uuid = ? AND name = ?
-            """)) {
-            updateFirstSeen.setString(1, normalizedName);
-            updateFirstSeen.setLong(2, observedAtMillis);
-            updateFirstSeen.setObject(3, playerId);
-            updateFirstSeen.setString(4, username);
-            if (updateFirstSeen.executeUpdate() != 0) {
-                try (var updateLastSeen = this.connection.prepareStatement("""
-                    UPDATE player_name_history
-                    SET last_seen = epoch_ms(?), last_event_id = ?
-                    WHERE
-                        player_uuid = ?
-                        AND name = ?
-                        AND (
-                            last_seen < epoch_ms(?)
-                            OR (last_seen = epoch_ms(?) AND last_event_id < ?)
-                        )
-                    """)) {
-                    updateLastSeen.setLong(1, observedAtMillis);
-                    updateLastSeen.setObject(2, eventId);
-                    updateLastSeen.setObject(3, playerId);
-                    updateLastSeen.setString(4, username);
-                    updateLastSeen.setLong(5, observedAtMillis);
-                    updateLastSeen.setLong(6, observedAtMillis);
-                    updateLastSeen.setObject(7, eventId);
-                    updateLastSeen.executeUpdate();
+            for (var queued : events) {
+                var name = queued.playerName();
+                if (name != null && queued.submission().actor() instanceof PlayerActor player) {
+                    statement.setObject(1, player.uniqueId());
+                    statement.setString(2, name);
+                    statement.setLong(3, queued.occurredAtMillis());
+                    statement.executeUpdate();
                 }
-                return;
-            }
-        }
-
-        try (var insert = this.connection.prepareStatement("""
-            INSERT INTO player_name_history (
-                player_uuid,
-                name,
-                normalized_name,
-                first_seen,
-                last_seen,
-                last_event_id
-            )
-            VALUES (?, ?, ?, epoch_ms(?), epoch_ms(?), ?)
-            """)) {
-            insert.setObject(1, playerId);
-            insert.setString(2, username);
-            insert.setString(3, normalizedName);
-            insert.setLong(4, observedAtMillis);
-            insert.setLong(5, observedAtMillis);
-            insert.setObject(6, eventId);
-            insert.executeUpdate();
-        }
-    }
-
-    @Override
-    public Optional<UUID> resolvePlayerName(String name) throws SQLException {
-        var normalizedName = normalizeName(name);
-        try (var statement = this.connection.prepareStatement("""
-            SELECT player_uuid
-            FROM player_name_history
-            WHERE normalized_name = ?
-            ORDER BY last_seen DESC, last_event_id DESC
-            LIMIT 1
-            """)) {
-            statement.setString(1, normalizedName);
-            try (var rows = statement.executeQuery()) {
-                return rows.next()
-                    ? Optional.of(rows.getObject(1, UUID.class))
-                    : Optional.empty();
             }
         }
     }
@@ -422,19 +207,10 @@ public final class DuckDbStorageImpl implements Storage {
         var names = new ArrayList<String>();
         try (var statement = this.connection.createStatement();
              var rows = statement.executeQuery("""
-                 SELECT name
-                 FROM (
-                     SELECT
-                         name,
-                         normalized_name,
-                         row_number() OVER (
-                             PARTITION BY normalized_name
-                             ORDER BY last_seen DESC, last_event_id DESC
-                         ) AS recency_rank
-                     FROM player_name_history
-                 )
-                 WHERE recency_rank = 1
-                 ORDER BY normalized_name
+                 SELECT arg_max(name, last_seen)
+                 FROM player_names
+                 GROUP BY lower(name)
+                 ORDER BY lower(name)
                  """)) {
             while (rows.next()) {
                 names.add(rows.getString(1));
@@ -443,33 +219,9 @@ public final class DuckDbStorageImpl implements Storage {
         return List.copyOf(names);
     }
 
-    private static String normalizeName(String name) {
-        return Objects.requireNonNull(name, "name").toLowerCase(Locale.ROOT);
-    }
-
-    @Override
-    public List<UUID> findEventIdsContaining(String literal) throws SQLException {
-        Objects.requireNonNull(literal, "literal");
-        var eventIds = new ArrayList<UUID>();
-        try (var statement = this.connection.prepareStatement("""
-            SELECT event_id
-            FROM event_search_text
-            WHERE contains(lower(search_text), lower(?))
-            ORDER BY event_id
-            """)) {
-            statement.setString(1, literal);
-            try (var rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    eventIds.add(rows.getObject(1, UUID.class));
-                }
-            }
-        }
-        return List.copyOf(eventIds);
-    }
-
     @Override
     public Optional<EventDetail> findEvent(UUID eventId) throws SQLException {
-        return DuckDbEventLookup.find(this.connection, Objects.requireNonNull(eventId, "eventId"));
+        return DuckDbEventSearch.find(this.connection, Objects.requireNonNull(eventId, "eventId"));
     }
 
     @Override
@@ -543,67 +295,16 @@ public final class DuckDbStorageImpl implements Storage {
 
     @Override
     public int deleteExpired(Instant now) throws SQLException {
-        try (
-            var deleteSearchText = this.connection.prepareStatement("""
-                DELETE FROM event_search_text
-                WHERE event_id IN (
-                    SELECT event_id
-                    FROM events
-                    WHERE expires_at <= epoch_ms(?)
-                )
-                """);
-            var deleteEvents = this.connection.prepareStatement(
-                "DELETE FROM events WHERE expires_at <= epoch_ms(?)"
-            )
-        ) {
-            var nowMillis = now.toEpochMilli();
-            deleteSearchText.setLong(1, nowMillis);
-            deleteSearchText.executeUpdate();
-
-            deleteEvents.setLong(1, nowMillis);
-            var deleted = deleteEvents.executeUpdate();
+        try (var statement = this.connection.prepareStatement(
+            "DELETE FROM events WHERE expires_at <= epoch_ms(?)"
+        )) {
+            statement.setLong(1, now.toEpochMilli());
+            var deleted = statement.executeUpdate();
             this.connection.commit();
             return deleted;
         } catch (SQLException | RuntimeException e) {
             this.rollback(e);
             throw e;
-        }
-    }
-
-    @Override
-    public void checkpoint() throws SQLException {
-        try (var statement = this.connection.createStatement()) {
-            statement.execute("CHECKPOINT");
-        }
-    }
-
-    @Override
-    public StorageHealth health() throws SQLException {
-        try (var statement = this.connection.createStatement();
-             var rows = statement.executeQuery("""
-                 SELECT
-                     (SELECT count(*) FROM events) AS event_count,
-                     database_size,
-                     block_size,
-                     total_blocks,
-                     used_blocks,
-                     free_blocks,
-                     wal_size
-                 FROM pragma_database_size()
-                 WHERE database_name = current_database()
-                 """)) {
-            if (!rows.next()) {
-                throw new SQLException("DuckDB did not report database size information.");
-            }
-            return new StorageHealth(
-                rows.getLong("event_count"),
-                rows.getString("database_size"),
-                rows.getLong("block_size"),
-                rows.getLong("total_blocks"),
-                rows.getLong("used_blocks"),
-                rows.getLong("free_blocks"),
-                rows.getString("wal_size")
-            );
         }
     }
 
@@ -724,15 +425,5 @@ public final class DuckDbStorageImpl implements Storage {
         if (failure != null) {
             throw failure;
         }
-    }
-
-    private record PlayerNameState(
-        String name,
-        long lastSeenMillis,
-        UUID lastEventId
-    ) {
-    }
-
-    private record StoredEvent(QueuedEvent queued, UUID eventId) {
     }
 }

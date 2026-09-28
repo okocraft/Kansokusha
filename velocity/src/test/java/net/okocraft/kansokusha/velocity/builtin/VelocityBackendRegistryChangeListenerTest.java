@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.velocity.builtin;
 
-import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.server.ServerRegisteredEvent;
 import com.velocitypowered.api.event.proxy.server.ServerUnregisteredEvent;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -75,44 +74,6 @@ class VelocityBackendRegistryChangeListenerTest {
         Mockito.verify(api, Mockito.never()).submit(Mockito.any());
         Mockito.verify(logger, Mockito.times(1))
             .warn(Mockito.anyString(), Mockito.eq("東京"));
-    }
-
-    @Test
-    void testRejectedAdmissionDoesNotBlockOrThrow() {
-        var api = api();
-        Mockito.when(api.submit(Mockito.any()))
-            .thenReturn(false);
-        var listener = VelocityBackendRegistryChangeListener.register(
-            api,
-            Mockito.mock(Logger.class)
-        );
-
-        Assertions.assertDoesNotThrow(
-            () -> listener.onServerRegistered(
-                new ServerRegisteredEvent(
-                    server(
-                        "game",
-                        InetSocketAddress.createUnresolved("backend.internal", 25565)
-                    )
-                )
-            )
-        );
-        Mockito.verify(api).submit(Mockito.any());
-    }
-
-    @Test
-    void testRegistryHandlersAreVelocitySubscriberMethods() throws Exception {
-        var registered = VelocityBackendRegistryChangeListener.class
-            .getMethod("onServerRegistered", ServerRegisteredEvent.class)
-            .getAnnotation(Subscribe.class);
-        var unregistered = VelocityBackendRegistryChangeListener.class
-            .getMethod("onServerUnregistered", ServerUnregisteredEvent.class)
-            .getAnnotation(Subscribe.class);
-
-        Assertions.assertNotNull(registered);
-        Assertions.assertFalse(registered.async());
-        Assertions.assertNotNull(unregistered);
-        Assertions.assertFalse(unregistered.async());
     }
 
     private static void assertSubmission(

@@ -12,38 +12,41 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Internal submission and lookup surface for searchable communication events.
+ * Internal submission and lookup surface used by Kansokusha's own listeners and commands.
  *
- * <p>This is intentionally separate from the public {@link KansokushaApi}. Search text is a
- * derived projection used by Kansokusha's own search backend, not provider-defined event data.</p>
+ * <p>This is intentionally separate from the public {@link KansokushaApi}. Search text and
+ * player names are derived lookup data, not provider-defined event data.</p>
  */
 @ApiStatus.Internal
 @NotNullByDefault
 public interface EventSearchBackend {
 
+    /**
+     * Submits a communication event together with its text searchable by {@code filter}.
+     */
     boolean submitSearchable(EventSubmission submission, String searchText);
+
+    /**
+     * Submits a login event together with the username observed by that login.
+     */
+    boolean submitPlayerLogin(EventSubmission submission, String username);
 
     /**
      * Executes a typed search asynchronously through the runtime's storage-owned read path.
      */
     CompletableFuture<SearchPage> search(SearchRequest request);
 
-    /**
-     * Looks up one persisted event by its internal UUID without exposing this operation publicly.
-     */
-    default CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
-        Objects.requireNonNull(eventId, "eventId");
-        return CompletableFuture.completedFuture(Optional.empty());
-    }
+    CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);
 
     /**
      * Returns historical values used for platform completion and event permission scoping.
      */
-    default CompletableFuture<SearchMetadata> searchMetadata() {
-        return CompletableFuture.completedFuture(SearchMetadata.empty());
-    }
+    CompletableFuture<SearchMetadata> searchMetadata();
 
-    CompletableFuture<List<UUID>> findEventIdsContaining(String literal);
+    /**
+     * Returns case-insensitively de-duplicated observed usernames for completion.
+     */
+    CompletableFuture<List<String>> offlinePlayerNames();
 
     static EventSearchBackend require(KansokushaApi api) {
         Objects.requireNonNull(api, "api");

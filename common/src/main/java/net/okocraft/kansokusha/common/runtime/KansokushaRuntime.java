@@ -2,21 +2,19 @@ package net.okocraft.kansokusha.common.runtime;
 
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
+import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
-import net.okocraft.kansokusha.common.storage.PlayerNameObservation;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
-import net.okocraft.kansokusha.common.storage.StorageHealth;
 import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,7 +24,6 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +38,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
  * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
@@ -51,7 +47,7 @@ import java.util.function.Consumer;
  * access is never concurrent.</p>
  */
 @NotNullByDefault
-public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirectory, EventSearchBackend, AutoCloseable {
+public final class KansokushaRuntime implements KansokushaApi, EventSearchBackend, AutoCloseable {
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
@@ -60,7 +56,6 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
     private final Storage storage;
-    private final Consumer<String> infoReporter;
     private final BiConsumer<String, Throwable> errorReporter;
     private final ConcurrentHashMap<Key, RegisteredEventType> eventTypes = new ConcurrentHashMap<>();
     private final int batchSize;
@@ -77,13 +72,11 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         @Nullable Key localServerKey,
         KansokushaConfig config,
         Storage storage,
-        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) {
         this.localServerKey = Optional.ofNullable(localServerKey);
         this.retention = config.retention();
         this.storage = storage;
-        this.infoReporter = infoReporter;
         this.errorReporter = errorReporter;
         this.batchSize = config.batchSize();
         this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
@@ -96,31 +89,28 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
      * Opens the database in the data directory and starts the storage thread.
      *
      * @param localServerKey the local server identity, or {@code null} for proxies
-     * @param infoReporter   receives storage health information on shutdown
      * @param errorReporter  receives storage failures so that administrators can notice them
      */
     public static KansokushaRuntime start(
         Path dataDirectory,
         KansokushaConfig config,
         @Nullable Key localServerKey,
-        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) throws IOException, SQLException {
         var storage = DuckDbStorage.open(
             dataDirectory,
             dataDirectory.resolve(DATABASE_FILENAME)
         );
-        return start(storage, config, localServerKey, infoReporter, errorReporter);
+        return start(storage, config, localServerKey, errorReporter);
     }
 
     static KansokushaRuntime start(
         Storage storage,
         KansokushaConfig config,
         @Nullable Key localServerKey,
-        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) {
-        var runtime = new KansokushaRuntime(localServerKey, config, storage, infoReporter, errorReporter);
+        var runtime = new KansokushaRuntime(localServerKey, config, storage, errorReporter);
 
         var flushMillis = config.flushInterval().toMillis();
         runtime.storageThread.scheduleWithFixedDelay(
@@ -160,62 +150,24 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
 
     @Override
     public boolean submit(EventSubmission submission) {
-        var registered = this.requireRegisteredEventType(submission);
-        // Validate here so that one invalid event cannot make the whole batch fail to write.
-        return this.enqueue(toQueuedEvent(submission, registered.retentionMillis(), null, null));
+        return this.enqueue(submission, null, null);
     }
 
     @Override
     public boolean submitSearchable(EventSubmission submission, String searchText) {
         Objects.requireNonNull(searchText, "searchText");
-        var registered = this.requireRegisteredEventType(submission);
-        return this.enqueue(toQueuedEvent(
-            submission,
-            registered.retentionMillis(),
-            null,
-            searchText
-        ));
+        return this.enqueue(submission, null, searchText);
     }
 
     @Override
     public boolean submitPlayerLogin(EventSubmission submission, String username) {
-        if (!(submission.actor() instanceof net.okocraft.kansokusha.api.actor.PlayerActor)) {
+        if (!(submission.actor() instanceof PlayerActor)) {
             throw new IllegalArgumentException("A player login must use PlayerActor.");
         }
         if (username.isEmpty()) {
             throw new IllegalArgumentException("username must not be empty");
         }
-
-        var registered = this.requireRegisteredEventType(submission);
-        try {
-            var occurredAtMillis = requireStorableMillis(submission.occurredAt().toEpochMilli());
-            var loginExpiresAtMillis = requireStorableMillis(
-                Math.addExact(occurredAtMillis, registered.retentionMillis())
-            );
-            var nameChangeRetentionMillis = this.retention.durationOf(
-                PlayerNameDirectory.NAME_CHANGE_EVENT_TYPE
-            ).toMillis();
-            var nameChangeExpiresAtMillis = requireStorableMillis(
-                Math.addExact(occurredAtMillis, nameChangeRetentionMillis)
-            );
-            return this.enqueue(new QueuedEvent(
-                submission,
-                occurredAtMillis,
-                loginExpiresAtMillis,
-                new PlayerNameObservation(username, nameChangeExpiresAtMillis),
-                null
-            ));
-        } catch (ArithmeticException e) {
-            throw new IllegalArgumentException(
-                "occurredAt is out of range: " + submission.occurredAt(),
-                e
-            );
-        }
-    }
-
-    @Override
-    public CompletableFuture<Optional<UUID>> resolvePlayerName(String name) {
-        return this.queryStorage(() -> this.storage.resolvePlayerName(name));
+        return this.enqueue(submission, username, null);
     }
 
     @Override
@@ -241,12 +193,6 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         return this.queryStorage(this.storage::searchMetadata);
     }
 
-    @Override
-    public CompletableFuture<List<UUID>> findEventIdsContaining(String literal) {
-        Objects.requireNonNull(literal, "literal");
-        return this.queryStorage(() -> this.storage.findEventIdsContaining(literal));
-    }
-
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
         var registered = this.eventTypes.get(submission.eventType());
         if (registered == null || !submission.payloadGeneration().equals(registered.payloadGeneration())) {
@@ -258,7 +204,14 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         return registered;
     }
 
-    private boolean enqueue(QueuedEvent queued) {
+    private boolean enqueue(
+        EventSubmission submission,
+        @Nullable String playerName,
+        @Nullable String searchText
+    ) {
+        var registered = this.requireRegisteredEventType(submission);
+        // Validate here so that one invalid event cannot make the whole batch fail to write.
+        var queued = toQueuedEvent(submission, registered.retentionMillis(), playerName, searchText);
         if (!this.beginSubmission()) {
             return false;
         }
@@ -279,7 +232,7 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     private static QueuedEvent toQueuedEvent(
         EventSubmission submission,
         long retentionMillis,
-        @Nullable PlayerNameObservation playerNameObservation,
+        @Nullable String playerName,
         @Nullable String searchText
     ) {
         try {
@@ -289,7 +242,7 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
                 submission,
                 requireStorableMillis(occurredAtMillis),
                 requireStorableMillis(Math.addExact(occurredAtMillis, retentionMillis)),
-                playerNameObservation,
+                playerName,
                 searchText
             );
         } catch (ArithmeticException e) {
@@ -355,8 +308,7 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
         // to the thread that created it, even when calls are not concurrent.
         this.storageThread.execute(() -> {
             this.flush();
-            var deleted = this.deleteExpired(Instant.now());
-            this.checkpointAndReportHealth(deleted);
+            this.deleteExpired();
             try {
                 this.storage.close();
             } catch (SQLException e) {
@@ -410,50 +362,11 @@ public final class KansokushaRuntime implements KansokushaApi, PlayerNameDirecto
     }
 
     private void deleteExpired() {
-        this.deleteExpired(Instant.now());
-    }
-
-    private int deleteExpired(Instant now) {
         try {
-            return this.storage.deleteExpired(now);
+            this.storage.deleteExpired(Instant.now());
         } catch (SQLException | RuntimeException e) {
             this.errorReporter.accept("Failed to delete expired events.", e);
-            return -1;
         }
-    }
-
-    private void checkpointAndReportHealth(int deleted) {
-        try {
-            this.storage.checkpoint();
-        } catch (SQLException | RuntimeException e) {
-            this.errorReporter.accept("Failed to checkpoint the Kansokusha database.", e);
-        }
-
-        try {
-            this.infoReporter.accept(formatStorageHealth(this.storage.health(), deleted));
-        } catch (SQLException | RuntimeException e) {
-            this.errorReporter.accept("Failed to report Kansokusha database health.", e);
-        }
-    }
-
-    private static String formatStorageHealth(StorageHealth health, int deleted) {
-        var reusablePercent = health.totalBlocks() == 0
-            ? 0.0
-            : (double) health.freeBlocks() * 100.0 / health.totalBlocks();
-        var deletedText = deleted >= 0 ? Integer.toString(deleted) : "unknown";
-        return String.format(
-            Locale.ROOT,
-            "Database health: events=%d, size=%s, used=%d/%d blocks, reusable=%d blocks (%.1f%%), "
-                + "WAL=%s, expired-on-shutdown=%s.",
-            health.eventCount(),
-            health.databaseSize(),
-            health.usedBlocks(),
-            health.totalBlocks(),
-            health.freeBlocks(),
-            reusablePercent,
-            health.walSize(),
-            deletedText
-        );
     }
 
     // Resolves the retention period at registration instead of on every submission.

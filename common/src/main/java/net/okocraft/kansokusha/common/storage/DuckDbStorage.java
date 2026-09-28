@@ -359,18 +359,8 @@ public final class DuckDbStorage {
         }
 
         @Override
-        public Optional<UUID> resolvePlayerName(String name) throws SQLException {
-            return this.delegate.resolvePlayerName(name);
-        }
-
-        @Override
         public List<String> offlinePlayerNames() throws SQLException {
             return this.delegate.offlinePlayerNames();
-        }
-
-        @Override
-        public List<UUID> findEventIdsContaining(String literal) throws SQLException {
-            return this.delegate.findEventIdsContaining(literal);
         }
 
         @Override
@@ -391,16 +381,6 @@ public final class DuckDbStorage {
         @Override
         public int deleteExpired(Instant now) throws SQLException {
             return this.delegate.deleteExpired(now);
-        }
-
-        @Override
-        public void checkpoint() throws SQLException {
-            this.delegate.checkpoint();
-        }
-
-        @Override
-        public StorageHealth health() throws SQLException {
-            return this.delegate.health();
         }
 
         @Override

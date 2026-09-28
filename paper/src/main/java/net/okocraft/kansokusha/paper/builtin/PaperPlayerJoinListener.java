@@ -6,7 +6,7 @@ import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
-import net.okocraft.kansokusha.common.player.PlayerNameDirectory;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -27,12 +27,12 @@ public final class PaperPlayerJoinListener implements Listener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "paper_join");
 
-    private final KansokushaApi api;
+    private final EventSearchBackend backend;
     private final Key serverKey;
     private final Clock clock;
 
     private PaperPlayerJoinListener(KansokushaApi api, Key serverKey, Clock clock) {
-        this.api = Objects.requireNonNull(api, "api");
+        this.backend = EventSearchBackend.require(api);
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -67,10 +67,6 @@ public final class PaperPlayerJoinListener implements Listener {
             null,
             PaperPlayerSessionPayloadCodec.encodeJoin(username)
         );
-        if (this.api instanceof PlayerNameDirectory playerNames) {
-            playerNames.submitPlayerLogin(submission, username);
-        } else {
-            this.api.submit(submission);
-        }
+        this.backend.submitPlayerLogin(submission, username);
     }
 }

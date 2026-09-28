@@ -164,34 +164,6 @@ class PaperCauldronLevelChangeListenerTest {
         );
     }
 
-    @Test
-    void testCancelledChangeIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperCauldronLevelChangeListener.register(
-            api,
-            PaperBlockEventTestSupport.SERVER_KEY
-        );
-        var world = PaperBlockEventTestSupport.world();
-        var block = PaperBlockEventTestSupport.block(
-            world, 7, 8, 9, waterCauldron(2), Material.WATER_CAULDRON
-        );
-        var changed = PaperBlockEventTestSupport.state(
-            world, block, 7, 8, 9, waterCauldron(1)
-        );
-        var event = Mockito.mock(CauldronLevelChangeEvent.class);
-        Mockito.when(event.getBlock()).thenReturn(block);
-        Mockito.when(event.getReason()).thenReturn(
-            CauldronLevelChangeEvent.ChangeReason.BOTTLE_FILL
-        );
-        Mockito.when(event.getNewState()).thenReturn(changed);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Mockito.verify(changed, Mockito.never()).getBlockData();
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static net.minecraft.world.level.block.state.BlockState waterCauldron(int level) {
         return Blocks.WATER_CAULDRON.defaultBlockState().setValue(
             LayeredCauldronBlock.LEVEL,

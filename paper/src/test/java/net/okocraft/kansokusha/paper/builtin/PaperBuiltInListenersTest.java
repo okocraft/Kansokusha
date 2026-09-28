@@ -3,13 +3,8 @@ package net.okocraft.kansokusha.paper.builtin;
 import net.kyori.adventure.key.Key;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
-import net.okocraft.kansokusha.api.KansokushaApi;
-import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
-import net.okocraft.kansokusha.common.search.EventSearchBackend;
-import net.okocraft.kansokusha.common.search.SearchPage;
-import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.junit.jupiter.api.Assertions;
@@ -17,10 +12,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 class PaperBuiltInListenersTest {
 
@@ -78,40 +70,13 @@ class PaperBuiltInListenersTest {
         }
     }
 
-    private static final class RegistrationRecordingApi implements KansokushaApi, EventSearchBackend {
+    private static final class RegistrationRecordingApi extends PaperBlockEventTestSupport.RecordingApi {
 
         private final Set<EventTypeDefinition> registered = new HashSet<>();
 
         @Override
-        public Optional<Key> localServerKey() {
-            return Optional.of(SERVER_KEY);
-        }
-
-        @Override
         public void registerEventType(EventTypeDefinition definition) {
             this.registered.add(definition);
-        }
-
-        @Override
-        public boolean submit(EventSubmission submission) {
-            return true;
-        }
-
-        @Override
-        public boolean submitSearchable(EventSubmission submission, String searchText) {
-            return true;
-        }
-
-        @Override
-        public CompletableFuture<SearchPage> search(SearchRequest request) {
-            return CompletableFuture.completedFuture(
-                new SearchPage(java.util.List.of(), Optional.empty(), Optional.empty())
-            );
-        }
-
-        @Override
-        public CompletableFuture<java.util.List<UUID>> findEventIdsContaining(String literal) {
-            return CompletableFuture.completedFuture(java.util.List.of());
         }
     }
 }

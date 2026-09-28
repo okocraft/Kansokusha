@@ -55,7 +55,6 @@ retention:
         - kansokusha:player_gamemode_change
         - kansokusha:player_spawn_change
         - kansokusha:player_death
-        - kansokusha:player_name_change
         - kansokusha:paper_player_command
         - kansokusha:paper_server_command
         - kansokusha:velocity_command

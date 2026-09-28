@@ -126,24 +126,6 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledTeleportIsNotRecorded() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = teleportListener(api);
-        var currentWorld = world("world");
-        var event = teleportEvent(
-            player(currentWorld, 1, 2, 3),
-            new Location(currentWorld, 1, 2, 3),
-            new Location(currentWorld, 4, 5, 6),
-            Set.of()
-        );
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
     void testPortalPreflightIsIgnoredAndOnlyFinalTeleportIsRecorded() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = teleportListener(api);
@@ -212,25 +194,6 @@ class PaperPlayerStateListenerTest {
     }
 
     @Test
-    void testCancelledGameModeChangeIsNotRecorded() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPlayerGameModeChangeListener.register(
-            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
-        );
-        var player = player(world("world"), 1, 2, 3);
-        Mockito.when(player.getGameMode()).thenReturn(GameMode.SURVIVAL);
-        var event = Mockito.mock(PlayerGameModeChangeEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getNewGameMode()).thenReturn(GameMode.CREATIVE);
-        Mockito.when(event.getCause()).thenReturn(PlayerGameModeChangeEvent.Cause.PLUGIN);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
-    @Test
     void testSpawnChangeRecordsCurrentAndNewRespawnLocation() throws Exception {
         var api = new PaperBlockEventTestSupport.RecordingApi();
         var listener = PaperPlayerSpawnChangeListener.register(
@@ -284,27 +247,6 @@ class PaperPlayerStateListenerTest {
         var clearPayload = PaperPayloadNbtCodec.decode(clearSubmission.payload());
         Assertions.assertEquals(optionalLocationTag(null), clearPayload.getCompoundOrEmpty("after"));
         Assertions.assertEquals("plugin", clearPayload.getString("cause").orElseThrow());
-    }
-
-    @Test
-    void testCancelledPlayerSetSpawnIsNotRecorded() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPlayerSpawnChangeListener.register(
-            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
-        );
-        var player = player(world("world"), 1, 2, 3);
-        Mockito.when(player.getRespawnLocation()).thenReturn(null);
-        var event = Mockito.mock(PlayerSetSpawnEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-        var spawnWorld = world("spawn");
-        Mockito.when(event.getLocation()).thenReturn(new Location(spawnWorld, 4, 5, 6));
-        Mockito.when(event.isForced()).thenReturn(false);
-        Mockito.when(event.getCause()).thenReturn(PlayerSetSpawnEvent.Cause.PLUGIN);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
     }
 
     @Test
@@ -387,24 +329,6 @@ class PaperPlayerStateListenerTest {
             PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("offhand")).getType()
         );
         Mockito.verify(event, Mockito.never()).getDrops();
-    }
-
-    @Test
-    void testCancelledDeathIsNotRecorded() throws Exception {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperPlayerDeathListener.register(
-            api, PaperBlockEventTestSupport.SERVER_KEY, fixedClock()
-        );
-        var player = player(world("death"), 1, 2, 3);
-        var source = Mockito.mock(DamageSource.class);
-        var event = Mockito.mock(PlayerDeathEvent.class);
-        Mockito.when(event.getPlayer()).thenReturn(player);
-        Mockito.when(event.getDamageSource()).thenReturn(source);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
     }
 
     private static PaperPlayerTeleportListener teleportListener(

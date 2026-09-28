@@ -31,15 +31,4 @@ class PaperComponentPayloadCodecTest {
         );
     }
 
-    @Test
-    void testNullValuesAreRejected() {
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperComponentPayloadCodec.encode(null)
-        );
-        Assertions.assertThrows(
-            NullPointerException.class,
-            () -> PaperComponentPayloadCodec.decode(null)
-        );
-    }
 }

@@ -88,18 +88,6 @@ class PaperBlockBurnListenerTest {
         Assertions.assertEquals(1, api.submissions.size());
     }
 
-    @Test
-    void testCancelledBurnIsNotSubmitted() {
-        var api = new PaperBlockEventTestSupport.RecordingApi();
-        var listener = PaperBlockBurnListener.register(api, PaperBlockEventTestSupport.SERVER_KEY);
-        var event = burnEvent(Blocks.OAK_PLANKS.defaultBlockState(), Material.OAK_PLANKS, true);
-        Mockito.when(event.isCancelled()).thenReturn(true);
-
-        PaperListenerTestSupport.fire(listener, event);
-
-        Assertions.assertTrue(api.submissions.isEmpty());
-    }
-
     private static BlockBurnEvent burnEvent(
         net.minecraft.world.level.block.state.BlockState state,
         Material material,

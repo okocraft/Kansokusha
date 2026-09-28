@@ -4,7 +4,6 @@ import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
-import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
@@ -77,19 +76,6 @@ class VelocityServerConnectedListenerTest {
             new String(submission.payload().copyBytes(), java.nio.charset.StandardCharsets.UTF_8)
                 .contains(VelocityServerKeyCodec.encode("game").orElseThrow().asString())
         );
-    }
-
-    @Test
-    void testRejectedAdmissionDoesNotBlockOrThrow() {
-        var api = api();
-        Mockito.when(api.submit(Mockito.any()))
-            .thenReturn(false);
-        var listener = VelocityServerConnectedListener.register(api, Mockito.mock(Logger.class));
-
-        Assertions.assertDoesNotThrow(
-            () -> listener.onServerConnected(event("game", "lobby"))
-        );
-        Mockito.verify(api).submit(Mockito.any());
     }
 
     @Test

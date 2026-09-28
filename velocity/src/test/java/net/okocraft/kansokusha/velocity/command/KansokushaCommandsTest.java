@@ -3,19 +3,25 @@ package net.okocraft.kansokusha.velocity.command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import net.okocraft.kansokusha.common.command.CommandMessages;
-import net.okocraft.kansokusha.common.command.EventCommandMessages;
-import net.okocraft.kansokusha.common.command.SearchCommandMessages;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.velocity.testsupport.CommandTester;
 import net.okocraft.kansokusha.velocity.testsupport.TestSources;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.util.List;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.ZoneOffset;
+import java.util.Properties;
 
 class KansokushaCommandsTest {
 
-    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand());
+    private final EventSearchBackend backend = Mockito.mock(EventSearchBackend.class);
+    private final CommandTester tester = CommandTester.of(
+        KansokushaCommands.createCommand(this.backend, Clock.systemUTC(), ZoneOffset.UTC)
+    );
 
     @Test
     void testVersionCommandIsWiredUnderKansokushaRoot() throws Exception {
@@ -27,29 +33,12 @@ class KansokushaCommandsTest {
     }
 
     @Test
-    void testCommandDefinersAreExposedForLanguageLoading() {
-        Assertions.assertEquals(
-            List.of(
-                CommandMessages.DEFINER,
-                SearchCommandMessages.DEFINER,
-                EventCommandMessages.DEFINER
-            ),
-            KansokushaCommands.getDefiners()
-        );
-    }
-
-    @Test
-    void testSearchCommandIsWiredUnderKansokushaRoot() throws Exception {
-        ConsoleCommandSource console = TestSources.console();
-        TestSources.grant(console, "kansokusha.command", SearchCommand.PERMISSION);
-
-        Assertions.assertEquals(0, this.tester.execute(console, "kansokusha search"));
-        Mockito.verify(console).sendMessage(SearchCommandMessages.SEARCH_FAILED.asComponent());
-    }
-
-    @Test
     void testEventCommandIsWiredUnderKansokushaRoot() {
-        Assertions.assertNotNull(KansokushaCommands.createCommand().getNode().getChild("event"));
+        Assertions.assertNotNull(
+            KansokushaCommands.createCommand(this.backend, Clock.systemUTC(), ZoneOffset.UTC)
+                .getNode()
+                .getChild("event")
+        );
     }
 
     @Test
@@ -61,5 +50,20 @@ class KansokushaCommandsTest {
             CommandSyntaxException.class,
             () -> this.tester.execute(console, "kansokusha version")
         );
+    }
+
+    @Test
+    void testJapaneseBundleContainsEveryMessageKey() throws Exception {
+        var properties = new Properties();
+        try (var input = KansokushaCommandsTest.class.getClassLoader().getResourceAsStream("languages/ja.properties")) {
+            Assertions.assertNotNull(input);
+            try (var reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                properties.load(reader);
+            }
+        }
+
+        for (var definer : KansokushaCommands.getDefiners()) {
+            Assertions.assertTrue(properties.stringPropertyNames().containsAll(definer.getCollectedMessages().keySet()));
+        }
     }
 }

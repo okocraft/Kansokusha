@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.testsupport.CommandTester;
 import net.okocraft.kansokusha.paper.testsupport.TestSources;
@@ -10,12 +11,19 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 class InspectCommandTest {
 
     private final InspectionSessionManager sessions = new InspectionSessionManager();
-    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand(this.sessions));
+    private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand(
+        Mockito.mock(EventSearchBackend.class),
+        Clock.systemUTC(),
+        ZoneOffset.UTC,
+        this.sessions
+    ));
 
     @Test
     void testInspectWithoutArgumentTogglesCurrentSession() throws Exception {
