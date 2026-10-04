@@ -61,9 +61,10 @@ class EventCommandTest {
 
         Mockito.verify(this.api).findEvent(EVENT_ID);
         Mockito.verify(console).sendMessage(
-            EventCommandMessages.EVENT_ID.asComponent()
-                .append(Component.text(": "))
-                .append(Component.text(EVENT_ID.toString()))
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.EVENT_ID.asComponent(),
+                Component.text(EVENT_ID.toString())
+            )
         );
     }
 

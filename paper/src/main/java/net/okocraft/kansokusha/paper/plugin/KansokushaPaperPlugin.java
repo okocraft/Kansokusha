@@ -27,7 +27,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         try {
-            LanguageProvider.load(this.getDataPath().resolve("languages"), KansokushaCommands.getDefiners());
+            LanguageProvider.load(this.getDataPath().resolve("languages"), KansokushaCommands.getDefaultMessages());
 
             var config = KansokushaConfig.load(this.getDataPath());
             var serverKey = PaperServerIdentity.resolve(config.serverKey(), Path.of("."));

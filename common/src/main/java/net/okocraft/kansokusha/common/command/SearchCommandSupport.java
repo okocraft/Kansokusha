@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
+import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParseException;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
 import org.jetbrains.annotations.ApiStatus;
@@ -64,14 +65,14 @@ public final class SearchCommandSupport {
         try {
             invocation = parseInvocation(rawInput, clock, timezone, source.origin());
         } catch (SearchQueryParseException e) {
-            source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.getMessage()));
+            source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.reason()));
             return false;
         }
 
         var query = invocation.query();
         var maxLimit = source.player() ? PLAYER_MAX_LIMIT : NON_PLAYER_MAX_LIMIT;
         if (query.limit().orElse(0) > maxLimit) {
-            source.sendMessage().accept(SearchCommandMessages.LIMIT_RANGE.apply(Integer.toString(maxLimit)));
+            source.sendMessage().accept(SearchCommandMessages.LIMIT_RANGE.apply(maxLimit));
             return false;
         }
 
@@ -258,7 +259,11 @@ public final class SearchCommandSupport {
             }
             result = result.append(parts.get(index));
         }
-        result = result.hoverEvent(HoverEvent.showText(Component.text(event.eventId().toString())));
+        result = result.hoverEvent(HoverEvent.showText(
+            eventDetailsPermitted
+                ? SearchCommandMessages.VIEW_EVENT.apply(event.eventId().toString())
+                : Component.text(event.eventId().toString())
+        ));
         return eventDetailsPermitted
             ? result.clickEvent(ClickEvent.runCommand("/kansokusha event " + event.eventId()))
             : result;
@@ -362,7 +367,7 @@ public final class SearchCommandSupport {
     private static SearchRequest.Cursor parseCursor(String value) {
         var parts = value.split(",", 3);
         if (parts.length != 3) {
-            throw new SearchQueryParseException("invalid search cursor");
+            throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent());
         }
 
         try {
@@ -377,7 +382,7 @@ public final class SearchCommandSupport {
                 direction
             );
         } catch (RuntimeException e) {
-            throw new SearchQueryParseException("invalid search cursor", e);
+            throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent(), e);
         }
     }
 

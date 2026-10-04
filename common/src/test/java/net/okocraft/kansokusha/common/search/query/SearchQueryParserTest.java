@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.common.search.query;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.ActorKind;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Around;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Order;
@@ -415,7 +416,24 @@ class SearchQueryParserTest {
         return query.conditions().timeRanges().iterator().next();
     }
 
+    @Test
+    void testErrorsCarryLocalizedReasonsAndCompletionUsesExpectedFields() {
+        var missing = Assertions.assertThrows(SearchQueryParseException.class, () -> parse("exclude actor-kind"));
+        Assertions.assertEquals(SearchQueryMessages.MISSING.apply("exclude actor-kind"), missing.reason());
+        Assertions.assertEquals("exclude actor-kind", missing.expected());
+        Assertions.assertEquals(SearchQueryParser.CompletionKind.ACTOR_KIND,
+            SearchQueryParser.completion("exclude actor-kind ", CLOCK, TOKYO, false).kind());
+
+        var invalid = Assertions.assertThrows(SearchQueryParseException.class, () -> parse("order sideways"));
+        Assertions.assertEquals(SearchQueryMessages.INVALID_ORDER.apply("sideways"), invalid.reason());
+        Assertions.assertNull(invalid.expected());
+        Assertions.assertEquals(SearchQueryParser.CompletionKind.NONE,
+            SearchQueryParser.completion("order sideways ", CLOCK, TOKYO, false).kind());
+    }
+
     private static void assertInvalid(String input) {
-        Assertions.assertThrows(SearchQueryParseException.class, () -> parse(input));
+        var error = Assertions.assertThrows(SearchQueryParseException.class, () -> parse(input));
+        var reason = Assertions.assertInstanceOf(TranslatableComponent.class, error.reason());
+        Assertions.assertTrue(reason.key().startsWith("kansokusha.command.search.reason."), input);
     }
 }

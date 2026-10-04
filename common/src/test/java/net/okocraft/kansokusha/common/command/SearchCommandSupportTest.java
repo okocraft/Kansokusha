@@ -13,6 +13,7 @@ import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
+import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -69,11 +70,11 @@ class SearchCommandSupportTest {
         Assertions.assertTrue(this.execute(true, null, "limit 50"));
         Assertions.assertEquals(SearchCommandSupport.PLAYER_DEFAULT_LIMIT, this.backend.lastRequest().defaultLimit());
         Assertions.assertFalse(this.execute(true, null, "limit 51"));
-        Assertions.assertEquals(SearchCommandMessages.LIMIT_RANGE.apply("50"), this.messages.getLast());
+        Assertions.assertEquals(SearchCommandMessages.LIMIT_RANGE.apply(50), this.messages.getLast());
 
         Assertions.assertTrue(this.execute(false, null, "limit 1000"));
         Assertions.assertFalse(this.execute(false, null, "limit 1001"));
-        Assertions.assertEquals(SearchCommandMessages.LIMIT_RANGE.apply("1000"), this.messages.getLast());
+        Assertions.assertEquals(SearchCommandMessages.LIMIT_RANGE.apply(1000), this.messages.getLast());
     }
 
     @Test
@@ -90,7 +91,7 @@ class SearchCommandSupportTest {
         this.messages.clear();
         Assertions.assertFalse(this.execute(false, null, "radius 5"));
         Assertions.assertEquals(
-            List.of(SearchCommandMessages.PARSE_ERROR.apply("radius requires the position of a player")),
+            List.of(SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.RADIUS_UNAVAILABLE.asComponent())),
             this.messages
         );
         Assertions.assertTrue(this.backend.requests.isEmpty());
@@ -105,7 +106,7 @@ class SearchCommandSupportTest {
 
         Assertions.assertEquals(
             List.of(
-                SearchCommandMessages.PARSE_ERROR.apply("order must be newest or oldest: sideways"),
+                SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.INVALID_ORDER.apply("sideways")),
                 SearchCommandMessages.EVENT_PERMISSION.apply("block_break")
             ),
             this.messages
@@ -137,7 +138,8 @@ class SearchCommandSupportTest {
             List.of(
                 SearchCommandMessages.RESULT.apply(line),
                 SearchCommandMessages.RESULT.apply(
-                    line.clickEvent(ClickEvent.runCommand("/kansokusha event " + event().eventId()))
+                    line.hoverEvent(HoverEvent.showText(SearchCommandMessages.VIEW_EVENT.apply(event().eventId().toString())))
+                        .clickEvent(ClickEvent.runCommand("/kansokusha event " + event().eventId()))
                 )
             ),
             this.messages

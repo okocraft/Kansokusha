@@ -44,7 +44,7 @@ public final class KansokushaVelocityPlugin {
         final KansokushaConfig config;
         final KansokushaRuntime runtime;
         try {
-            LanguageProvider.load(this.dataDirectory.resolve("languages"), KansokushaCommands.getDefiners());
+            LanguageProvider.load(this.dataDirectory.resolve("languages"), KansokushaCommands.getDefaultMessages());
             config = KansokushaConfig.load(this.dataDirectory);
             runtime = KansokushaRuntime.start(
                 this.dataDirectory,

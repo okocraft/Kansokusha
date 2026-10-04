@@ -140,31 +140,33 @@ class EventCommandSupportTest {
 
         Assertions.assertEquals(11, lines.size());
         Assertions.assertTrue(lines.contains(
-            EventCommandMessages.EVENT_ID.asComponent()
-                .append(Component.text(": "))
-                .append(Component.text(EVENT_ID.toString()))
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.EVENT_ID.asComponent(),
+                Component.text(EVENT_ID.toString())
+            )
         ));
         Assertions.assertTrue(lines.contains(
-            EventCommandMessages.EVENT_TYPE.asComponent()
-                .append(Component.text(": "))
-                .append(Component.text("paper_chat").hoverEvent(
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.EVENT_TYPE.asComponent(),
+                Component.text("paper_chat").hoverEvent(
                     HoverEvent.showText(Component.text("kansokusha:paper_chat"))
-                ))
+                )
+            )
         ));
         Assertions.assertTrue(lines.contains(
-            EventCommandMessages.ACTOR.asComponent()
-                .append(Component.text(": "))
-                .append(
-                    EventCommandMessages.ACTOR_PLAYER.asComponent()
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.ACTOR.asComponent(),
+                EventCommandMessages.ACTOR_PLAYER.asComponent()
                         .append(Component.space())
                         .append(Component.text("Alice"))
                         .hoverEvent(HoverEvent.showText(Component.text(PLAYER_ID.toString())))
-                )
+            )
         ));
         Assertions.assertTrue(lines.contains(
-            EventCommandMessages.COMMUNICATION_TEXT.asComponent()
-                .append(Component.text(": "))
-                .append(Component.text("hello world"))
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.COMMUNICATION_TEXT.asComponent(),
+                Component.text("hello world")
+            )
         ));
     }
 
@@ -189,23 +191,21 @@ class EventCommandSupportTest {
         var block = detailWithActor(new BlockActor(Key.key("minecraft", "piston")));
 
         Assertions.assertTrue(EventCommandSupport.formatEvent(entity).contains(
-            EventCommandMessages.ACTOR.asComponent()
-                .append(Component.text(": "))
-                .append(
-                    EventCommandMessages.ACTOR_ENTITY.asComponent()
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.ACTOR.asComponent(),
+                EventCommandMessages.ACTOR_ENTITY.asComponent()
                         .append(Component.space())
                         .append(Component.text("minecraft:creeper"))
                         .hoverEvent(HoverEvent.showText(Component.text(entityId.toString())))
-                )
+            )
         ));
         Assertions.assertTrue(EventCommandSupport.formatEvent(block).contains(
-            EventCommandMessages.ACTOR.asComponent()
-                .append(Component.text(": "))
-                .append(
-                    EventCommandMessages.ACTOR_BLOCK.asComponent()
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.ACTOR.asComponent(),
+                EventCommandMessages.ACTOR_BLOCK.asComponent()
                         .append(Component.space())
                         .append(Component.text("minecraft:piston"))
-                )
+            )
         ));
     }
 

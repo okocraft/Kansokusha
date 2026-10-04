@@ -2,49 +2,94 @@ package net.okocraft.kansokusha.common.command;
 
 import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import dev.siroshun.mcmsgdef.MessageKey;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.translation.Argument;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.UnmodifiableView;
+
+import java.util.Map;
 
 @NotNullByDefault
 public final class EventCommandMessages {
 
-    public static final DefaultMessageDefiner DEFINER = DefaultMessageDefiner.create();
+    private static final DefaultMessageDefiner DEFINER = DefaultMessageDefiner.create();
 
     public static final MessageKey INVALID_ID = DEFINER
-        .define("kansokusha.command.event.invalid-id", "Invalid event ID.");
+        .define(
+            "kansokusha.command.event.invalid-id",
+            "<red>Invalid event ID. Copy the full UUID from a search result, or click the result to view its details.</red>"
+        );
+
     public static final MessageKey NOT_FOUND = DEFINER
-        .define("kansokusha.command.event.not-found", "Event not found.");
+        .define(
+            "kansokusha.command.event.not-found",
+            "<red>Event not found. Search again in this server or proxy; the event may have expired.</red>"
+        );
+
     public static final MessageKey PERMISSION_DENIED = DEFINER
-        .define("kansokusha.command.event.permission-denied", "You do not have permission to view this event.");
+        .define(
+            "kansokusha.command.event.permission-denied",
+            "<red>You do not have permission to view this event. Contact a server administrator.</red>"
+        );
+
     public static final MessageKey LOOKUP_FAILED = DEFINER
-        .define("kansokusha.command.event.lookup-failed", "Failed to load event.");
+        .define(
+            "kansokusha.command.event.lookup-failed",
+            "<red>Failed to load the event. Contact a server administrator.</red>"
+        );
+
+    public static final MessageKey.Arg2<Component, Component> DETAIL_LINE = DEFINER
+        .define(
+            "kansokusha.command.event.detail-line",
+            "<gray><label><dark_gray>: </dark_gray><aqua><value></aqua></gray>"
+        )
+        .with(label -> Argument.component("label", label), value -> Argument.component("value", value));
+
     public static final MessageKey EVENT_ID = DEFINER
         .define("kansokusha.command.event.label.event-id", "Event ID");
+
     public static final MessageKey OCCURRED_AT = DEFINER
         .define("kansokusha.command.event.label.occurred-at", "Occurred at");
+
     public static final MessageKey EVENT_TYPE = DEFINER
         .define("kansokusha.command.event.label.event-type", "Event type");
+
     public static final MessageKey SERVER = DEFINER
         .define("kansokusha.command.event.label.server", "Server");
+
     public static final MessageKey WORLD = DEFINER
         .define("kansokusha.command.event.label.world", "World");
+
     public static final MessageKey POSITION = DEFINER
         .define("kansokusha.command.event.label.position", "Position");
+
     public static final MessageKey ACTOR = DEFINER
         .define("kansokusha.command.event.label.actor", "Actor");
+
     public static final MessageKey TARGET_TYPE = DEFINER
         .define("kansokusha.command.event.label.target-type", "Target type");
+
     public static final MessageKey PAYLOAD_GENERATION = DEFINER
         .define("kansokusha.command.event.label.payload-generation", "Payload generation");
+
     public static final MessageKey EXPIRES_AT = DEFINER
         .define("kansokusha.command.event.label.expires-at", "Expires at");
+
     public static final MessageKey COMMUNICATION_TEXT = DEFINER
         .define("kansokusha.command.event.label.communication-text", "Text");
+
     public static final MessageKey ACTOR_PLAYER = DEFINER
         .define("kansokusha.command.event.actor.player", "Player");
+
     public static final MessageKey ACTOR_ENTITY = DEFINER
         .define("kansokusha.command.event.actor.entity", "Entity");
+
     public static final MessageKey ACTOR_BLOCK = DEFINER
         .define("kansokusha.command.event.actor.block", "Block");
+
+    public static @UnmodifiableView Map<String, String> defaultMessages() {
+        return DEFINER.getCollectedMessages();
+    }
 
     private EventCommandMessages() {
         throw new UnsupportedOperationException();

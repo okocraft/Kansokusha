@@ -2,25 +2,29 @@ package net.okocraft.kansokusha.velocity.command;
 
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
-import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
+import com.velocitypowered.api.command.CommandSource;
+import net.okocraft.kansokusha.common.command.CommandHelp;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 @NotNullByDefault
 public final class KansokushaCommands {
 
-    public static List<DefaultMessageDefiner> getDefiners() {
+    public static List<Map<String, String>> getDefaultMessages() {
         return List.of(
-            CommandMessages.DEFINER,
-            SearchCommandMessages.DEFINER,
-            EventCommandMessages.DEFINER
+            CommandMessages.defaultMessages(),
+            SearchCommandMessages.defaultMessages(),
+            SearchQueryMessages.defaultMessages(),
+            EventCommandMessages.defaultMessages()
         );
     }
 
@@ -38,10 +42,18 @@ public final class KansokushaCommands {
         return new BrigadierCommand(
             BrigadierCommand.literalArgumentBuilder("kansokusha")
                 .requires(source -> source.hasPermission("kansokusha.command"))
+                .executes(context -> sendHelp(context.getSource()))
+                .then(BrigadierCommand.literalArgumentBuilder("help")
+                    .executes(context -> sendHelp(context.getSource())))
                 .then(VersionCommand.createVersionCommand())
                 .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
                 .then(EventCommand.createEventCommand(backend))
         );
+    }
+
+    private static int sendHelp(CommandSource source) {
+        CommandHelp.send(source::hasPermission, source::sendMessage);
+        return 1;
     }
 
     private KansokushaCommands() {
