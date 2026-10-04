@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.common.search.query;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.ActorKind;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Around;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Conditions;
@@ -105,7 +106,7 @@ public final class SearchQueryParser {
         while (cursor.hasNext()) {
             var modifier = cursor.next("modifier");
             if (SINGLETON_MODIFIERS.contains(modifier) && !singletons.add(modifier)) {
-                throw error(modifier + " may only be specified once");
+                throw error(modifier + " may only be specified once", SearchQueryMessages.DUPLICATE.apply(modifier));
             }
             switch (modifier) {
                 case "from" -> from = Optional.of(parseAbsoluteBound(cursor.next("from"), timezone, false));
@@ -119,12 +120,12 @@ public final class SearchQueryParser {
 
         if (from.isPresent() || to.isPresent()) {
             if (!conditions.timeRanges.isEmpty()) {
-                throw error("time cannot be combined with from/to");
+                throw error("time cannot be combined with from/to", SearchQueryMessages.TIME_CONFLICT.asComponent());
             }
             try {
                 conditions.timeRanges.add(new TimeRange(from, to));
             } catch (IllegalArgumentException e) {
-                throw error(e.getMessage(), e);
+                throw error("time range start must be before its end", SearchQueryMessages.TIME_ORDER.asComponent(), e);
             }
         }
 
@@ -148,7 +149,7 @@ public final class SearchQueryParser {
             parse(partial.completedArguments(), clock, timezone, origin);
             kind = CompletionKind.MODIFIER;
         } catch (SearchQueryParseException e) {
-            kind = completionKind(e.getMessage());
+            kind = completionKind(e.expected());
         }
 
         return new Completion(
@@ -159,12 +160,11 @@ public final class SearchQueryParser {
         );
     }
 
-    private static CompletionKind completionKind(String message) {
-        if (message == null || !message.startsWith("missing ")) {
+    private static CompletionKind completionKind(@Nullable String expected) {
+        if (expected == null) {
             return CompletionKind.NONE;
         }
 
-        var expected = message.substring("missing ".length());
         if (expected.equals("exclude condition")) {
             return CompletionKind.EXCLUDE_CONDITION;
         }
@@ -293,7 +293,10 @@ public final class SearchQueryParser {
                 var radius = parsePositiveInt(cursor.next(label), label);
                 var origin = context.origin();
                 if (origin == null) {
-                    throw error("radius requires the position of a player");
+                    throw error(
+                        "radius requires the position of a player",
+                        SearchQueryMessages.RADIUS_UNAVAILABLE.asComponent()
+                    );
                 }
                 target.around.add(new Around(origin.world(), origin.x(), origin.z(), radius));
             }
@@ -305,7 +308,7 @@ public final class SearchQueryParser {
             case "world" -> target.worlds.add(parseKey(cursor.next(label), label));
             case "position" -> target.positions.add(parsePosition(cursor));
             case "around" -> target.around.add(parseAround(cursor));
-            default -> throw error("unknown condition: " + label);
+            default -> throw error("unknown condition: " + label, SearchQueryMessages.UNKNOWN_CONDITION.apply(label));
         }
     }
 
@@ -329,7 +332,10 @@ public final class SearchQueryParser {
         return switch (value) {
             case "newest" -> Order.NEWEST;
             case "oldest" -> Order.OLDEST;
-            default -> throw error("order must be newest or oldest: " + value);
+            default -> throw error(
+                "order must be newest or oldest: " + value,
+                SearchQueryMessages.INVALID_ORDER.apply(value)
+            );
         };
     }
 
@@ -338,7 +344,10 @@ public final class SearchQueryParser {
             case "player" -> ActorKind.PLAYER;
             case "entity" -> ActorKind.ENTITY;
             case "block" -> ActorKind.BLOCK;
-            default -> throw error("actor-kind must be player, entity, or block: " + value);
+            default -> throw error(
+                "actor-kind must be player, entity, or block: " + value,
+                SearchQueryMessages.INVALID_ACTOR_KIND.apply(value)
+            );
         };
     }
 
@@ -346,7 +355,7 @@ public final class SearchQueryParser {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException e) {
-            throw error("invalid actor UUID: " + value, e);
+            throw error("invalid actor UUID: " + value, SearchQueryMessages.INVALID_UUID.apply(value), e);
         }
     }
 
@@ -361,14 +370,17 @@ public final class SearchQueryParser {
         try {
             return Key.key(value);
         } catch (RuntimeException e) {
-            throw error("invalid " + field + " key: " + value, e);
+            throw error("invalid " + field + " key: " + value, SearchQueryMessages.INVALID_KEY.apply(field, value), e);
         }
     }
 
     private static int parsePositiveInt(String value, String field) {
         var parsed = parseInt(value, field);
         if (parsed <= 0) {
-            throw error(field + " must be greater than zero: " + value);
+            throw error(
+                field + " must be greater than zero: " + value,
+                SearchQueryMessages.POSITIVE_INTEGER.apply(field, value)
+            );
         }
         return parsed;
     }
@@ -377,13 +389,13 @@ public final class SearchQueryParser {
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
-            throw error("invalid " + field + ": " + value, e);
+            throw error("invalid " + field + ": " + value, SearchQueryMessages.INVALID_INTEGER.apply(field, value), e);
         }
     }
 
     private static String nonEmpty(String value, String field) {
         if (value.isEmpty()) {
-            throw error(field + " must not be empty");
+            throw error(field + " must not be empty", SearchQueryMessages.EMPTY.apply(field));
         }
         return value;
     }
@@ -406,17 +418,24 @@ public final class SearchQueryParser {
             try {
                 return TimeRange.bounded(now.minus(duration), now);
             } catch (DateTimeException | ArithmeticException e) {
-                throw error("relative time is out of range: " + value, e);
+                throw error(
+                    "relative time is out of range: " + value,
+                    SearchQueryMessages.TIME_OUT_OF_RANGE.apply(value),
+                    e
+                );
             }
         }
         if (separator == 0 || separator == value.length() - 1 || separator != value.lastIndexOf('-')) {
-            throw error("invalid relative time range: " + value);
+            throw error("invalid relative time range: " + value, SearchQueryMessages.INVALID_TIME_RANGE.apply(value));
         }
 
         var first = parseDuration(value.substring(0, separator));
         var second = parseDuration(value.substring(separator + 1));
         if (first.equals(second)) {
-            throw error("relative time range must span a non-zero interval: " + value);
+            throw error(
+                "relative time range must span a non-zero interval: " + value,
+                SearchQueryMessages.INVALID_TIME_RANGE.apply(value)
+            );
         }
 
         var older = first.compareTo(second) > 0 ? first : second;
@@ -424,7 +443,11 @@ public final class SearchQueryParser {
         try {
             return TimeRange.bounded(now.minus(older), now.minus(newer));
         } catch (DateTimeException | ArithmeticException e) {
-            throw error("relative time range is out of range: " + value, e);
+            throw error(
+                "relative time range is out of range: " + value,
+                SearchQueryMessages.TIME_OUT_OF_RANGE.apply(value),
+                e
+            );
         }
     }
 
@@ -436,7 +459,10 @@ public final class SearchQueryParser {
         try {
             while (matcher.find()) {
                 if (matcher.start() != position) {
-                    throw error("invalid relative duration: " + value);
+                    throw error(
+                        "invalid relative duration: " + value,
+                        SearchQueryMessages.INVALID_DURATION.apply(value)
+                    );
                 }
                 found = true;
                 var amount = Long.parseLong(matcher.group(1));
@@ -451,11 +477,15 @@ public final class SearchQueryParser {
                 position = matcher.end();
             }
         } catch (NumberFormatException | ArithmeticException e) {
-            throw error("relative duration is out of range: " + value, e);
+            throw error(
+                "relative duration is out of range: " + value,
+                SearchQueryMessages.TIME_OUT_OF_RANGE.apply(value),
+                e
+            );
         }
 
         if (!found || position != value.length() || duration.isZero()) {
-            throw error("invalid relative duration: " + value);
+            throw error("invalid relative duration: " + value, SearchQueryMessages.INVALID_DURATION.apply(value));
         }
         return duration;
     }
@@ -468,7 +498,11 @@ public final class SearchQueryParser {
         } catch (DateTimeParseException ignored) {
             // Not a date-only value.
         } catch (DateTimeException e) {
-            throw error("absolute date is out of range: " + value, e);
+            throw error(
+                "absolute date is out of range: " + value,
+                SearchQueryMessages.TIME_OUT_OF_RANGE.apply(value),
+                e
+            );
         }
 
         try {
@@ -480,9 +514,9 @@ public final class SearchQueryParser {
         try {
             return LocalDateTime.parse(value).atZone(timezone).toInstant();
         } catch (DateTimeParseException e) {
-            throw error("invalid date or datetime: " + value, e);
+            throw error("invalid date or datetime: " + value, SearchQueryMessages.INVALID_DATE.apply(value), e);
         } catch (DateTimeException e) {
-            throw error("datetime is out of range: " + value, e);
+            throw error("datetime is out of range: " + value, SearchQueryMessages.TIME_OUT_OF_RANGE.apply(value), e);
         }
     }
 
@@ -551,12 +585,15 @@ public final class SearchQueryParser {
 
         if (escaping) {
             if (!tolerateIncomplete) {
-                throw error("query ends with an incomplete escape");
+                throw error(
+                    "query ends with an incomplete escape",
+                    SearchQueryMessages.INCOMPLETE_ESCAPE.asComponent()
+                );
             }
             token.append('\\');
         }
         if (quote != '\0' && !tolerateIncomplete) {
-            throw error("query contains an unterminated quote");
+            throw error("query contains an unterminated quote", SearchQueryMessages.UNTERMINATED_QUOTE.asComponent());
         }
         if (tokenStarted) {
             tokens.add(new InputToken(
@@ -569,12 +606,12 @@ public final class SearchQueryParser {
         return new ScanResult(List.copyOf(tokens), tokenStarted);
     }
 
-    private static SearchQueryParseException error(String message) {
-        return new SearchQueryParseException(message);
+    private static SearchQueryParseException error(String message, Component reason) {
+        return new SearchQueryParseException(message, reason);
     }
 
-    private static SearchQueryParseException error(String message, Throwable cause) {
-        return new SearchQueryParseException(message, cause);
+    private static SearchQueryParseException error(String message, Component reason, Throwable cause) {
+        return new SearchQueryParseException(message, reason, cause);
     }
 
     private record Context(Instant now, ZoneId timezone, @Nullable Position origin) {
@@ -598,7 +635,7 @@ public final class SearchQueryParser {
 
         private String next(String expected) {
             if (!this.hasNext()) {
-                throw error("missing " + expected);
+                throw SearchQueryParseException.missing(expected);
             }
             return this.arguments.get(this.index++);
         }

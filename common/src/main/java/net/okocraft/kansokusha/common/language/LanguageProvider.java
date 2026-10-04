@@ -1,6 +1,5 @@
 package net.okocraft.kansokusha.common.language;
 
-import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import dev.siroshun.mcmsgdef.directory.DirectorySource;
 import dev.siroshun.mcmsgdef.directory.MessageProcessors;
 import dev.siroshun.mcmsgdef.file.PropertiesFile;
@@ -20,16 +19,23 @@ public final class LanguageProvider {
 
     private static final Key LANGUAGE_KEY = Key.key("kansokusha", "language");
 
-    public static void load(Path directory, List<DefaultMessageDefiner> defaultMessages) throws IOException {
-        DirectorySource.propertiesFiles(directory)
+    private static Translator messageSource;
+
+    public static void load(Path directory, List<Map<String, String>> defaultMessages) throws IOException {
+        Map<String, String> messageMap = new LinkedHashMap<>();
+        for (var defaults : defaultMessages) {
+            for (var entry : defaults.entrySet()) {
+                if (messageMap.putIfAbsent(entry.getKey(), entry.getValue()) != null) {
+                    throw new IllegalArgumentException("Duplicate message key: " + entry.getKey());
+                }
+            }
+        }
+
+        Translator nextSource = DirectorySource.propertiesFiles(directory)
             .defaultLocale(Locale.ENGLISH, Locale.JAPANESE)
             .primaryLocale(Locale.ENGLISH)
             .messageProcessor(MessageProcessors.appendMissingMessagesToPropertiesFile(locale -> {
                 if (locale.equals(Locale.ENGLISH)) {
-                    Map<String, String> messageMap = new LinkedHashMap<>();
-                    for (DefaultMessageDefiner definer : defaultMessages) {
-                        messageMap.putAll(definer.getCollectedMessages());
-                    }
                     return messageMap;
                 }
 
@@ -38,14 +44,17 @@ public final class LanguageProvider {
                     return input != null ? PropertiesFile.load(input) : null;
                 }
             }))
-            .loadAndRegister(LANGUAGE_KEY);
+            .loadAsMiniMessageTranslationStore(LANGUAGE_KEY);
+
+        unload();
+        GlobalTranslator.translator().addSource(nextSource);
+        messageSource = nextSource;
     }
 
     public static void unload() {
-        for (Translator source : GlobalTranslator.translator().sources()) {
-            if (source.name().equals(LANGUAGE_KEY)) {
-                GlobalTranslator.translator().removeSource(source);
-            }
+        if (messageSource != null) {
+            GlobalTranslator.translator().removeSource(messageSource);
+            messageSource = null;
         }
     }
 

@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
+import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -17,6 +18,10 @@ final class EventCommand {
     static LiteralCommandNode<CommandSource> createEventCommand(EventSearchBackend backend) {
         return BrigadierCommand.literalArgumentBuilder("event")
             .requires(source -> source.hasPermission(PERMISSION))
+            .executes(context -> {
+                context.getSource().sendMessage(CommandMessages.HELP_EVENT.asComponent());
+                return 0;
+            })
             .then(BrigadierCommand.requiredArgumentBuilder("event-id", StringArgumentType.word())
                 .executes(context -> {
                     var source = context.getSource();

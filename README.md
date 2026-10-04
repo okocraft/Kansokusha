@@ -101,6 +101,17 @@ same order as the clicks.
 The packaged Paper verification and the manual Paper/Folia interaction checklist are in
 `docs/verification/paper-folia-packaged-smoke.md`.
 
+## Messages and command help
+
+`/kansokusha` and `/kansokusha help` show the commands available to the sender.
+Running `/kansokusha event` without an ID shows its usage.
+
+English and Japanese messages are provided by default, with English as the fallback.
+Administrators can customize `languages/*.properties` in the plugin data directory.
+Startup adds missing keys while preserving existing translations. Updated default wording
+therefore applies to new files; to adopt it in an existing file, remove the individual
+keys you want to reset and restart the server or proxy. Back up customizations first.
+
 ## Search
 
 - `/kansokusha search ...` searches persisted events in the current instance's DuckDB database.

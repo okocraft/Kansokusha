@@ -66,12 +66,12 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                 }
 
                 var position = target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z();
-                currentPlayer.sendMessage(InspectionSearchMessages.HISTORY.apply(position));
                 if (page.events().isEmpty()) {
                     currentPlayer.sendMessage(InspectionSearchMessages.NO_HISTORY.apply(position));
                     return;
                 }
 
+                currentPlayer.sendMessage(InspectionSearchMessages.HISTORY.apply(position));
                 for (var event : page.events()) {
                     currentPlayer.sendMessage(SearchCommandMessages.RESULT.apply(
                         SearchCommandSupport.formatEvent(event, eventDetailsPermitted)

@@ -15,3 +15,10 @@ tasks.processResources {
         expand("duckdbVersion" to duckdbVersion)
     }
 }
+
+// Exercise the bundled Japanese defaults without changing the platform resource merge.
+tasks.processTestResources {
+    from("src/main/languages") {
+        into("languages")
+    }
+}

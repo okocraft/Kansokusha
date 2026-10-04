@@ -92,6 +92,10 @@ class InspectionSearchHandlerTest {
             InspectionSearchMessages.NO_HISTORY.apply("minecraft:overworld 123 64 -456")
         );
 
+        Mockito.verify(noHistory.player(), Mockito.never()).sendMessage(
+            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456")
+        );
+
         var failedBackend = new RecordingBackend();
         failedBackend.metadata = metadata(BREAK);
         failedBackend.failure = new IllegalStateException("storage failed");

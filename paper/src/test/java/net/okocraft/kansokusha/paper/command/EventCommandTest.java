@@ -65,9 +65,10 @@ class EventCommandTest {
 
         Mockito.verify(this.api).findEvent(EVENT_ID);
         Mockito.verify(console).sendMessage(
-            EventCommandMessages.EVENT_ID.asComponent()
-                .append(net.kyori.adventure.text.Component.text(": "))
-                .append(net.kyori.adventure.text.Component.text(EVENT_ID.toString()))
+            EventCommandMessages.DETAIL_LINE.apply(
+                EventCommandMessages.EVENT_ID.asComponent(),
+                net.kyori.adventure.text.Component.text(EVENT_ID.toString())
+            )
         );
     }
 

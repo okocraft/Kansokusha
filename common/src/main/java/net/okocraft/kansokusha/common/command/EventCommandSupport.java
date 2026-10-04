@@ -131,7 +131,7 @@ public final class EventCommandSupport {
     }
 
     private static Component line(MessageKey label, Component value) {
-        return label.asComponent().append(Component.text(": ")).append(value);
+        return EventCommandMessages.DETAIL_LINE.apply(label.asComponent(), value);
     }
 
     private EventCommandSupport() {
