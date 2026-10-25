@@ -32,7 +32,8 @@ class KansokushaCommandsTest {
         this.backend,
         Clock.systemUTC(),
         ZoneOffset.UTC,
-        new InspectionSessionManager()
+        new InspectionSessionManager(),
+        Mockito.mock(org.bukkit.plugin.Plugin.class)
     ));
 
     @Test
@@ -53,7 +54,8 @@ class KansokushaCommandsTest {
             this.backend,
             Clock.systemUTC(),
             ZoneOffset.UTC,
-            new InspectionSessionManager()
+            new InspectionSessionManager(),
+        Mockito.mock(org.bukkit.plugin.Plugin.class)
         );
 
         for (var name : List.of("version", "search", "event", "inspect", "i")) {

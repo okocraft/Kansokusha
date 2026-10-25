@@ -22,7 +22,8 @@ class InspectCommandTest {
         Mockito.mock(EventSearchBackend.class),
         Clock.systemUTC(),
         ZoneOffset.UTC,
-        this.sessions
+        this.sessions,
+        Mockito.mock(org.bukkit.plugin.Plugin.class)
     ));
 
     @Test

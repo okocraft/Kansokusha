@@ -15,6 +15,8 @@ import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchMessages;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.bukkit.plugin.Plugin;
+import net.okocraft.kansokusha.paper.builtin.PaperViewMessages;
 
 import java.time.Clock;
 import java.time.ZoneId;
@@ -34,7 +36,8 @@ public final class KansokushaCommands {
             EventCommandMessages.defaultMessages(),
             InspectionCommandMessages.defaultMessages(),
             InspectionSearchMessages.defaultMessages(),
-            EventFieldMessages.defaultMessages()
+            EventFieldMessages.defaultMessages(),
+            PaperViewMessages.defaultMessages()
         ));
         defaults.addAll(PaperEventPresenter.defaultMessages());
         return List.copyOf(defaults);
@@ -47,16 +50,18 @@ public final class KansokushaCommands {
         Commands commands,
         EventSearchBackend backend,
         ZoneId searchTimeZone,
-        InspectionSessionManager inspectionSessions
+        InspectionSessionManager inspectionSessions,
+        Plugin plugin
     ) {
-        commands.register(createCommand(backend, Clock.systemUTC(), searchTimeZone, inspectionSessions));
+        commands.register(createCommand(backend, Clock.systemUTC(), searchTimeZone, inspectionSessions, plugin));
     }
 
     static LiteralCommandNode<CommandSourceStack> createCommand(
         EventSearchBackend backend,
         Clock clock,
         ZoneId searchTimeZone,
-        InspectionSessionManager inspectionSessions
+        InspectionSessionManager inspectionSessions,
+        Plugin plugin
     ) {
         return Commands.literal("kansokusha")
             .requires(source -> source.getSender().hasPermission("kansokusha.command"))
@@ -64,7 +69,7 @@ public final class KansokushaCommands {
             .then(Commands.literal("help").executes(context -> sendHelp(context.getSource())))
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
-            .then(EventCommand.createEventCommand(backend, clock, searchTimeZone))
+            .then(EventCommand.createEventCommand(backend, clock, searchTimeZone, plugin))
             .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
             .then(InspectCommand.createInspectCommand("i", inspectionSessions))
             .build();

@@ -34,9 +34,17 @@ class PaperEventPresenterTest {
     private static final Instant NOW = Instant.parse("2026-10-25T00:00:00Z");
     private final EventRenderer renderer = PaperEventPresenter.renderer(Clock.fixed(NOW, ZoneOffset.UTC), ZoneOffset.UTC);
 
+    private org.mockito.MockedStatic<org.bukkit.Bukkit> itemFactory;
+
+    @org.junit.jupiter.api.BeforeEach
+    void installItemFactory() {
+        this.itemFactory = PaperItemViewTestSupport.install();
+    }
+
     @AfterEach
     void cleanup() {
         LanguageProvider.unload();
+        this.itemFactory.close();
     }
 
     @Test
