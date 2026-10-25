@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import org.bukkit.Server;
 import org.jetbrains.annotations.NotNullByDefault;
+import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -37,7 +38,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
     }
 
     public InspectionSearchHandler(Server server, EventSearchBackend backend, Clock clock, ZoneId timezone) {
-        this.renderer = EventRenderer.generic(clock, timezone);
+        this.renderer = PaperEventPresenter.renderer(clock, timezone);
         this.server = Objects.requireNonNull(server, "server");
         this.backend = Objects.requireNonNull(backend, "backend");
     }

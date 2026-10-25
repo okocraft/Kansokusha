@@ -18,20 +18,26 @@ import java.time.Clock;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
+import net.okocraft.kansokusha.common.command.EventFieldMessages;
 
 @NotNullByDefault
 public final class KansokushaCommands {
 
     public static List<Map<String, String>> getDefaultMessages() {
-        return List.of(
+        var defaults = new ArrayList<>(List.of(
             CommandMessages.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages(),
             InspectionCommandMessages.defaultMessages(),
-            InspectionSearchMessages.defaultMessages()
-        );
+            InspectionSearchMessages.defaultMessages(),
+            EventFieldMessages.defaultMessages()
+        ));
+        defaults.addAll(PaperEventPresenter.defaultMessages());
+        return List.copyOf(defaults);
     }
 
     /**

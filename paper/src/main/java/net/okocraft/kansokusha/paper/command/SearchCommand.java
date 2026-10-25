@@ -13,6 +13,7 @@ import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNullByDefault;
+import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 
 import java.time.Clock;
 import java.time.ZoneId;
@@ -68,7 +69,7 @@ final class SearchCommand {
             player != null,
             origin
         );
-        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone)
+        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, PaperEventPresenter.renderer(clock, timezone))
             ? Command.SINGLE_SUCCESS
             : 0;
     }
