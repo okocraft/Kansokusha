@@ -60,7 +60,7 @@ class PaperEventPresenterTest {
         var search = this.renderer.row(event, true, true);
         var inspection = this.renderer.row(event, true, false);
         var english = plain(search, Locale.ENGLISH);
-        Assertions.assertTrue(english.contains("Alice attempted to break"), english);
+        Assertions.assertTrue(english.contains("Alice break attempt"), english);
         Assertions.assertTrue(english.contains("(1,64,2)"), english);
         Assertions.assertFalse(plain(inspection, Locale.ENGLISH).contains("(1,64,2)"));
         Assertions.assertEquals(ClickEvent.runCommand("/kansokusha event " + event.eventId()), search.clickEvent());
@@ -83,7 +83,8 @@ class PaperEventPresenterTest {
         var details = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).toList();
         Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("Before") && line.contains("minecraft:stone")), details.toString());
         Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("After") && line.contains("minecraft:air")), details.toString());
-        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("block_fade"));
+        Assertions.assertFalse(plain(content.summary(), Locale.ENGLISH).contains("block_fade"));
+        Assertions.assertTrue(plain(content.hover(), Locale.ENGLISH).contains("block_fade"));
     }
 
     @Test
@@ -111,14 +112,14 @@ class PaperEventPresenterTest {
         var command = "<red>/say " + "a".repeat(200) + " END";
         payload.putString("command", command);
         var content = new PaperEventPresenter().present(event("paper_player_command", payload), true, this.renderer).orElseThrow();
-        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("entered a command"));
+        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("command input"));
         Assertions.assertFalse(plain(content.summary(), Locale.ENGLISH).contains(" END"));
-        Assertions.assertTrue(content.details().stream().map(line -> plain(line, Locale.ENGLISH))
-            .anyMatch(line -> line.contains(command)));
+        Assertions.assertEquals(command, content.sections().get("text_command").lines().get().stream()
+            .map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining()));
         payload = new CompoundTag();
         payload.putString("from_world", "minecraft:the_nether");
         content = new PaperEventPresenter().present(event("player_world_change", payload), false, this.renderer).orElseThrow();
-        var summary = plain(content.summary(), Locale.ENGLISH);
+        var summary = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining());
         Assertions.assertTrue(summary.contains("minecraft:the_nether"), summary);
         Assertions.assertTrue(summary.contains("minecraft:overworld"), summary);
     }
@@ -131,8 +132,27 @@ class PaperEventPresenterTest {
             original.server(), original.world(), original.position(), original.actor(), original.actorName(),
             original.targetType(), original.searchText());
         var text = plain(this.renderer.row(event, true, false), Locale.ENGLISH);
-        Assertions.assertTrue(text.contains("Alice attempted to break"), text);
-        Assertions.assertTrue(text.contains("payload omitted"), text);
+        Assertions.assertTrue(text.contains("Alice break attempt"), text);
+        Assertions.assertFalse(text.contains("payload omitted"), text);
+    }
+
+    @Test
+    void testCurrentMinecraftBlockStateNeverLeaksIntoRows(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var payload = new CompoundTag();
+        payload.put("pre_state", net.minecraft.nbt.NbtUtils.writeBlockState(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));
+        payload.put("post_state", net.minecraft.nbt.NbtUtils.writeBlockState(net.minecraft.world.level.block.Blocks.SMALL_AMETHYST_BUD.defaultBlockState()));
+        payload.putString("source_event", "block_spread");
+        var content = new PaperEventPresenter().present(event("natural_block_change", payload), true, this.renderer).orElseThrow();
+        var row = plain(content.summary(), Locale.JAPANESE);
+        Assertions.assertFalse(row.contains("properties"), row);
+        Assertions.assertFalse(row.contains("block_spread"), row);
+        Assertions.assertFalse(row.contains("変更前"), row);
+        var overview = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining());
+        Assertions.assertFalse(overview.contains("{id:"), overview);
+        Assertions.assertFalse(overview.contains("facing"), overview);
+        Assertions.assertTrue(overview.contains("small_amethyst_bud"), overview);
+        Assertions.assertTrue(content.sections().containsKey("raw"));
     }
 
     static SearchPage.Event event(String type, CompoundTag payload) {

@@ -44,6 +44,8 @@ public final class EventPresentationMessages {
         .define("kansokusha.display.row", "<dark_gray>[<time>]</dark_gray> <summary>")
         .with(time -> Argument.component("time", time), summary -> Argument.component("summary", summary));
 
+    public static final MessageKey EMPTY = DEFINER.define("kansokusha.display.compact.empty", "(empty)");
+    public static final MessageKey EXTRA = DEFINER.define("kansokusha.display.compact.extra", "[Additional data]");
     public static final MessageKey HINT = DEFINER.define("kansokusha.display.compact.hint",
         "Hover for context; click a row for details");
     public static final MessageKey RECORD = DEFINER.define("kansokusha.display.compact.record", "[Record information]");

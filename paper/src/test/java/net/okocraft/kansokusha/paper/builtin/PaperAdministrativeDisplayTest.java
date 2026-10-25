@@ -38,8 +38,8 @@ class PaperAdministrativeDisplayTest {
         payload.putLong("transition_duration_ticks", 400);
         var content = new PaperEventPresenter().present(PaperEventPresenterTest.event("world_border_change", payload),
             true, renderer).orElseThrow();
-        Assertions.assertTrue(PaperEventPresenterTest.plain(content.summary(), Locale.ENGLISH).contains("requested"));
-        Assertions.assertTrue(content.details().stream().map(line -> PaperEventPresenterTest.plain(line, Locale.ENGLISH))
+        Assertions.assertTrue(PaperEventPresenterTest.plain(content.summary(), Locale.ENGLISH).contains("request"));
+        Assertions.assertTrue(content.sections().get("raw").lines().get().stream().map(line -> PaperEventPresenterTest.plain(line, Locale.ENGLISH))
             .anyMatch(line -> line.contains("400")));
     }
 }
