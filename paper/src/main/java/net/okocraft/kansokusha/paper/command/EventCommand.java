@@ -11,6 +11,7 @@ import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.bukkit.plugin.Plugin;
 
 import java.time.Clock;
 import java.time.ZoneId;
@@ -20,7 +21,7 @@ final class EventCommand {
 
     static final String PERMISSION = EventCommandSupport.PERMISSION;
 
-    static LiteralArgumentBuilder<CommandSourceStack> createEventCommand(EventSearchBackend backend, Clock clock, ZoneId timezone) {
+    static LiteralArgumentBuilder<CommandSourceStack> createEventCommand(EventSearchBackend backend, Clock clock, ZoneId timezone, Plugin plugin) {
         return Commands.literal("event")
             .requires(source -> source.getSender().hasPermission(PERMISSION))
             .executes(context -> {
@@ -38,6 +39,11 @@ final class EventCommand {
                         PaperEventPresenter.renderer(clock, timezone)
                     ) ? Command.SINGLE_SUCCESS : 0;
                 })
+                .then(Commands.literal("read")
+                    .then(Commands.argument("item", StringArgumentType.word())
+                        .executes(context -> ReadBookCommand.execute(backend, plugin, context.getSource().getSender(),
+                            StringArgumentType.getString(context, "event-id"), StringArgumentType.getString(context, "item"))
+                            ? Command.SINGLE_SUCCESS : 0)))
                 .then(Commands.argument("view", StringArgumentType.word())
                     .executes(context -> {
                         var source = context.getSource().getSender();

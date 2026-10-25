@@ -44,6 +44,10 @@ public final class PaperEventPresenter implements EventPresenter {
         return VIEWS.values().stream().map(view -> view.sentence().defaultMessages()).toList();
     }
 
+    static boolean supports(SearchPage.Event event) {
+        return event.eventType().namespace().equals("kansokusha") && VIEWS.containsKey(event.eventType().value());
+    }
+
     public static EventRenderer renderer(Clock clock, ZoneId timezone) {
         return new EventRenderer(clock, timezone, new PaperEventPresenter(), PaperEventNames::name);
     }
@@ -111,7 +115,9 @@ public final class PaperEventPresenter implements EventPresenter {
                     if (value == null) {
                         continue;
                     }
-                    details.add(EventFieldMessages.field(label(spec), value));
+                    var itemTag = PaperPayloadDisplay.at(payload, label(spec));
+                    details.add(EventFieldMessages.field(label(spec), value).append(itemTag == null ? Component.empty()
+                        : PaperRecordedItems.readAction(event.eventId(), label(spec), itemTag)));
                     var tag = PaperPayloadDisplay.at(payload, spec.startsWith("~") ? spec.substring(1) : spec);
                     if (tag != null && PaperPayloadDisplay.isText(tag)) {
                         var text = PaperPayloadDisplay.text(tag, spec);
@@ -120,6 +126,9 @@ public final class PaperEventPresenter implements EventPresenter {
                             () -> PaperPayloadDisplay.textLines(text)));
                     }
                 }
+            }
+            if (detailed && PaperRecordedItems.hasItems(payload)) {
+                sections.put("items", new Section(PaperViewMessages.ITEMS.asComponent(), () -> PaperRecordedItems.items(payload, event.eventId())));
             }
             return Optional.of(new Content(view.sentence().summary(renderer.actor(event), target, context),
                 details, EventRenderer.join(hover), sections));

@@ -50,9 +50,7 @@ final class PaperPayloadDisplay {
     static Component preview(Tag tag, String field) {
         if (tag instanceof CompoundTag compound) {
             if (compound.get("serialized") instanceof ByteArrayTag bytes) {
-                var item = itemData(bytes);
-                return PaperEventNames.name(Key.key(item.getStringOr("id", "minecraft:air")), EventRenderer.NameKind.ITEM)
-                    .append(Component.text(" ×" + item.getIntOr("count", 1)));
+                return PaperRecordedItems.preview(compound);
             }
             var state = compound.getStringOr("id", compound.getStringOr("Name", ""));
             if (!state.isEmpty()) {

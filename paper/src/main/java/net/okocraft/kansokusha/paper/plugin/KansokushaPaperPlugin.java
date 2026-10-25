@@ -44,7 +44,8 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                     commands,
                     runtime,
                     config.searchTimeZone(),
-                    this.inspectionSessions
+                    this.inspectionSessions,
+                    this
                 );
             });
             InspectionListener.register(

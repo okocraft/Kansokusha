@@ -19,9 +19,17 @@ import java.util.Locale;
 
 class PaperItemDisplayTest {
 
+    private org.mockito.MockedStatic<org.bukkit.Bukkit> itemFactory;
+
+    @org.junit.jupiter.api.BeforeEach
+    void installItemFactory() {
+        this.itemFactory = PaperItemViewTestSupport.install();
+    }
+
     @AfterEach
     void cleanup() {
         LanguageProvider.unload();
+        this.itemFactory.close();
     }
 
     @Test

@@ -28,7 +28,7 @@ class EventCommandTest {
 
     private final EventSearchBackend api = Mockito.mock(EventSearchBackend.class);
     private final CommandTester tester = CommandTester.of(
-        EventCommand.createEventCommand(this.api, java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC).build()
+        EventCommand.createEventCommand(this.api, java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, Mockito.mock(org.bukkit.plugin.Plugin.class)).build()
     );
 
     @Test
