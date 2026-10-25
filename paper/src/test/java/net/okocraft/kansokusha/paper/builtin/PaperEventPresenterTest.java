@@ -68,12 +68,12 @@ class PaperEventPresenterTest {
         var search = this.renderer.row(event, true, true);
         var inspection = this.renderer.row(event, true, false);
         var english = plain(search, Locale.ENGLISH);
-        Assertions.assertTrue(english.contains("Alice break attempt"), english);
+        Assertions.assertTrue(english.contains("- Alice"), english);
         Assertions.assertTrue(english.contains("(1,64,2)"), english);
         Assertions.assertFalse(plain(inspection, Locale.ENGLISH).contains("(1,64,2)"));
         Assertions.assertEquals(ClickEvent.runCommand("/kansokusha event " + event.eventId()), search.clickEvent());
         Assertions.assertNull(this.renderer.row(event, false, true).clickEvent());
-        Assertions.assertTrue(plain(inspection, Locale.JAPANESE).contains("破壊操作"));
+        Assertions.assertTrue(plain(inspection, Locale.JAPANESE).contains("- Alice"));
     }
 
     @Test
@@ -120,7 +120,7 @@ class PaperEventPresenterTest {
         var command = "<red>/say " + "a".repeat(200) + " END";
         payload.putString("command", command);
         var content = new PaperEventPresenter().present(event("paper_player_command", payload), true, this.renderer).orElseThrow();
-        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("command input"));
+        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("command"));
         Assertions.assertFalse(plain(content.summary(), Locale.ENGLISH).contains(" END"));
         Assertions.assertEquals(command, content.sections().get("text_command").lines().get().stream()
             .map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining()));
@@ -140,7 +140,7 @@ class PaperEventPresenterTest {
             original.server(), original.world(), original.position(), original.actor(), original.actorName(),
             original.targetType(), original.searchText());
         var text = plain(this.renderer.row(event, true, false), Locale.ENGLISH);
-        Assertions.assertTrue(text.contains("Alice break attempt"), text);
+        Assertions.assertTrue(text.contains("- Alice"), text);
         Assertions.assertFalse(text.contains("payload omitted"), text);
     }
 
@@ -209,6 +209,27 @@ class PaperEventPresenterTest {
         owner.putString("type", "minecraft:player");
         Assertions.assertNull(PaperPayloadDisplay.preview(owner, "new_owner", false).hoverEvent());
         Assertions.assertNotNull(PaperPayloadDisplay.preview(owner, "new_owner", true).hoverEvent());
+    }
+
+    @Test
+    void testChangeMarkersAndAbsoluteContainerQuantities(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        for (var type : java.util.List.of("block_break", "block_place", "bucket_fill", "bucket_empty",
+            "item_drop", "item_pickup", "entity_place", "entity_break")) {
+            var positive = java.util.Set.of("block_place", "bucket_empty", "item_pickup", "entity_place").contains(type);
+            var line = plain(new PaperEventPresenter().present(event(type, new CompoundTag()), false, this.renderer)
+                .orElseThrow().summary(), Locale.ENGLISH);
+            Assertions.assertTrue(line.startsWith(positive ? "+ Alice" : "- Alice"), line);
+        }
+        for (var delta : new int[]{-32, 64, Integer.MIN_VALUE}) {
+            var payload = new CompoundTag();
+            payload.putInt("amount_delta", delta);
+            var content = new PaperEventPresenter().present(event("container_transaction", payload), true, this.renderer).orElseThrow();
+            var line = plain(content.summary(), Locale.ENGLISH);
+            Assertions.assertTrue(line.startsWith(delta > 0 ? "+ Alice" : "- Alice"), line);
+            Assertions.assertTrue(line.contains("x" + Math.abs((long) delta)), line);
+            Assertions.assertTrue(plain(content.hover(), Locale.ENGLISH).contains("committed net changes"));
+        }
     }
 
     static SearchPage.Event event(String type, CompoundTag payload) {
