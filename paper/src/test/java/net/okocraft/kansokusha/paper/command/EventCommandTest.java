@@ -37,13 +37,13 @@ class EventCommandTest {
 
         Assertions.assertThrows(
             CommandSyntaxException.class,
-            () -> this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID)
+            () -> this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID + " record")
         );
 
         TestSources.deny(console, EventCommand.PERMISSION);
         Assertions.assertThrows(
             CommandSyntaxException.class,
-            () -> this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID)
+            () -> this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID + " record")
         );
     }
 
@@ -60,7 +60,7 @@ class EventCommandTest {
 
         Assertions.assertEquals(
             1,
-            this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID)
+            this.tester.execute(TestSources.ofSenderOnly(console), "event " + EVENT_ID + " record")
         );
 
         Mockito.verify(this.api).findEvent(EVENT_ID);

@@ -65,7 +65,7 @@ class EventTimeTest {
         Assertions.assertEquals(net.kyori.adventure.text.event.ClickEvent.runCommand("/kansokusha event " + event.eventId()), row.clickEvent());
         Assertions.assertTrue(hasHover(row, EventTime.absolute(now, timezone)));
         Assertions.assertTrue(plain(row).contains("5分前"));
-        Assertions.assertEquals("😀".repeat(100) + "…", EventRenderer.preview("😀".repeat(101)));
+        Assertions.assertEquals("😀".repeat(36) + "…", EventRenderer.preview("😀".repeat(101)));
         Assertions.assertFalse(plain(row).contains("bad provider data"));
     }
 

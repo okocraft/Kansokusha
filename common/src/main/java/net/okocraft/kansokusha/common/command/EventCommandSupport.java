@@ -46,6 +46,17 @@ public final class EventCommandSupport {
         Consumer<Component> sendMessage,
         EventRenderer renderer
     ) {
+        return execute(backend, rawEventId, hasPermission, sendMessage, renderer, "", 1);
+    }
+
+    public static boolean execute(EventSearchBackend backend, String rawEventId, Predicate<String> hasPermission,
+                                  Consumer<Component> sendMessage, EventRenderer renderer, String view, int page) {
+        return lookup(backend, rawEventId, hasPermission, sendMessage,
+            detail -> renderer.view(detail, view, page).forEach(sendMessage));
+    }
+
+    public static boolean lookup(EventSearchBackend backend, String rawEventId, Predicate<String> hasPermission,
+                                 Consumer<Component> sendMessage, Consumer<EventDetail> action) {
         final UUID eventId;
         try {
             eventId = parseEventId(rawEventId);
@@ -70,7 +81,7 @@ public final class EventCommandSupport {
                 return;
             }
 
-            renderer.detail(detail).forEach(sendMessage);
+            action.accept(detail);
         });
         return true;
     }
@@ -129,6 +140,23 @@ public final class EventCommandSupport {
                 var end = value.offsetByCodePoints(0, Math.min(256, value.codePointCount(0, value.length())));
                 lines.add(line(EventCommandMessages.COMMUNICATION_TEXT, Component.text(value.substring(0, end))));
                 value = value.substring(end);
+            }
+        });
+        return List.copyOf(lines);
+    }
+
+    static List<Component> metadata(EventDetail detail, EventRenderer renderer) {
+        var event = detail.event();
+        var common = new EventDetail(new net.okocraft.kansokusha.common.search.SearchPage.Event(
+            event.eventId(), event.eventType(), event.occurredAt(), event.server(), event.world(), event.position(),
+            event.actor(), event.actorName(), event.targetType(), java.util.Optional.empty()),
+            detail.payloadGeneration(), detail.expiresAt());
+        var lines = new ArrayList<>(commonFields(common, renderer));
+        event.actor().ifPresent(actor -> {
+            switch (actor) {
+                case PlayerActor player -> lines.add(Component.text("UUID: " + player.uniqueId()));
+                case EntityActor entity -> lines.add(Component.text("UUID: " + entity.uniqueId()));
+                case BlockActor ignored -> { }
             }
         });
         return List.copyOf(lines);
