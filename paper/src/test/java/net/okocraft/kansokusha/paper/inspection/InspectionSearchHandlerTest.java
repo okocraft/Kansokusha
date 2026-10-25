@@ -171,6 +171,26 @@ class InspectionSearchHandlerTest {
             InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456"));
     }
 
+    @Test
+    void testInspectionPaginationKeepsExactPositionWithoutSearchPermission() {
+        var backend = new RecordingBackend();
+        backend.metadata = metadata(BREAK, CHAT);
+        var cursor = new SearchRequest.Cursor(Instant.parse("2026-09-27T00:00:00Z"), EVENT_ID, SearchRequest.Direction.NEXT);
+        backend.page = new SearchPage(List.of(event(BREAK)), Optional.of(cursor), Optional.of(cursor));
+        var fixture = fixture(backend);
+        TestSources.grant(fixture.player(), SearchCommandSupport.eventPermission(BREAK));
+        fixture.handler().page(PLAYER_ID, TARGET, Optional.of(cursor));
+        Assertions.assertEquals(SearchQuery.Conditions.position(TARGET), backend.lastRequest.query().conditions());
+        Assertions.assertEquals(Optional.of(cursor), backend.lastRequest.cursor());
+        Assertions.assertEquals(Set.of(BREAK), backend.lastRequest.constraints().allowedEventTypes());
+        var command = InspectionSearchHandler.pageCommand(TARGET, cursor);
+        Assertions.assertTrue(command.startsWith("/kansokusha inspect page minecraft:overworld 123 64 -456 "));
+        Mockito.verify(fixture.player()).sendMessage(net.kyori.adventure.text.Component.empty()
+            .append(SearchCommandMessages.PREVIOUS.asComponent().clickEvent(ClickEvent.runCommand(command)))
+            .append(net.kyori.adventure.text.Component.space())
+            .append(SearchCommandMessages.NEXT.asComponent().clickEvent(ClickEvent.runCommand(command))));
+    }
+
     private static Fixture fixture(RecordingBackend backend) {
         var server = Mockito.mock(Server.class);
         var player = Mockito.mock(Player.class);
