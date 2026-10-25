@@ -70,8 +70,8 @@ public final class KansokushaCommands {
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
             .then(EventCommand.createEventCommand(backend, clock, searchTimeZone, plugin))
-            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
-            .then(InspectCommand.createInspectCommand("i", inspectionSessions))
+            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions, backend, clock, searchTimeZone))
+            .then(InspectCommand.createInspectCommand("i", inspectionSessions, backend, clock, searchTimeZone))
             .build();
     }
 

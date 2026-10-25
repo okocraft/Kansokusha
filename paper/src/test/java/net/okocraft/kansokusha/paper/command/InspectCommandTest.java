@@ -17,9 +17,10 @@ import java.util.UUID;
 
 class InspectCommandTest {
 
+    private final EventSearchBackend backend = Mockito.mock(EventSearchBackend.class);
     private final InspectionSessionManager sessions = new InspectionSessionManager();
     private final CommandTester tester = CommandTester.of(KansokushaCommands.createCommand(
-        Mockito.mock(EventSearchBackend.class),
+        this.backend,
         Clock.systemUTC(),
         ZoneOffset.UTC,
         this.sessions,
@@ -94,6 +95,27 @@ class InspectCommandTest {
             () -> this.tester.execute(TestSources.of(player), "kansokusha inspect")
         );
         Assertions.assertFalse(this.sessions.isEnabled(player.getUniqueId()));
+    }
+
+    @Test
+    void testHiddenPageCommandUsesOnlyInspectAndRejectsArbitraryQueries() throws Exception {
+        var player = player();
+        var server = Mockito.mock(org.bukkit.Server.class);
+        Mockito.when(player.getServer()).thenReturn(server);
+        Mockito.when(server.getPlayer(player.getUniqueId())).thenReturn(player);
+        Mockito.when(this.backend.searchMetadata()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+            net.okocraft.kansokusha.common.search.SearchMetadata.empty()));
+        Mockito.when(this.backend.search(Mockito.any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+            new net.okocraft.kansokusha.common.search.SearchPage(java.util.List.of(), java.util.Optional.empty(), java.util.Optional.empty())));
+        var source = TestSources.of(player);
+        Assertions.assertFalse(this.tester.suggest(source, "kansokusha inspect ").contains("page"));
+        Assertions.assertEquals(1, this.tester.execute(source, "kansokusha inspect page minecraft:overworld 1 64 2 first"));
+        var request = org.mockito.ArgumentCaptor.forClass(net.okocraft.kansokusha.common.search.SearchRequest.class);
+        Mockito.verify(this.backend).search(request.capture());
+        Assertions.assertEquals(java.util.Set.of(new net.okocraft.kansokusha.common.search.query.SearchQuery.Position(
+            net.kyori.adventure.key.Key.key("minecraft:overworld"), 1, 64, 2)), request.getValue().query().conditions().positions());
+        Assertions.assertEquals(0, this.tester.execute(source, "kansokusha inspect page user Alice"));
+        Mockito.verify(this.backend, Mockito.times(1)).search(Mockito.any());
     }
 
     private static Player player() {

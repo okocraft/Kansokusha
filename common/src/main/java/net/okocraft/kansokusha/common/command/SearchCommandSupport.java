@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
+import net.okocraft.kansokusha.common.search.query.ActionCategories;
 import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParseException;
 import net.okocraft.kansokusha.common.search.query.SearchQueryParser;
@@ -70,7 +71,7 @@ public final class SearchCommandSupport {
     ) {
         final Invocation invocation;
         try {
-            invocation = parseInvocation(rawInput, clock, timezone, source.origin());
+            invocation = parseInvocation(rawInput, clock, timezone, source.origin(), source.hasPermission());
         } catch (SearchQueryParseException e) {
             source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.reason()));
             return false;
@@ -148,16 +149,34 @@ public final class SearchCommandSupport {
         ZoneId timezone,
         SearchQuery.@Nullable Position origin
     ) {
+        return parseInvocation(rawInput, clock, timezone, origin, permission -> true);
+    }
+
+    static Invocation parseInvocation(String rawInput, Clock clock, ZoneId timezone,
+                                      SearchQuery.@Nullable Position origin, Predicate<String> permission) {
+        java.util.function.Function<String, Set<Key>> categories = name -> {
+            var members = ActionCategories.events(name);
+            if (members.isEmpty()) {
+                return members;
+            }
+            var visible = members.stream().filter(type -> permission.test(eventPermission(type)))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            if (visible.isEmpty()) {
+                throw new SearchQueryParseException("No permitted events in category " + name,
+                    SearchCommandMessages.EVENT_PERMISSION.apply(name));
+            }
+            return visible;
+        };
         var input = rawInput.strip();
         var lastToken = SearchQueryParser.trailingToken(input).orElse(null);
         if (lastToken == null || lastToken.quotedOrEscaped() || !lastToken.value().startsWith(CURSOR_PREFIX)) {
-            return new Invocation(input, SearchQueryParser.parse(input, clock, timezone, origin), Optional.empty());
+            return new Invocation(input, SearchQueryParser.parse(input, clock, timezone, origin, categories), Optional.empty());
         }
 
         var queryText = input.substring(0, lastToken.start()).stripTrailing();
         return new Invocation(
             queryText,
-            SearchQueryParser.parse(queryText, clock, timezone, origin),
+            SearchQueryParser.parse(queryText, clock, timezone, origin, categories),
             Optional.of(parseCursor(lastToken.value().substring(CURSOR_PREFIX.length())))
         );
     }
@@ -209,7 +228,13 @@ public final class SearchCommandSupport {
             case TARGET -> metadata.targetTypes().stream().map(Key::asString);
             default -> Stream.<String>empty();
         };
-        return values.sorted().toList();
+        var literals = values.sorted().toList();
+        if (kind != SearchQueryParser.CompletionKind.ACTION) {
+            return literals;
+        }
+        return Stream.concat(ActionCategories.names().stream()
+            .filter(name -> ActionCategories.events(name).stream().anyMatch(metadata.eventTypes()::contains)), literals.stream())
+            .distinct().toList();
     }
 
     public static String displayEventType(Key eventType) {
@@ -240,12 +265,12 @@ public final class SearchCommandSupport {
         boolean interactive
     ) {
         if (!page.events().isEmpty() && page.events().stream().noneMatch(event -> hasPermission.test(eventPermission(event.eventType())))) {
+            sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
             return;
         }
         scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
-        if (!page.events().isEmpty()) {
-            sendMessage.accept((interactive ? eventDetailsPermitted ? EventPresentationMessages.HINT : EventPresentationMessages.HOVER_HINT
-                : EventPresentationMessages.CONSOLE_HINT).asComponent());
+        if (!interactive && !page.events().isEmpty()) {
+            sendMessage.accept(EventPresentationMessages.CONSOLE_HINT.asComponent());
         }
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
@@ -316,7 +341,7 @@ public final class SearchCommandSupport {
         return command.toString();
     }
 
-    private static String serializeCursor(SearchRequest.Cursor cursor) {
+    public static String serializeCursor(SearchRequest.Cursor cursor) {
         return cursor.direction().name().toLowerCase(Locale.ROOT)
             + ","
             + cursor.occurredAt().toEpochMilli()
@@ -324,7 +349,7 @@ public final class SearchCommandSupport {
             + cursor.eventId();
     }
 
-    private static SearchRequest.Cursor parseCursor(String value) {
+    public static SearchRequest.Cursor parseCursor(String value) {
         var parts = value.split(",", 3);
         if (parts.length != 3) {
             throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent());

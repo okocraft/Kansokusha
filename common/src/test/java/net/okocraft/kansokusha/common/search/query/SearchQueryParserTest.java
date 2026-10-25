@@ -28,6 +28,17 @@ class SearchQueryParserTest {
     private static final ZoneId TOKYO = ZoneId.of("Asia/Tokyo");
 
     @Test
+    void testSharedActionCategoryExpansionAndExclusion() {
+        var query = SearchQueryParser.parse("action block action example:custom exclude action chat",
+            java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, null);
+        Assertions.assertEquals(Set.of(Key.key("kansokusha", "block_break"), Key.key("kansokusha", "block_place"),
+            Key.key("example", "custom")), query.conditions().actions());
+        Assertions.assertEquals(ActionCategories.events("chat"), query.exclusions().actions());
+        Assertions.assertEquals(Set.of(Key.key("kansokusha", "block")), SearchQueryParser.parse("action kansokusha:block",
+            java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, null).conditions().actions());
+    }
+
+    @Test
     void testRepeatedFieldsAreOrGroupsAndDifferentFieldsRemainSeparate() {
         var query = parse(
             "user Alice user Bob "

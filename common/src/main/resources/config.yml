@@ -16,8 +16,9 @@ flush-interval: PT1S
 cleanup-interval: PT1H
 
 # Time zone used by search date/time expressions such as today, yesterday, and offset-less datetimes.
-# Use an IANA zone ID such as UTC, Asia/Tokyo, or Europe/London.
-search-time-zone: UTC
+# Empty uses the server system time zone. Set an IANA zone ID to override it.
+# Existing configurations with UTC keep UTC; change them explicitly if needed.
+search-time-zone: ''
 
 retention:
   # Retention period for event types that are not listed in any policy below.
