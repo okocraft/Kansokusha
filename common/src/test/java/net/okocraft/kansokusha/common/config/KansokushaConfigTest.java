@@ -24,7 +24,7 @@ class KansokushaConfigTest {
         Assertions.assertEquals(1_000, config.batchSize());
         Assertions.assertEquals(Duration.ofSeconds(1), config.flushInterval());
         Assertions.assertEquals(Duration.ofHours(1), config.cleanupInterval());
-        Assertions.assertEquals(ZoneId.of("UTC"), config.searchTimeZone());
+        Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
 
         var retention = config.retention();
         Assertions.assertEquals(Duration.ofDays(180), retention.durationOf(Key.key("kansokusha", "block_break")));
@@ -57,7 +57,7 @@ class KansokushaConfigTest {
         Assertions.assertEquals(2, config.batchSize());
         Assertions.assertEquals(Duration.ofMillis(500), config.flushInterval());
         Assertions.assertEquals(Duration.ofMinutes(5), config.cleanupInterval());
-        Assertions.assertEquals(ZoneId.of("UTC"), config.searchTimeZone());
+        Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
         Assertions.assertEquals(Duration.ofDays(365), config.retention().durationOf(Key.key("example", "important")));
         Assertions.assertEquals(Duration.ofDays(1), config.retention().durationOf(Key.key("example", "other")));
     }
@@ -76,6 +76,22 @@ class KansokushaConfigTest {
         var config = KansokushaConfig.load(dir);
 
         Assertions.assertEquals(ZoneId.of("Asia/Tokyo"), config.searchTimeZone());
+    }
+
+    @Test
+    void testEmptyZoneUsesSystemDefaultAndExplicitUtcIsPreserved(@TempDir Path dir) throws IOException {
+        var original = java.util.TimeZone.getDefault();
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Tokyo"));
+            for (var value : java.util.List.of("''", "UTC")) {
+                Files.writeString(dir.resolve("config.yml"), config("''", "1", "PT1S", "")
+                    .replace("cleanup-interval: PT1H", "cleanup-interval: PT1H\nsearch-time-zone: " + value));
+                Assertions.assertEquals(ZoneId.of(value.equals("UTC") ? "UTC" : "Asia/Tokyo"),
+                    KansokushaConfig.load(dir).searchTimeZone());
+            }
+        } finally {
+            java.util.TimeZone.setDefault(original);
+        }
     }
 
     @Test

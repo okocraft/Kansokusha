@@ -58,9 +58,11 @@ contained in the packaged artifact and verifies the flushed event.
 
 `config.yml` is created in the plugin data directory on first start. It contains the
 retention periods recommended by `docs/v1-built-in-event-catalog.md` and
-`search-time-zone` (default `UTC`) for search expressions such as `today`,
+`search-time-zone` (empty by default, using the server system time zone) for search expressions such as `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit offset. Restart the
-server or proxy to apply changes. See `docs/design.md` for the recording pipeline and
+server or proxy to apply changes. Existing configurations with `search-time-zone: UTC`
+keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
+The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
 
 ## Inspection mode
