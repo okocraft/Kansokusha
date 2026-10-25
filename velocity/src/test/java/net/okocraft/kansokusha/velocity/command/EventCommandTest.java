@@ -52,6 +52,7 @@ class EventCommandTest {
         TestSources.grant(
             console,
             EventCommand.PERMISSION,
+            net.okocraft.kansokusha.common.command.EventCommandSupport.DEBUG_PERMISSION,
             SearchCommandSupport.eventPermission(EVENT_TYPE)
         );
         Mockito.when(this.api.findEvent(EVENT_ID))
@@ -66,6 +67,16 @@ class EventCommandTest {
                 Component.text(EVENT_ID.toString())
             )
         );
+    }
+
+    @Test
+    void testDirectRecordAndRawViewsRequireDebugPermission() throws Exception {
+        var console = TestSources.console();
+        TestSources.grant(console, EventCommand.PERMISSION, SearchCommandSupport.eventPermission(EVENT_TYPE));
+        for (var view : java.util.List.of("record", "raw")) {
+            Assertions.assertEquals(0, this.tester.execute(console, "event " + EVENT_ID + " " + view));
+        }
+        Mockito.verify(this.api, Mockito.never()).findEvent(Mockito.any());
     }
 
     private static EventDetail event() {

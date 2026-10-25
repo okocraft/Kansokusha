@@ -8,8 +8,8 @@ import static net.okocraft.kansokusha.paper.builtin.PaperEventView.of;
 final class PaperEntityViews {
 
     static final List<PaperEventView> VIEWS = List.of(
-        of("entity_place", "<actor>entity placement <target><context>", ENTITY, "", "used_item", "used_item"),
-        of("entity_break", "<actor>entity removal <target><context>", ENTITY, "", "cause", "cause"),
+        of("entity_place", "<green>+</green> <actor><target><context>", ENTITY, "", "used_item", "used_item"),
+        of("entity_break", "<red>-</red> <actor><target><context>", ENTITY, "", "cause", "cause"),
         of("entity_death", "<actor>entity death <target><context>", ENTITY, "", "damage_type", "damage_type"),
         of("entity_spawn", "entity spawn <target><context>", ENTITY, "", "spawn_reason", "spawn_reason"),
         of("armor_stand_manipulate", "<actor>equipment operation <target><context>", ENTITY, "", "equipment_slot player_item_before armor_stand_item_before", "equipment_slot player_item_before armor_stand_item_before"),

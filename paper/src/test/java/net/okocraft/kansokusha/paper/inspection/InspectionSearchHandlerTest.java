@@ -74,7 +74,7 @@ class InspectionSearchHandlerTest {
             SearchCommandMessages.RESULT.apply(
                 net.okocraft.kansokusha.paper.builtin.PaperEventPresenter.renderer(
                     java.time.Clock.fixed(event.occurredAt(), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC)
-                    .withLocations((location, world) -> net.okocraft.kansokusha.paper.command.PaperEventLocations.format(location, world, false)).row(event, true, false)
+                    .withLocations((location, world) -> net.okocraft.kansokusha.paper.command.PaperEventLocations.format(location, world, false)).withDebug(false).row(event, true, false)
             )
         );
     }

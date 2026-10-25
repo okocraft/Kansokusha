@@ -48,6 +48,10 @@ final class PaperPayloadDisplay {
     }
 
     static Component preview(Tag tag, String field) {
+        return preview(tag, field, true);
+    }
+
+    static Component preview(Tag tag, String field, boolean debug) {
         if (tag instanceof CompoundTag compound) {
             if (compound.get("serialized") instanceof ByteArrayTag bytes) {
                 return PaperRecordedItems.preview(compound);
@@ -55,30 +59,30 @@ final class PaperPayloadDisplay {
             var state = compound.getStringOr("id", compound.getStringOr("Name", ""));
             if (!state.isEmpty()) {
                 return PaperEventNames.name(Key.key(state), EventRenderer.NameKind.BLOCK)
-                    .hoverEvent(HoverEvent.showText(stateHover(compound)));
+                    .hoverEvent(HoverEvent.showText(stateHover(compound, debug)));
             }
             if (compound.contains("holder_kind")) {
                 var block = compound.getStringOr("holder_block_type", "");
                 var name = block.isEmpty() ? Component.text(compound.getStringOr("type", ""))
                     : PaperEventNames.name(Key.key(block), EventRenderer.NameKind.BLOCK);
                 var location = compound.get("location");
-                return location == null ? name : name.append(Component.text(" @ ")).append(preview(location, "location"));
+                return location == null ? name : name.append(Component.text(" @ ")).append(preview(location, "location", debug));
             }
             if (compound.contains("result") && compound.contains("ingredients")) {
-                return preview(compound.get("ingredients"), "ingredients").append(Component.text(" → "))
-                    .append(preview(compound.get("result"), "result"));
+                return preview(compound.get("ingredients"), "ingredients", debug).append(Component.text(" → "))
+                    .append(preview(compound.get("result"), "result", debug));
             }
             if (compound.contains("uuid")) {
                 var type = compound.getStringOr("type", "");
                 var name = type.isEmpty() ? EventFieldMessages.label(field)
                     : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.ENTITY);
-                return name.hoverEvent(HoverEvent.showText(Component.text(compound.getStringOr("uuid", ""))));
+                return debug ? name.hoverEvent(HoverEvent.showText(Component.text(compound.getStringOr("uuid", "")))) : name;
             }
             if (compound.contains("component")) {
                 return Component.text(EventRenderer.preview(text(compound, field)));
             }
             if (compound.contains("location")) {
-                return preview(compound.get("location"), "location");
+                return preview(compound.get("location"), "location", debug);
             }
             if (compound.contains("x") && compound.contains("z")) {
                 return Component.text(compound.getStringOr("world", "") + " (" + compound.getDoubleOr("x", 0)
@@ -92,7 +96,7 @@ final class PaperPayloadDisplay {
             }
             var result = Component.empty();
             for (var i = 0; i < Math.min(3, list.size()); i++) {
-                result = result.append(i == 0 ? Component.empty() : Component.text(", ")).append(preview(list.get(i), field));
+                result = result.append(i == 0 ? Component.empty() : Component.text(", ")).append(preview(list.get(i), field, debug));
             }
             return list.size() > 3 ? result.append(Component.text(" … (" + list.size() + ")")) : result;
         }
@@ -120,16 +124,25 @@ final class PaperPayloadDisplay {
     }
 
     static Component hoverValue(Tag tag, String field) {
+        return hoverValue(tag, field, true);
+    }
+
+    static Component hoverValue(Tag tag, String field, boolean debug) {
         if (tag instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
-            return preview(tag, field).hoverEvent(null).append(Component.newline()).append(stateHover(compound));
+            return preview(tag, field, debug).hoverEvent(null).append(Component.newline()).append(stateHover(compound, debug));
         }
-        return preview(tag, field);
+        return preview(tag, field, debug);
     }
 
     static Component stateHover(CompoundTag compound) {
+        return stateHover(compound, true);
+    }
+
+    static Component stateHover(CompoundTag compound, boolean debug) {
         var properties = compound.getCompoundOrEmpty(compound.contains("properties") ? "properties" : "Properties");
         var lines = new ArrayList<Component>();
-        lines.add(Component.text(compound.getStringOr("id", compound.getStringOr("Name", ""))));
+        var type = compound.getStringOr("id", compound.getStringOr("Name", ""));
+        lines.add(debug || type.isEmpty() ? Component.text(type) : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.BLOCK));
         for (var key : properties.keySet().stream().sorted().limit(6).toList()) {
             lines.add(EventFieldMessages.field(key, preview(properties.get(key), key)));
         }

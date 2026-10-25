@@ -9,3 +9,6 @@ permissions:
   kansokusha.command.teleport:
     description: Teleport to recorded block coordinates
     default: op
+  kansokusha.command.event.debug:
+    description: View technical event fields and saved payloads
+    default: false
