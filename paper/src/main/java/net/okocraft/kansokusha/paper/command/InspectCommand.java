@@ -37,13 +37,24 @@ final class InspectCommand {
                     }
                     try {
                         var parts = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target-and-cursor").split(" ");
-                        if (parts.length != 5) throw new IllegalArgumentException("Expected one exact block coordinate and cursor");
+                        if (parts.length != 5 && parts.length != 6 && parts.length != 9) throw new IllegalArgumentException("Expected one exact block coordinate and cursor");
                         var target = new net.okocraft.kansokusha.common.search.query.SearchQuery.Position(
                             net.kyori.adventure.key.Key.key(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
                         var cursor = parts[4].equals("first") ? java.util.Optional.<net.okocraft.kansokusha.common.search.SearchRequest.Cursor>empty()
                             : java.util.Optional.of(net.okocraft.kansokusha.common.command.SearchCommandSupport.parseCursor(parts[4]));
+                        var positions = new java.util.LinkedHashSet<net.okocraft.kansokusha.common.search.query.SearchQuery.Position>();
+                        positions.add(target);
+                        var container = parts.length > 5;
+                        if (container && !parts[5].equals("container")) throw new IllegalArgumentException("Invalid inspection mode");
+                        if (parts.length == 9) {
+                            var other = new net.okocraft.kansokusha.common.search.query.SearchQuery.Position(target.world(),
+                                Integer.parseInt(parts[6]), Integer.parseInt(parts[7]), Integer.parseInt(parts[8]));
+                            if (target.y() != other.y() || Math.abs((long) target.x() - other.x()) + Math.abs((long) target.z() - other.z()) != 1)
+                                throw new IllegalArgumentException("A double chest must have two adjacent halves");
+                            positions.add(other);
+                        }
                         new net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler(player.getServer(), backend, clock, timezone)
-                            .page(player.getUniqueId(), target, cursor);
+                            .page(player.getUniqueId(), target, cursor, container, java.util.Set.copyOf(positions));
                         return Command.SINGLE_SUCCESS;
                     } catch (IllegalArgumentException e) {
                         sender.sendMessage(net.okocraft.kansokusha.common.command.SearchCommandMessages.PARSE_ERROR.apply(

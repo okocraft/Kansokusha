@@ -136,3 +136,9 @@ Copyright © 2026, OKOCRAFT
 Inspection results have their own previous/next links under `kansokusha.command.inspect`.
 The hidden `inspect page` command accepts an exact world/X/Y/Z and a cursor only; it cannot
 run arbitrary search conditions. Search permission is not needed for these links.
+
+Right-clicking a container in inspection mode shows container transaction, pickup, and transfer
+records; left-clicking still shows every visible event at the selected coordinate. Double
+chests search both halves as an OR group, with the same filter retained during pagination
+and in the full-search link. Automatic transfer/pickup records describe observed operations;
+only container transaction deltas represent committed net inventory changes.
