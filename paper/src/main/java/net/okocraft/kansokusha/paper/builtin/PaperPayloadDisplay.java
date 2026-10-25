@@ -136,21 +136,6 @@ final class PaperPayloadDisplay {
         return EventRenderer.join(lines);
     }
 
-    static List<Component> textLines(String text) {
-        var lines = new ArrayList<Component>();
-        for (var paragraph : text.split("\\R", -1)) {
-            if (paragraph.isEmpty()) {
-                lines.add(Component.empty());
-            }
-            for (var offset = 0; offset < paragraph.length();) {
-                var end = paragraph.offsetByCodePoints(offset, Math.min(64, paragraph.codePointCount(offset, paragraph.length())));
-                lines.add(Component.text(paragraph.substring(offset, end)));
-                offset = end;
-            }
-        }
-        return List.copyOf(lines);
-    }
-
     static List<Component> details(CompoundTag payload) {
         var lines = new ArrayList<Component>();
         appendDetails(payload, Component.empty(), lines);
@@ -170,7 +155,7 @@ final class PaperPayloadDisplay {
             }
         } else {
             var value = tag instanceof StringTag string ? string.value() : tag.toString();
-            for (var line : textLines(value)) {
+            for (var line : EventRenderer.textLines(value)) {
                 lines.add(EventCommandMessages.DETAIL_LINE.apply(path, line));
             }
         }

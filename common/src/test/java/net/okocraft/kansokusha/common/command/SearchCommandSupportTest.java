@@ -118,12 +118,12 @@ class SearchCommandSupportTest {
         this.backend.metadata = metadata(BREAK);
         this.backend.page = new SearchPage(List.of(event()), Optional.empty(), Optional.empty());
 
-        Assertions.assertTrue(this.execute(false, null, "", BREAK));
-        Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
+        Assertions.assertTrue(this.execute(true, null, "", BREAK));
+        Assertions.assertTrue(this.execute(true, null, "", BREAK, EventCommandSupport.PERMISSION));
 
         var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
         Assertions.assertEquals(List.of(
-            EventPresentationMessages.HINT.asComponent(),
+            EventPresentationMessages.HOVER_HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
             EventPresentationMessages.HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
@@ -248,6 +248,15 @@ class SearchCommandSupportTest {
         this.backend.pending.complete(new SearchPage(List.of(event()), Optional.empty(), Optional.empty()));
         Assertions.assertEquals(0, calls.get());
         Assertions.assertTrue(this.messages.isEmpty());
+    }
+
+    @Test
+    void testConsoleRetainsAnAddressableIdWithoutHover() {
+        this.backend.metadata = metadata(BREAK);
+        this.backend.page = new SearchPage(List.of(event()), Optional.empty(), Optional.empty());
+        Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
+        Assertions.assertEquals(EventPresentationMessages.CONSOLE_HINT.asComponent(), this.messages.getFirst());
+        Assertions.assertTrue(this.messages.getLast().toString().contains(event().eventId().toString()));
     }
 
     private static SearchMetadata metadata(Key... eventTypes) {

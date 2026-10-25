@@ -7,8 +7,8 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /** A platform interprets only its own known payload generations. */
 @ApiStatus.Internal

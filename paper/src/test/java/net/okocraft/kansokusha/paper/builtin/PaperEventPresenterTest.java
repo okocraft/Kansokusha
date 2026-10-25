@@ -163,6 +163,32 @@ class PaperEventPresenterTest {
         Assertions.assertTrue(content.sections().containsKey("raw"));
     }
 
+    @Test
+    void testShortRowsAndStateOnlyOnHover(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var before = net.minecraft.nbt.NbtUtils.writeBlockState(net.minecraft.world.level.block.Blocks.SMALL_AMETHYST_BUD.defaultBlockState());
+        var after = before.copy();
+        after.getCompoundOrEmpty("properties").putString("facing", "down");
+        var payload = new CompoundTag();
+        payload.put("pre_state", before);
+        payload.put("post_state", after);
+        payload.putString("source_event", "block_grow");
+        var event = event("natural_block_change", payload);
+        var row = this.renderer.row(event, true, true);
+        var visible = plain(row, Locale.JAPANESE);
+        Assertions.assertFalse(visible.contains("\n"), visible);
+        Assertions.assertFalse(visible.contains("facing"), visible);
+        Assertions.assertFalse(visible.contains("block_grow"), visible);
+        Assertions.assertTrue(row.toString().contains("facing"));
+        Assertions.assertTrue(visible.codePointCount(0, visible.length()) < 100, visible);
+        var mode = new CompoundTag();
+        mode.putString("old_gamemode", "survival");
+        mode.putString("new_gamemode", "creative");
+        var content = new PaperEventPresenter().present(event("player_gamemode_change", mode), true, this.renderer).orElseThrow();
+        Assertions.assertEquals(java.util.Set.of("raw"), content.sections().keySet());
+        System.out.println("Compact JA row: " + visible);
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),

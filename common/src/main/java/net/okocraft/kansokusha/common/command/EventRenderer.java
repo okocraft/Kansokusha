@@ -17,10 +17,10 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.function.Supplier;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 /** Shared search/inspection/detail composition, independent of storage and platform codecs. */
 @ApiStatus.Internal
@@ -55,7 +55,7 @@ public final class EventRenderer {
         return switch (event.actor().orElse(null)) {
             case null -> Component.empty();
             case PlayerActor player -> SearchCommandSupport.withUuidHover(
-                Component.text(event.actorName().orElse(player.uniqueId().toString())), player.uniqueId());
+                event.actorName().map(name -> (Component) Component.text(name)).orElse(EventCommandMessages.ACTOR_PLAYER.asComponent()), player.uniqueId());
             case EntityActor entity -> SearchCommandSupport.withUuidHover(
                 this.name(entity.entityType(), NameKind.ENTITY), entity.uniqueId());
             case BlockActor block -> this.name(block.blockType(), NameKind.BLOCK);
@@ -180,7 +180,24 @@ public final class EventRenderer {
         if (event.searchText().isPresent()) {
             summary = summary.append(Component.space()).append(Component.text(preview(event.searchText().get())));
         }
-        return new EventPresenter.Content(summary, List.of(), EventPresentationMessages.UNAVAILABLE.asComponent(), Map.of());
+        var sections = event.searchText().map(text -> Map.of("text", new EventPresenter.Section(
+            EventPresentationMessages.FULL.asComponent(), () -> textLines(text)))).orElse(Map.of());
+        return new EventPresenter.Content(summary, List.of(), EventPresentationMessages.UNAVAILABLE.asComponent(), sections);
+    }
+
+    public static List<Component> textLines(String text) {
+        var lines = new ArrayList<Component>();
+        for (var paragraph : text.split("\\R", -1)) {
+            if (paragraph.isEmpty()) {
+                lines.add(Component.empty());
+            }
+            for (var offset = 0; offset < paragraph.length();) {
+                var end = paragraph.offsetByCodePoints(offset, Math.min(64, paragraph.codePointCount(offset, paragraph.length())));
+                lines.add(Component.text(paragraph.substring(offset, end)));
+                offset = end;
+            }
+        }
+        return List.copyOf(lines);
     }
 
     public static String preview(String text) {

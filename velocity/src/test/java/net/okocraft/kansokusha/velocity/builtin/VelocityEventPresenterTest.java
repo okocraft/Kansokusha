@@ -41,14 +41,15 @@ class VelocityEventPresenterTest {
         LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
         var event = event("server_connected", VelocityServerConnectedPayloadCodec.encode(Key.key("velocity:lobby")));
         var content = new VelocityEventPresenter().present(event, true, this.renderer).orElseThrow();
-        Assertions.assertTrue(plain(content.summary()).contains("connected to velocity:survival"));
-        Assertions.assertTrue(plain(content.summary()).contains("velocity:lobby"));
+        Assertions.assertTrue(plain(content.summary()).contains("connected velocity:survival"));
+        Assertions.assertFalse(plain(content.summary()).contains("velocity:lobby"));
+        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain).anyMatch(text -> text.contains("velocity:lobby")));
         var command = "<red>/say " + "a".repeat(200) + " END";
         content = new VelocityEventPresenter().present(event("velocity_command",
             VelocityCommunicationPayloadCodec.encodeCommand("console", "Console", command)), true, this.renderer).orElseThrow();
         Assertions.assertFalse(plain(content.summary()).contains(" END"));
-        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain).anyMatch(text -> text.contains(command)));
-        Assertions.assertTrue(plain(content.summary()).contains("entered a command"));
+        Assertions.assertEquals(command, content.sections().get("text_command").lines().get().stream().map(VelocityEventPresenterTest::plain).collect(java.util.stream.Collectors.joining()));
+        Assertions.assertTrue(plain(content.summary()).contains("command input"));
     }
 
     @Test
@@ -58,16 +59,18 @@ class VelocityEventPresenterTest {
             VelocityPlayerSessionPayloadCodec.encodePostLogin("Alice",
                 InetSocketAddress.createUnresolved("192.0.2.1", 25565), null, null)), true, this.renderer).orElseThrow();
         Assertions.assertFalse(plain(content.summary()).contains("192.0.2.1"));
-        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain).anyMatch(text -> text.contains("192.0.2.1")));
+        Assertions.assertTrue(content.sections().get("raw").lines().get().stream().map(VelocityEventPresenterTest::plain).anyMatch(text -> text.contains("192.0.2.1")));
         var reason = Component.text("Reason").clickEvent(ClickEvent.runCommand("/danger"));
         content = new VelocityEventPresenter().present(event("backend_kick",
             VelocityPlayerSessionPayloadCodec.encodeBackendKick(reason, false,
                 VelocityPlayerSessionPayloadCodec.ProxyAction.REDIRECT, Key.key("velocity:lobby"), reason)), true, this.renderer).orElseThrow();
-        Assertions.assertTrue(plain(content.summary()).contains("Reason"));
+        Assertions.assertFalse(plain(content.summary()).contains("Reason"));
+        Assertions.assertTrue(plain(content.hover()).contains("Reason"));
         Assertions.assertFalse(content.summary().toString().contains("/danger"));
-        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain)
+        Assertions.assertTrue(content.sections().get("raw").lines().get().stream().map(VelocityEventPresenterTest::plain)
             .anyMatch(text -> text.contains("/danger")));
-        Assertions.assertTrue(plain(content.summary()).contains("velocity:lobby"));
+        Assertions.assertFalse(plain(content.summary()).contains("velocity:lobby"));
+        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain).anyMatch(text -> text.contains("velocity:lobby")));
     }
 
     @Test
