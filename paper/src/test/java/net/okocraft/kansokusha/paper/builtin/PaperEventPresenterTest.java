@@ -65,7 +65,7 @@ class PaperEventPresenterTest {
         Assertions.assertFalse(plain(inspection, Locale.ENGLISH).contains("(1,64,2)"));
         Assertions.assertEquals(ClickEvent.runCommand("/kansokusha event " + event.eventId()), search.clickEvent());
         Assertions.assertNull(this.renderer.row(event, false, true).clickEvent());
-        Assertions.assertTrue(plain(inspection, Locale.JAPANESE).contains("破壊を試みた"));
+        Assertions.assertTrue(plain(inspection, Locale.JAPANESE).contains("破壊操作"));
     }
 
     @Test
@@ -81,8 +81,8 @@ class PaperEventPresenterTest {
         payload.putString("source_event", "block_fade");
         var content = new PaperEventPresenter().present(event("natural_block_change", payload), true, this.renderer).orElseThrow();
         var details = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).toList();
-        Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("Before") && line.contains("minecraft:stone")), details.toString());
-        Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("After") && line.contains("minecraft:air")), details.toString());
+        Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("Before") && line.contains("Stone")), details.toString());
+        Assertions.assertTrue(details.stream().anyMatch(line -> line.contains("After") && line.contains("Air")), details.toString());
         Assertions.assertFalse(plain(content.summary(), Locale.ENGLISH).contains("block_fade"));
         Assertions.assertTrue(plain(content.hover(), Locale.ENGLISH).contains("block_fade"));
     }
@@ -118,7 +118,7 @@ class PaperEventPresenterTest {
             .map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining()));
         payload = new CompoundTag();
         payload.putString("from_world", "minecraft:the_nether");
-        content = new PaperEventPresenter().present(event("player_world_change", payload), false, this.renderer).orElseThrow();
+        content = new PaperEventPresenter().present(event("player_world_change", payload), true, this.renderer).orElseThrow();
         var summary = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining());
         Assertions.assertTrue(summary.contains("minecraft:the_nether"), summary);
         Assertions.assertTrue(summary.contains("minecraft:overworld"), summary);
@@ -151,7 +151,7 @@ class PaperEventPresenterTest {
         var overview = content.details().stream().map(line -> plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining());
         Assertions.assertFalse(overview.contains("{id:"), overview);
         Assertions.assertFalse(overview.contains("facing"), overview);
-        Assertions.assertTrue(overview.contains("small_amethyst_bud"), overview);
+        Assertions.assertTrue(overview.contains("Small Amethyst Bud"), overview);
         Assertions.assertTrue(content.sections().containsKey("raw"));
     }
 

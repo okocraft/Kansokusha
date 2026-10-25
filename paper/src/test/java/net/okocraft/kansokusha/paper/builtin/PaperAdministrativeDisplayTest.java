@@ -27,9 +27,9 @@ class PaperAdministrativeDisplayTest {
         var payload = new CompoundTag();
         payload.putString("before", "normal");
         payload.putString("after", "hard");
-        var summary = new PaperEventPresenter().present(PaperEventPresenterTest.event("world_difficulty_change", payload),
-            false, renderer).orElseThrow().summary();
-        var text = PaperEventPresenterTest.plain(summary, Locale.ENGLISH);
+        var contentBefore = new PaperEventPresenter().present(PaperEventPresenterTest.event("world_difficulty_change", payload),
+            true, renderer).orElseThrow();
+        var text = contentBefore.details().stream().map(line -> PaperEventPresenterTest.plain(line, Locale.ENGLISH)).collect(java.util.stream.Collectors.joining());
         Assertions.assertTrue(text.contains("Before: normal"), text);
         Assertions.assertTrue(text.contains("After: hard"), text);
         payload = new CompoundTag();
