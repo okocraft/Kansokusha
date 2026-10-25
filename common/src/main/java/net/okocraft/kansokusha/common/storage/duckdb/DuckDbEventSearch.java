@@ -6,10 +6,12 @@ import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
+import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.position.BlockPosition;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
+import net.okocraft.kansokusha.common.search.StoredPayload;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.ActorKind;
 import net.okocraft.kansokusha.common.search.query.SearchQuery.Conditions;
@@ -35,6 +37,9 @@ import java.util.UUID;
 @NotNullByDefault
 final class DuckDbEventSearch {
 
+    // A page can contain up to 1,000 events. Large inventories/books belong in event details.
+    static final int SEARCH_PAYLOAD_MAX_BYTES = 16 * 1024;
+
     private static final String SELECT_EVENTS = """
         SELECT
             e.event_id,
@@ -56,15 +61,20 @@ final class DuckDbEventSearch {
             e.actor_type,
             e.target_type,
             epoch_ms(e.expires_at) AS expires_at_ms,
-            e.search_text
+            e.search_text,
+            %s AS display_payload
         FROM events e
         """;
+
+    private static final String SELECT_SEARCH_EVENTS = SELECT_EVENTS.formatted(
+        "CASE WHEN octet_length(e.payload) <= " + SEARCH_PAYLOAD_MAX_BYTES + " THEN e.payload ELSE NULL END"
+    );
 
     private DuckDbEventSearch() {
     }
 
     static Optional<EventDetail> find(DuckDBConnection connection, UUID eventId) throws SQLException {
-        try (var statement = connection.prepareStatement(SELECT_EVENTS + "WHERE e.event_id = ?")) {
+        try (var statement = connection.prepareStatement(SELECT_EVENTS.formatted("e.payload") + "WHERE e.event_id = ?")) {
             statement.setObject(1, eventId);
             try (var rows = statement.executeQuery()) {
                 return rows.next()
@@ -114,7 +124,7 @@ final class DuckDbEventSearch {
         var fetchAscending = fetchingPrevious ? !logicalAscending : logicalAscending;
         var direction = fetchAscending ? "ASC" : "DESC";
 
-        var sql = SELECT_EVENTS + """
+        var sql = SELECT_SEARCH_EVENTS + """
             WHERE %s
             ORDER BY e.occurred_at %s, e.event_id %s
             LIMIT ?
@@ -391,6 +401,7 @@ final class DuckDbEventSearch {
     }
 
     private static SearchPage.Event readEvent(ResultSet rows) throws SQLException {
+        var generation = new PayloadGeneration(rows.getInt("payload_generation"));
         var x = rows.getInt("x");
         var position = rows.wasNull()
             ? Optional.<BlockPosition>empty()
@@ -405,7 +416,11 @@ final class DuckDbEventSearch {
             Optional.ofNullable(readActor(rows)),
             Optional.ofNullable(rows.getString("actor_name")),
             optionalKey(rows.getString("target_type")),
-            Optional.ofNullable(rows.getString("search_text"))
+            Optional.ofNullable(rows.getString("search_text")),
+            Optional.ofNullable(rows.getBytes("display_payload")).map(bytes -> new StoredPayload(
+                generation,
+                EventPayload.takeOwnership(bytes)
+            ))
         );
     }
 
