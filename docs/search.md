@@ -165,3 +165,7 @@ A category with no permitted members is rejected; literal names retain their str
 | `death` / `kill` | `player_death` / `entity_death` |
 
 Container direction aliases are not provided because direction is not an SQL-searchable field.
+
+Running `/kansokusha search` without conditions shows a guide without querying storage.
+Click examples to fill the input line. Paper players see `radius`; console and Velocity users
+are guided to explicit `around` coordinates. Examples are limited by event visibility permissions.

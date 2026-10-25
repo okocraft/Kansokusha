@@ -77,7 +77,7 @@ class SearchCommandTest {
         TestSources.grant(console, SearchCommand.PERMISSION);
         var source = TestSources.ofSenderOnly(console);
 
-        Assertions.assertEquals(1, this.tester.execute(source, "search"));
+        Assertions.assertEquals(1, this.tester.execute(source, "search order newest"));
         Assertions.assertEquals(SearchCommandSupport.NON_PLAYER_DEFAULT_LIMIT, this.lastRequest().defaultLimit());
         Assertions.assertEquals(0, this.tester.execute(source, "search radius 5"));
         Assertions.assertFalse(this.tester.suggest(source, "search ").contains("radius"));
@@ -89,6 +89,14 @@ class SearchCommandTest {
 
         Assertions.assertEquals(List.of("newest", "oldest"), this.tester.suggest(source, "search order "));
         Assertions.assertTrue(this.tester.suggest(source, "search ").contains("radius"));
+    }
+
+    @Test
+    void testNoConditionsShowsGuideWithoutBackendLookup() throws Exception {
+        var source = TestSources.of(player());
+        Assertions.assertEquals(1, this.tester.execute(source, "search"));
+        Mockito.verify(this.backend, Mockito.never()).search(Mockito.any());
+        Mockito.verify(this.backend, Mockito.never()).searchMetadata();
     }
 
     private SearchRequest lastRequest() {

@@ -90,7 +90,7 @@ class SearchCommandSupportTest {
         this.messages.clear();
         Assertions.assertFalse(this.execute(false, null, "radius 5"));
         Assertions.assertEquals(
-            List.of(SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.RADIUS_UNAVAILABLE.asComponent())),
+            List.of(SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.RADIUS_UNAVAILABLE.asComponent()).append(Component.space()).append(SearchGuide.link())),
             this.messages
         );
         Assertions.assertTrue(this.backend.requests.isEmpty());
@@ -105,7 +105,7 @@ class SearchCommandSupportTest {
 
         Assertions.assertEquals(
             List.of(
-                SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.INVALID_ORDER.apply("sideways")),
+                SearchCommandMessages.PARSE_ERROR.apply(SearchQueryMessages.INVALID_ORDER.apply("sideways")).append(Component.space()).append(SearchGuide.link()),
                 SearchCommandMessages.EVENT_PERMISSION.apply("block_break")
             ),
             this.messages

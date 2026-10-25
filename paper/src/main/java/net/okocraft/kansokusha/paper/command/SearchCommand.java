@@ -8,6 +8,7 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
+import net.okocraft.kansokusha.common.command.SearchGuide;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
 import net.okocraft.kansokusha.paper.api.PaperKansokusha;
@@ -50,6 +51,11 @@ final class SearchCommand {
         Clock clock,
         ZoneId timezone
     ) {
+        if (rawInput.isBlank()) {
+            SearchGuide.send(source.getSender()::hasPermission, source.getSender()::sendMessage, source.getExecutor() instanceof Player);
+            return Command.SINGLE_SUCCESS;
+        }
+
         var sender = source.getSender();
         var player = source.getExecutor() instanceof Player executor ? executor : null;
         SearchQuery.Position origin = null;
