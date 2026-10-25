@@ -70,6 +70,7 @@ public final class PaperEventPresenter implements EventPresenter {
             var payload = PaperPayloadNbtCodec.decode(event.payload().get().bytes());
             var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());
             var hover = new ArrayList<Component>();
+            hover.add(PaperViewMessages.OPERATION_SCOPE.asComponent());
             for (var spec : view.fields()) {
                 var value = field(event, payload, spec);
                 if (value != null) {
@@ -101,7 +102,7 @@ public final class PaperEventPresenter implements EventPresenter {
             if (!view.quantity().isEmpty()) {
                 if (view.quantity().equals("amount_delta")) {
                     var delta = payload.getIntOr("amount_delta", 0);
-                    target = target.append(Component.text(" " + (delta > 0 ? "+" : "") + delta));
+                    target = target.append(Component.text(" x" + Math.abs((long) delta)));
                 } else {
                     var item = PaperPayloadDisplay.at(payload, view.quantity());
                     if (item != null) {
@@ -115,7 +116,14 @@ public final class PaperEventPresenter implements EventPresenter {
             if (event.actor().isEmpty() && payload.contains("source_name")) {
                 context = Component.space().append(Component.text(EventRenderer.preview(payload.getStringOr("source_name", "")))).append(context);
             }
+            var actor = renderer.actor(event);
+            if (view.type().equals("container_transaction")) {
+                var delta = payload.getIntOr("amount_delta", 0);
+                if (delta != 0) actor = (delta > 0 ? PaperViewMessages.ADDED : PaperViewMessages.REMOVED)
+                    .asComponent().append(Component.space()).append(actor);
+            }
             var details = new ArrayList<Component>();
+            if (detailed) details.add(PaperViewMessages.OPERATION_SCOPE.asComponent());
             var sections = new LinkedHashMap<String, Section>();
             sections.put("raw", new Section(EventPresentationMessages.RAW.asComponent(), () -> PaperPayloadDisplay.details(payload)));
             if (detailed) {
@@ -144,7 +152,7 @@ public final class PaperEventPresenter implements EventPresenter {
             if (detailed && PaperRecordedItems.hasItems(payload)) {
                 sections.put("items", new Section(PaperViewMessages.ITEMS.asComponent(), () -> PaperRecordedItems.items(payload, event.eventId())));
             }
-            return Optional.of(new Content(view.sentence().summary(renderer.actor(event), EventPresentationMessages.TARGET.apply(target), context),
+            return Optional.of(new Content(view.sentence().summary(actor, EventPresentationMessages.TARGET.apply(target), context),
                 details, EventRenderer.join(hover), sections));
         } catch (IOException | IllegalArgumentException e) {
             return Optional.empty();
