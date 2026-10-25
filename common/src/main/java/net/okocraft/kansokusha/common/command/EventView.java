@@ -34,7 +34,7 @@ public final class EventView {
         var context = event.searchText().map(text -> Component.text(" “" + EventRenderer.preview(text) + "”"))
             .orElse(Component.empty());
         return new EventPresenter.Content(this.summary(renderer.actor(event), target, context), java.util.List.of(),
-            EventPresentationMessages.MORE_IN_DETAILS.asComponent(), java.util.Map.of());
+            (renderer.debug() ? EventPresentationMessages.MORE_IN_DETAILS : EventPresentationMessages.UNAVAILABLE_USER).asComponent(), java.util.Map.of());
     }
 
     public Map<String, String> defaultMessages() {

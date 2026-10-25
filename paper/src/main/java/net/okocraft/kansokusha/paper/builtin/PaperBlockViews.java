@@ -9,13 +9,13 @@ import static net.okocraft.kansokusha.paper.builtin.PaperEventView.of;
 final class PaperBlockViews {
 
     static final List<PaperEventView> VIEWS = List.of(
-        of("block_break", "<actor>break attempt <target><context>", BLOCK, "", "", ""),
-        of("block_place", "<actor>place attempt <target><context>", BLOCK, "", "replaced", ""),
+        of("block_break", "<red>-</red> <actor><target><context>", BLOCK, "", "", ""),
+        of("block_place", "<green>+</green> <actor><target><context>", BLOCK, "", "replaced", ""),
         of("sign_change", "<actor>sign edit <target><context>", BLOCK, "", "before after", "side after"),
-        of("bucket_empty", "<actor>bucket empty <target><context>", ITEM, "", "pre_state result_item", "pre_state"),
-        of("bucket_fill", "<actor>bucket fill <target><context>", ITEM, "", "pre_state result_item", "pre_state"),
+        of("bucket_empty", "<green>+</green> <actor><target><context>", ITEM, "", "pre_state result_item", "pre_state"),
+        of("bucket_fill", "<red>-</red> <actor><target><context>", ITEM, "", "pre_state result_item", "pre_state"),
         of("block_harvest", "<actor>harvest/shear <target><context>", BLOCK, "", "harvest_items shear_drops", "operation harvest_items shear_drops"),
-        of("flower_pot_change", "<actor>flower pot operation <target><context>", ITEM, "", "before after", "action"),
+        of("flower_pot_change", "<actor>flower pot <target><context>", ITEM, "", "before after", "action"),
         of("block_ignite", "<actor>ignition <target><context>", BLOCK, "", "cause", "cause"),
         of("block_burn", "<actor>burning <target><context>", BLOCK, "", "", ""),
         of("tnt_prime", "<actor>TNT priming <target><context>", BLOCK, "", "cause", "cause"),

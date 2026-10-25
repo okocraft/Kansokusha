@@ -45,9 +45,9 @@ public final class VelocityEventPresenter implements EventPresenter {
                 "reason_component", data.originalReason() == null ? null : GsonComponentSerializer.gson().serialize(data.originalReason()),
                 "message_component", data.message() == null ? null : GsonComponentSerializer.gson().serialize(data.message()));
         }, "reason", "action", "destination"),
-        "velocity_chat", view("velocity_chat", "<actor>chat input<context>",
+        "velocity_chat", view("velocity_chat", "<actor>chat<context>",
             payload -> facts("message", VelocityCommunicationPayloadCodec.decodeChat(payload)), "message"),
-        "velocity_command", view("velocity_command", "<actor>command input<context>", payload -> {
+        "velocity_command", view("velocity_command", "<actor>command<context>", payload -> {
             var data = VelocityCommunicationPayloadCodec.decodeCommand(payload);
             return facts("source_kind", data.sourceKind(), "source_name", data.sourceName(), "command", data.command());
         }, "source_kind", "source_name", "command"),
