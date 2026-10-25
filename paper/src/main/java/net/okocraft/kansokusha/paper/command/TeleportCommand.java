@@ -13,9 +13,20 @@ import org.bukkit.plugin.Plugin;
 final class TeleportCommand {
     static final String PERMISSION = "kansokusha.command.teleport";
 
+    private static final com.mojang.brigadier.arguments.ArgumentType<String> WORLD_KEY = reader -> {
+        var start = reader.getCursor();
+        while (reader.canRead() && !Character.isWhitespace(reader.peek())) reader.skip();
+        var value = reader.getString().substring(start, reader.getCursor());
+        if (NamespacedKey.fromString(value) == null) {
+            throw com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherParseException()
+                .createWithContext(reader, "Invalid world key");
+        }
+        return value;
+    };
+
     static LiteralArgumentBuilder<CommandSourceStack> create(Plugin plugin) {
         return Commands.literal("teleport").requires(source -> source.getSender().hasPermission(PERMISSION))
-            .then(Commands.argument("world", StringArgumentType.word())
+            .then(Commands.argument("world", WORLD_KEY)
                 .then(Commands.argument("x", IntegerArgumentType.integer())
                     .then(Commands.argument("y", IntegerArgumentType.integer())
                         .then(Commands.argument("z", IntegerArgumentType.integer()).executes(context -> {
