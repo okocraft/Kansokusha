@@ -145,3 +145,23 @@ The initial search scope intentionally does **not** include:
 Each Paper/Folia server and Velocity proxy searches only its own local DuckDB database. The
 `server`, `payload_generation`, and `expires_at` values may still be persisted or displayed
 where applicable; their presence does not make them user-facing search filters.
+
+### Action categories
+
+`action` and `exclude action` accept the following aliases. Individual event names remain valid;
+use a namespaced event name to bypass aliases. Categories are suggested before individual names.
+Only events present in this instance and permitted for the sender can appear in results.
+A category with no permitted members is rejected; literal names retain their strict permission check.
+
+| Category | Events |
+| --- | --- |
+| `block` | `block_break`, `block_place` |
+| `-block` / `+block` | `block_break` / `block_place` |
+| `container` | `container_transaction`, `container_pickup`, `container_transfer` |
+| `item` | `item_drop`, `item_pickup` |
+| `chat` | `paper_chat`, `velocity_chat` |
+| `command` | `paper_player_command`, `paper_server_command`, `velocity_command` |
+| `session` | `paper_join`, `paper_quit`, `paper_kick`, `velocity_post_login`, `velocity_disconnect`, `server_connected`, `backend_kick` |
+| `death` / `kill` | `player_death` / `entity_death` |
+
+Container direction aliases are not provided because direction is not an SQL-searchable field.
