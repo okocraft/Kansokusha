@@ -40,7 +40,7 @@ public final class EventRenderer {
     }
 
     public static EventRenderer generic(Clock clock, ZoneId timezone) {
-        return new EventRenderer(clock, timezone, (event, detailed) -> Optional.empty(),
+        return new EventRenderer(clock, timezone, (event, detailed, renderer) -> Optional.empty(),
             (key, kind) -> Component.text(key.asString()));
     }
 
@@ -88,7 +88,7 @@ public final class EventRenderer {
 
     private EventPresenter.Content content(SearchPage.Event event, boolean detailed) {
         try {
-            var content = this.presenter.present(event, detailed);
+            var content = this.presenter.present(event, detailed, this);
             if (content.isPresent()) {
                 return content.get();
             }

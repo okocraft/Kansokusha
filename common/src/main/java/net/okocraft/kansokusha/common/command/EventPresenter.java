@@ -14,7 +14,7 @@ import java.util.Optional;
 @FunctionalInterface
 public interface EventPresenter {
 
-    Optional<Content> present(SearchPage.Event event, boolean detailed);
+    Optional<Content> present(SearchPage.Event event, boolean detailed, EventRenderer renderer);
 
     record Content(Component summary, List<Component> details) {
         public Content {
