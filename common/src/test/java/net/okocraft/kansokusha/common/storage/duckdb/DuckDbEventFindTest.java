@@ -28,6 +28,34 @@ class DuckDbEventFindTest {
     private static final Key CHAT = Key.key("kansokusha", "paper_chat");
 
     @Test
+    void testLargePayloadIsOnlyLoadedForDetails(@TempDir Path dir) throws Exception {
+        for (var size : new int[]{DuckDbEventSearch.SEARCH_PAYLOAD_MAX_BYTES,
+            DuckDbEventSearch.SEARCH_PAYLOAD_MAX_BYTES + 1}) {
+            var payload = EventPayload.copyOf(new byte[size]);
+            var submission = new EventSubmission(CHAT, PayloadGeneration.FIRST, NOW,
+                null, null, null, null, null, payload);
+            try (var storage = DuckDbStorageImpl.open(dir.resolve("payload-" + size + ".duckdb"))) {
+                storage.append(List.of(new QueuedEvent(submission, NOW.toEpochMilli(),
+                    NOW.plusSeconds(60).toEpochMilli(), null, null)));
+                var page = storage.search(new SearchRequest(
+                    new SearchQuery(SearchQuery.Conditions.empty(), SearchQuery.Conditions.empty(),
+                        SearchQuery.Order.NEWEST, OptionalInt.empty()),
+                    new SearchRequest.Constraints(Set.of(CHAT)), Optional.empty(), 10));
+                var event = page.events().getFirst();
+                Assertions.assertEquals(size <= DuckDbEventSearch.SEARCH_PAYLOAD_MAX_BYTES,
+                    event.payload().isPresent());
+                Assertions.assertEquals(payload,
+                    storage.findEvent(event.eventId()).orElseThrow().event().payload().orElseThrow().bytes());
+                var hidden = storage.search(new SearchRequest(
+                    new SearchQuery(SearchQuery.Conditions.empty(), SearchQuery.Conditions.empty(),
+                        SearchQuery.Order.NEWEST, OptionalInt.empty()),
+                    new SearchRequest.Constraints(Set.of()), Optional.empty(), 10));
+                Assertions.assertTrue(hidden.events().isEmpty());
+            }
+        }
+    }
+
+    @Test
     void testFindPersistedUuidV7EventWithDerivedDataAndUnknownId(@TempDir Path dir)
         throws Exception {
         var playerId = UUID.fromString("123e4567-e89b-12d3-a456-426614174510");
@@ -71,6 +99,8 @@ class DuckDbEventFindTest {
             var detail = storage.findEvent(eventId).orElseThrow();
             var event = detail.event();
             Assertions.assertEquals(page.events().getFirst(), event);
+            Assertions.assertEquals(submission.payload(), event.payload().orElseThrow().bytes());
+            Assertions.assertEquals(new PayloadGeneration(2), event.payload().orElseThrow().generation());
             Assertions.assertEquals(eventId, event.eventId());
             Assertions.assertEquals(CHAT, event.eventType());
             Assertions.assertEquals(new PayloadGeneration(2), detail.payloadGeneration());

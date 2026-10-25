@@ -30,9 +30,10 @@ public record SearchPage(
     }
 
     /**
-     * Common event fields needed by platform search rendering.
+     * Event fields needed by platform search rendering.
      *
-     * <p>Payload generation, expiry and raw payload are intentionally not exposed here.</p>
+     * <p>Searches only include payloads up to the storage search byte budget. Detail lookups
+     * include the full payload. No decoding happens in the storage layer.</p>
      *
      * @param actorName the latest observed name of a player actor
      */
@@ -46,7 +47,8 @@ public record SearchPage(
         Optional<EventActor> actor,
         Optional<String> actorName,
         Optional<Key> targetType,
-        Optional<String> searchText
+        Optional<String> searchText,
+        Optional<StoredPayload> payload
     ) {
 
         public Event {
@@ -60,6 +62,23 @@ public record SearchPage(
             Objects.requireNonNull(actorName, "actorName");
             Objects.requireNonNull(targetType, "targetType");
             Objects.requireNonNull(searchText, "searchText");
+            Objects.requireNonNull(payload, "payload");
+        }
+
+        public Event(
+            UUID eventId,
+            Key eventType,
+            Instant occurredAt,
+            Optional<Key> server,
+            Optional<Key> world,
+            Optional<BlockPosition> position,
+            Optional<EventActor> actor,
+            Optional<String> actorName,
+            Optional<Key> targetType,
+            Optional<String> searchText
+        ) {
+            this(eventId, eventType, occurredAt, server, world, position, actor, actorName,
+                targetType, searchText, Optional.empty());
         }
 
         public SearchRequest.Cursor cursor(SearchRequest.Direction direction) {
