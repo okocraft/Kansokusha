@@ -73,7 +73,7 @@ class InspectionSearchHandlerTest {
             SearchCommandMessages.RESULT.apply(
                 net.okocraft.kansokusha.paper.builtin.PaperEventPresenter.renderer(
                     java.time.Clock.fixed(event.occurredAt(), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC)
-                    .row(event, true, false)
+                    .withDebug(false).row(event, true, false)
             )
         );
     }

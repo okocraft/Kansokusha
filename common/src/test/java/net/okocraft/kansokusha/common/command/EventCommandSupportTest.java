@@ -37,6 +37,18 @@ class EventCommandSupportTest {
     private static final Instant EXPIRES_AT = Instant.parse("2026-10-27T09:00:00Z");
 
     @Test
+    void testSavedDataViewsRequireDebugPermissionBeforeLookup() {
+        var api = new TestApi();
+        for (var view : List.of("record", "raw")) {
+            var messages = new ArrayList<Component>();
+            Assertions.assertFalse(EventCommandSupport.execute(api, EVENT_ID.toString(), permission -> false,
+                messages::add, EventRenderer.generic(java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC), view, 1));
+            Assertions.assertNull(api.lookupId);
+            Assertions.assertEquals(List.of(EventCommandMessages.PERMISSION_DENIED.asComponent()), messages);
+        }
+    }
+
+    @Test
     void testInvalidUuidSyntaxDoesNotLookup() {
         var api = new TestApi();
         var messages = new ArrayList<Component>();

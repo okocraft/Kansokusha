@@ -23,6 +23,7 @@ import java.util.function.Predicate;
 public final class EventCommandSupport {
 
     public static final String PERMISSION = "kansokusha.command.event";
+    public static final String DEBUG_PERMISSION = "kansokusha.command.event.debug";
 
     /**
      * Looks up one event and sends its details asynchronously.
@@ -51,8 +52,17 @@ public final class EventCommandSupport {
 
     public static boolean execute(EventSearchBackend backend, String rawEventId, Predicate<String> hasPermission,
                                   Consumer<Component> sendMessage, EventRenderer renderer, String view, int page) {
-        return lookup(backend, rawEventId, hasPermission, sendMessage,
-            detail -> renderer.view(detail, view, page).forEach(sendMessage));
+        if ((view.equals("record") || view.equals("raw")) && !hasPermission.test(DEBUG_PERMISSION)) {
+            sendMessage.accept(EventCommandMessages.PERMISSION_DENIED.asComponent());
+            return false;
+        }
+        return lookup(backend, rawEventId, hasPermission, sendMessage, detail -> {
+            if ((view.equals("record") || view.equals("raw")) && !hasPermission.test(DEBUG_PERMISSION)) {
+                sendMessage.accept(EventCommandMessages.PERMISSION_DENIED.asComponent());
+                return;
+            }
+            renderer.withDebug(hasPermission.test(DEBUG_PERMISSION)).view(detail, view, page).forEach(sendMessage);
+        });
     }
 
     public static boolean lookup(EventSearchBackend backend, String rawEventId, Predicate<String> hasPermission,

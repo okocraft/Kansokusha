@@ -133,6 +133,12 @@ This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for mor
 
 Copyright © 2026, OKOCRAFT
 
+`kansokusha.command.event.debug` permits technical event information, actor UUID hovers,
+and the `record` / `raw` saved-data views. Without it, known player names have no UUID hover,
+record metadata and payload buttons are hidden, and direct saved-data view requests are denied.
+Paper defaults this permission to false, including for operators; grant it explicitly to developers.
+Console output still includes addressable event IDs for searches.
+
 ### Adopting concise action messages
 
 Existing language customizations are preserved. To adopt the concise +/- defaults, back up

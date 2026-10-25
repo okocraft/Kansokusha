@@ -203,6 +203,15 @@ class PaperEventPresenterTest {
     }
 
     @Test
+    void testPayloadEntityUuidHoverFollowsDebugPermission() {
+        var owner = new CompoundTag();
+        owner.putString("uuid", "123e4567-e89b-12d3-a456-426614174501");
+        owner.putString("type", "minecraft:player");
+        Assertions.assertNull(PaperPayloadDisplay.preview(owner, "new_owner", false).hoverEvent());
+        Assertions.assertNotNull(PaperPayloadDisplay.preview(owner, "new_owner", true).hoverEvent());
+    }
+
+    @Test
     void testChangeMarkersAndAbsoluteContainerQuantities(@TempDir Path dir) throws Exception {
         LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
         for (var type : java.util.List.of("block_break", "block_place", "bucket_fill", "bucket_empty",
