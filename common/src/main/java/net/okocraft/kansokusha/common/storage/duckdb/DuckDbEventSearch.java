@@ -417,7 +417,7 @@ final class DuckDbEventSearch {
             Optional.ofNullable(rows.getString("actor_name")),
             optionalKey(rows.getString("target_type")),
             Optional.ofNullable(rows.getString("search_text")),
-            Optional.ofNullable(rows.getBytes("display_payload")).map(bytes -> new StoredPayload(
+            Optional.ofNullable(rows.getBytes(rows.findColumn("display_payload"))).map(bytes -> new StoredPayload(
                 generation,
                 EventPayload.takeOwnership(bytes)
             ))
