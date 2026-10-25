@@ -67,7 +67,8 @@ final class SearchCommand {
             sender::hasPermission,
             sender::sendMessage,
             player != null,
-            origin
+            origin,
+            command -> CommandNavigation.remember(sender, command)
         );
         return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, PaperEventPresenter.renderer(clock, timezone))
             ? Command.SINGLE_SUCCESS

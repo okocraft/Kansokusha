@@ -142,3 +142,9 @@ records; left-clicking still shows every visible event at the selected coordinat
 chests search both halves as an OR group, with the same filter retained during pagination
 and in the full-search link. Automatic transfer/pickup records describe observed operations;
 only container transaction deltas represent committed net inventory changes.
+
+Event overview, full-text, item and record views provide a back-to-results link after a
+search or inspection. The last displayed page is held per sender, including its cursor
+and container mode, and discarded on logout or plugin shutdown. Opening an event with
+no preceding results does not show a back link. Returning re-runs the query; results are
+not a frozen snapshot of the database.

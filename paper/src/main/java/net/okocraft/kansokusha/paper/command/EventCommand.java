@@ -36,7 +36,8 @@ final class EventCommand {
                         StringArgumentType.getString(context, "event-id"),
                         sender::hasPermission,
                         sender::sendMessage,
-                        PaperEventPresenter.renderer(clock, timezone)
+                        PaperEventPresenter.renderer(clock, timezone).withReturnCommand(
+                            net.okocraft.kansokusha.common.command.SearchNavigation.last(CommandNavigation.key(sender)))
                     ) ? Command.SINGLE_SUCCESS : 0;
                 })
                 .then(Commands.literal("read")
@@ -48,14 +49,16 @@ final class EventCommand {
                     .executes(context -> {
                         var source = context.getSource().getSender();
                         return EventCommandSupport.execute(backend, StringArgumentType.getString(context, "event-id"),
-                            source::hasPermission, source::sendMessage, PaperEventPresenter.renderer(clock, timezone),
+                            source::hasPermission, source::sendMessage, PaperEventPresenter.renderer(clock, timezone).withReturnCommand(
+                                net.okocraft.kansokusha.common.command.SearchNavigation.last(CommandNavigation.key(source))),
                             StringArgumentType.getString(context, "view"), 1) ? Command.SINGLE_SUCCESS : 0;
                     })
                     .then(Commands.argument("page", IntegerArgumentType.integer(1))
                         .executes(context -> {
                             var source = context.getSource().getSender();
                             return EventCommandSupport.execute(backend, StringArgumentType.getString(context, "event-id"),
-                                source::hasPermission, source::sendMessage, PaperEventPresenter.renderer(clock, timezone),
+                                source::hasPermission, source::sendMessage, PaperEventPresenter.renderer(clock, timezone).withReturnCommand(
+                                net.okocraft.kansokusha.common.command.SearchNavigation.last(CommandNavigation.key(source))),
                                 StringArgumentType.getString(context, "view"), IntegerArgumentType.getInteger(context, "page"))
                                 ? Command.SINGLE_SUCCESS : 0;
                         }))));

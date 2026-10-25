@@ -29,6 +29,7 @@ public final class EventRenderer {
 
     public enum NameKind { BLOCK, ITEM, ENTITY, OTHER }
 
+    private final Optional<String> returnCommand;
     private final Clock clock;
     private final ZoneId timezone;
     private final EventPresenter presenter;
@@ -36,10 +37,26 @@ public final class EventRenderer {
 
     public EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
                          BiFunction<Key, NameKind, Component> names) {
+        this(clock, timezone, presenter, names, Optional.empty());
+    }
+
+    private EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
+                          BiFunction<Key, NameKind, Component> names, Optional<String> returnCommand) {
+        this.returnCommand = returnCommand;
         this.clock = clock;
         this.timezone = timezone;
         this.presenter = presenter;
         this.names = names;
+    }
+
+    public EventRenderer withReturnCommand(Optional<String> command) {
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, command);
+    }
+
+    private Component backLink(Component navigation) {
+        return this.returnCommand.map(command -> navigation.append(Component.space())
+            .append(EventPresentationMessages.BACK.asComponent().clickEvent(ClickEvent.runCommand(command))))
+            .orElse(navigation);
     }
 
     public static EventRenderer generic(Clock clock, ZoneId timezone) {
@@ -125,11 +142,11 @@ public final class EventRenderer {
                     .clickEvent(ClickEvent.runCommand(command(event.eventId(), entry.getKey(), 1))));
             }
         }
-        result.add(actions);
+        result.add(backLink(actions));
         return List.copyOf(result);
     }
 
-    private static List<Component> section(UUID id, String view, int page, List<Component> lines) {
+    private List<Component> section(UUID id, String view, int page, List<Component> lines) {
         var pages = Math.max(1, (lines.size() + 7) / 8);
         if (page < 1 || page > pages) {
             return List.of(EventPresentationMessages.INVALID_VIEW.asComponent());
@@ -146,7 +163,7 @@ public final class EventRenderer {
             navigation = navigation.append(Component.space()).append(SearchCommandMessages.NEXT.asComponent()
                 .clickEvent(ClickEvent.runCommand(command(id, view, page + 1))));
         }
-        result.add(navigation);
+        result.add(backLink(navigation));
         return List.copyOf(result);
     }
 

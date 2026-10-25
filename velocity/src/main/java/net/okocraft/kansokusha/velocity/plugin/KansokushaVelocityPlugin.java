@@ -61,6 +61,7 @@ public final class KansokushaVelocityPlugin {
         this.runtime = runtime;
 
         var listeners = List.of(
+            new net.okocraft.kansokusha.velocity.command.CommandNavigation(),
             VelocityServerConnectedListener.register(runtime, this.logger),
             VelocityPlayerSessionListener.register(runtime, this.logger),
             VelocityChatSubscriber.register(runtime),
@@ -83,6 +84,7 @@ public final class KansokushaVelocityPlugin {
     @Subscribe(priority = Short.MAX_VALUE)
     public void onProxyShutdown(ProxyShutdownEvent event) {
         LanguageProvider.unload();
+        net.okocraft.kansokusha.common.command.SearchNavigation.clear();
 
         var runtime = this.runtime;
         if (runtime != null) {

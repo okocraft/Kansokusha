@@ -97,6 +97,8 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                     return;
                 }
 
+                if (currentPlayer.isOnline()) net.okocraft.kansokusha.common.command.SearchNavigation.remember(playerId,
+                    pageCommand(target, cursor, container, positions));
                 var position = target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z();
                 if (page.events().stream().noneMatch(event -> currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType())))) {
                     currentPlayer.sendMessage(InspectionSearchMessages.NO_HISTORY.apply(position));
@@ -140,10 +142,15 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
 
     public static String pageCommand(SearchQuery.Position target, SearchRequest.Cursor cursor, boolean container,
                                      java.util.Set<SearchQuery.Position> positions) {
+        return pageCommand(target, Optional.of(cursor), container, positions);
+    }
+
+    public static String pageCommand(SearchQuery.Position target, Optional<SearchRequest.Cursor> cursor, boolean container,
+                                     java.util.Set<SearchQuery.Position> positions) {
         var extra = container ? " container" + positions.stream().filter(position -> !position.equals(target))
             .map(position -> " " + position.x() + " " + position.y() + " " + position.z()).collect(java.util.stream.Collectors.joining()) : "";
         return "/kansokusha inspect page " + target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z()
-            + " " + SearchCommandSupport.serializeCursor(cursor) + extra;
+            + " " + cursor.map(SearchCommandSupport::serializeCursor).orElse("first") + extra;
     }
 
 }

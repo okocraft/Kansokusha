@@ -58,6 +58,7 @@ public final class EventPresentationMessages {
     public static final MessageKey HINT = DEFINER.define("kansokusha.display.compact.hint",
         "Hover for context; click a row for details");
     public static final MessageKey RECORD = DEFINER.define("kansokusha.display.compact.record", "[Record information]");
+    public static final MessageKey BACK = DEFINER.define("kansokusha.display.compact.back", "[Back to results]");
     public static final MessageKey FULL = DEFINER.define("kansokusha.display.compact.full", "[Full text]");
     public static final MessageKey RAW = DEFINER.define("kansokusha.display.compact.raw", "[Saved data]");
     public static final MessageKey OVERVIEW = DEFINER.define("kansokusha.display.compact.overview", "[Overview]");

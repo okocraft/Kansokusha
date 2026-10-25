@@ -69,6 +69,25 @@ class CompactEventViewTest {
         Assertions.assertEquals(List.of(EventPresentationMessages.INVALID_VIEW.asComponent()), renderer.view(detail, "text", Integer.MAX_VALUE));
     }
 
+    @Test
+    void testReturnLinkIsAvailableOnOverviewAndPagedViewsOnlyWithContext() {
+        var event = new SearchPage.Event(UUID.randomUUID(), Key.key("custom:event"), Instant.now(),
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("body"));
+        var detail = new EventDetail(event, PayloadGeneration.FIRST, Instant.now().plusSeconds(60));
+        var command = "/kansokusha search user Alice __cursor=next,1," + UUID.randomUUID();
+        var renderer = EventRenderer.generic(Clock.systemUTC(), ZoneOffset.UTC);
+        for (var view : List.of("", "text", "record")) {
+            var lines = renderer.withReturnCommand(Optional.of(command)).view(detail, view, 1);
+            Assertions.assertTrue(hasClick(lines.getLast(), net.kyori.adventure.text.event.ClickEvent.runCommand(command)));
+            Assertions.assertFalse(hasClick(renderer.view(detail, view, 1).getLast(),
+                net.kyori.adventure.text.event.ClickEvent.runCommand(command)));
+        }
+    }
+
+    private static boolean hasClick(Component component, net.kyori.adventure.text.event.ClickEvent<?> expected) {
+        return expected.equals(component.clickEvent()) || component.children().stream().anyMatch(child -> hasClick(child, expected));
+    }
+
     private static String plain(Component component) {
         var value = GlobalTranslator.render(component, Locale.ENGLISH);
         var text = new StringBuilder(value instanceof TextComponent part ? part.content() : "");

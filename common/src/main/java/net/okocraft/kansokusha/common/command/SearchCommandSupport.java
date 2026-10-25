@@ -106,6 +106,7 @@ public final class SearchCommandSupport {
                     return;
                 }
                 renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission(), SearchDisplayScope.of(query), source.player());
+                source.rememberPage().accept("/kansokusha search" + (rawInput.isBlank() ? "" : " " + rawInput.strip()));
             });
         return true;
     }
@@ -380,8 +381,13 @@ public final class SearchCommandSupport {
         Predicate<String> hasPermission,
         Consumer<Component> sendMessage,
         boolean player,
-        SearchQuery.@Nullable Position origin
+        SearchQuery.@Nullable Position origin,
+        Consumer<String> rememberPage
     ) {
+        public SearchSource(Predicate<String> hasPermission, Consumer<Component> sendMessage, boolean player,
+                            SearchQuery.@Nullable Position origin) {
+            this(hasPermission, sendMessage, player, origin, command -> { });
+        }
     }
 
     /**
