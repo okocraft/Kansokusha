@@ -81,10 +81,17 @@ public final class PaperEventPresenter implements EventPresenter {
             }
             if (view.targetKind() == EventRenderer.NameKind.BLOCK) {
                 var states = new ArrayList<Component>();
-                for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced")) {
+                for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced", "state")) {
                     var state = payload.get(field);
                     if (state instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
                         states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field)));
+                    }
+                }
+                if (event.targetType().isPresent()) {
+                    if (view.type().equals("block_break")) {
+                        states.add(properties(event.targetType().get(), payload));
+                    } else if (view.type().equals("block_place") && payload.get("placed") instanceof CompoundTag placed) {
+                        states.add(properties(event.targetType().get(), placed));
                     }
                 }
                 if (!states.isEmpty()) {
@@ -143,6 +150,14 @@ public final class PaperEventPresenter implements EventPresenter {
             return Optional.empty();
         }
     }
+    private static Component properties(net.kyori.adventure.key.Key type, CompoundTag properties) {
+        // These schemas deliberately store the type in common columns and only properties in the payload.
+        var state = new CompoundTag();
+        state.putString("id", type.asString());
+        state.put("properties", properties);
+        return PaperPayloadDisplay.stateHover(state);
+    }
+
     private static String label(String spec) {
         return spec.startsWith("$") || spec.startsWith("~") ? spec.substring(1) : spec;
     }

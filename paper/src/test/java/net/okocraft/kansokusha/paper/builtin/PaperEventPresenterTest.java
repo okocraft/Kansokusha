@@ -189,6 +189,19 @@ class PaperEventPresenterTest {
         System.out.println("Compact JA row: " + visible);
     }
 
+    @Test
+    void testBreakPropertiesRemainAccessibleOnTargetHover(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var state = net.minecraft.nbt.NbtUtils.writeBlockState(net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState());
+        var original = event("block_break", state.getCompoundOrEmpty("properties"));
+        var event = new SearchPage.Event(original.eventId(), original.eventType(), original.occurredAt(), original.server(),
+            original.world(), original.position(), original.actor(), original.actorName(), Optional.of(Key.key("minecraft:oak_log")),
+            original.searchText(), original.payload());
+        var row = this.renderer.row(event, true, false);
+        Assertions.assertFalse(plain(row, Locale.ENGLISH).contains("axis"));
+        Assertions.assertTrue(row.toString().contains("axis"));
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),
