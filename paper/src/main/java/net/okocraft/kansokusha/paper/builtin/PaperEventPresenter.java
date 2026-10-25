@@ -24,7 +24,7 @@ public final class PaperEventPresenter implements EventPresenter {
 
     private static Map<String, PaperEventView> views() {
         var views = new LinkedHashMap<String, PaperEventView>();
-        for (var group : List.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS)) {
+        for (var group : List.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS, PaperPlayerViews.VIEWS)) {
             for (var view : group) {
                 if (views.putIfAbsent(view.type(), view) != null) {
                     throw new IllegalStateException("Duplicate event view: " + view.type());
@@ -54,11 +54,20 @@ public final class PaperEventPresenter implements EventPresenter {
         try {
             var payload = PaperPayloadNbtCodec.decode(event.payload().get().bytes());
             var context = Component.empty();
-            for (var field : view.fields()) {
+            for (var spec : view.fields()) {
+                var field = spec.startsWith("~") ? spec.substring(1) : spec;
+                if (field.equals("$server") || field.equals("$world")) {
+                    var key = field.equals("$server") ? event.server() : event.world();
+                    if (key.isPresent()) {
+                        context = context.append(Component.text(" | ")).append(
+                            EventFieldMessages.field(field.substring(1), Component.text(key.get().asString())));
+                    }
+                    continue;
+                }
                 var value = payload.get(field);
                 if (value != null) {
                     context = context.append(Component.text(" | "))
-                        .append(EventFieldMessages.field(field, PaperPayloadDisplay.preview(value, field)));
+                        .append(EventFieldMessages.field(field, spec.startsWith("~") ? PaperPayloadDisplay.componentPreview(value) : PaperPayloadDisplay.preview(value, field)));
                 }
             }
             var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());

@@ -17,19 +17,23 @@ import java.time.Clock;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
 
 @NotNullByDefault
 public final class KansokushaCommands {
 
     public static List<Map<String, String>> getDefaultMessages() {
-        return List.of(
+        var defaults = new ArrayList<>(List.of(
             CommandMessages.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
-        );
+        ));
+        defaults.addAll(VelocityEventPresenter.defaultMessages());
+        return List.copyOf(defaults);
     }
 
     public static void register(
