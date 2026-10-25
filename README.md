@@ -133,6 +133,39 @@ This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for mor
 
 Copyright © 2026, OKOCRAFT
 
+`kansokusha.command.event.debug` permits technical event information, actor UUID hovers,
+and the `record` / `raw` saved-data views. Without it, known player names have no UUID hover,
+record metadata and payload buttons are hidden, and direct saved-data view requests are denied.
+Paper defaults this permission to false, including for operators; grant it explicitly to developers.
+Console output still includes addressable event IDs for searches.
+
+### Adopting concise action messages
+
+Existing language customizations are preserved. To adopt the concise +/- defaults, back up
+`languages/*.properties`, remove the `kansokusha.display.compact.event.*` entries, and restart.
+The added `kansokusha.display.compact.added` / `removed` keys control container marker colors;
+other marker colors are part of each event sentence. Item signs refer to player inventory,
+container signs to container contents, and bucket signs to liquid blocks.
+
 Inspection results have their own previous/next links under `kansokusha.command.inspect`.
 The hidden `inspect page` command accepts an exact world/X/Y/Z and a cursor only; it cannot
 run arbitrary search conditions. Search permission is not needed for these links.
+
+Right-clicking a container in inspection mode shows container transaction, pickup, and transfer
+records; left-clicking still shows every visible event at the selected coordinate. Double
+chests search both halves as an OR group, with the same filter retained during pagination
+and in the full-search link. Automatic transfer/pickup records describe observed operations;
+only container transaction deltas represent committed net inventory changes.
+
+Event overview, full-text, item and record views provide a back-to-results link after a
+search or inspection. The last displayed page is held per sender, including its cursor
+and container mode, and discarded on logout or plugin shutdown. Opening an event with
+no preceding results does not show a back link. Returning re-runs the query; results are
+not a frozen snapshot of the database.
+
+Paper/Folia players with `kansokusha.command.teleport` can click coordinates in search,
+inspection headers, and event details to run `/kansokusha teleport <world> <x> <y> <z>`.
+Only the coordinate segment teleports; the rest of a result row opens event details.
+The command uses the player's scheduler and async teleportation, targets the block center
+on X/Z, preserves yaw/pitch, and rejects unloaded worlds. World labels use their key value,
+with the complete key on hover. Velocity and console coordinates do not teleport.

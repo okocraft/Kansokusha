@@ -41,14 +41,14 @@ class PaperItemDisplayTest {
         var summary = new PaperEventPresenter().present(PaperEventPresenterTest.event("container_transfer", payload),
             false, renderer).orElseThrow().summary();
         var text = PaperEventPresenterTest.plain(summary, Locale.ENGLISH);
-        Assertions.assertTrue(text.contains("transfer attempt"), text);
+        Assertions.assertTrue(text.contains("transfer"), text);
         Assertions.assertTrue(text.contains("×12"), text);
         var delta = new CompoundTag();
         delta.putString("transfer_direction", "removed_from_container");
         delta.putInt("amount_delta", -12);
         var confirmed = new PaperEventPresenter().present(PaperEventPresenterTest.event("container_transaction", delta),
             false, renderer).orElseThrow().summary();
-        Assertions.assertTrue(PaperEventPresenterTest.plain(confirmed, Locale.ENGLISH).contains("-12"));
+        Assertions.assertTrue(PaperEventPresenterTest.plain(confirmed, Locale.ENGLISH).contains("x12"));
     }
 
     @Test

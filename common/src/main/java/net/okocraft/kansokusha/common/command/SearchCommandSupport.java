@@ -111,6 +111,7 @@ public final class SearchCommandSupport {
                     .allMatch(type -> source.hasPermission().test(eventPermission(type))) ? result.total() : java.util.OptionalLong.empty();
                 renderPage(source.sendMessage(), invocation.queryText(), result.page(), eventDetailsPermitted, renderer,
                     source.hasPermission(), SearchDisplayScope.of(query), source.player(), total, invocation.page(), result.request().limit());
+                source.rememberPage().accept("/kansokusha search" + (rawInput.isBlank() ? "" : " " + rawInput.strip()));
             });
         return true;
     }
@@ -277,7 +278,7 @@ public final class SearchCommandSupport {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
             return;
         }
-        scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
+        scope.header(renderer).ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
         if (!interactive && !page.events().isEmpty()) {
             sendMessage.accept(EventPresentationMessages.CONSOLE_HINT.asComponent());
         }
@@ -288,7 +289,7 @@ public final class SearchCommandSupport {
             if (!hasPermission.test(eventPermission(event.eventType()))) {
                 continue;
             }
-            var line = renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty());
+            var line = renderer.withDebug(hasPermission.test(EventCommandSupport.DEBUG_PERMISSION)).row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty());
             if (!interactive) {
                 line = line.append(Component.text(" [" + event.eventId() + "]"));
             }
@@ -417,8 +418,13 @@ public final class SearchCommandSupport {
         Predicate<String> hasPermission,
         Consumer<Component> sendMessage,
         boolean player,
-        SearchQuery.@Nullable Position origin
+        SearchQuery.@Nullable Position origin,
+        Consumer<String> rememberPage
     ) {
+        public SearchSource(Predicate<String> hasPermission, Consumer<Component> sendMessage, boolean player,
+                            SearchQuery.@Nullable Position origin) {
+            this(hasPermission, sendMessage, player, origin, command -> { });
+        }
     }
 
     /**

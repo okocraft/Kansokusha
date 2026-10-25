@@ -48,7 +48,7 @@ class KansokushaVelocityPluginTest {
         Assertions.assertTrue(Files.isRegularFile(dir.resolve("languages/ja.properties")));
 
         var listenerCaptor = ArgumentCaptor.forClass(Object.class);
-        Mockito.verify(eventManager, Mockito.times(5))
+        Mockito.verify(eventManager, Mockito.times(6))
             .register(Mockito.eq(plugin), listenerCaptor.capture());
         Mockito.verify(commandManager).register(
             Mockito.any(CommandMeta.class),
@@ -62,7 +62,8 @@ class KansokushaVelocityPluginTest {
                 VelocityPlayerSessionListener.class,
                 VelocityChatSubscriber.class,
                 VelocityCommandSubscriber.class,
-                VelocityBackendRegistryChangeListener.class
+                VelocityBackendRegistryChangeListener.class,
+                net.okocraft.kansokusha.velocity.command.CommandNavigation.class
             ),
             listeners.stream().map(Object::getClass).toList()
         );
