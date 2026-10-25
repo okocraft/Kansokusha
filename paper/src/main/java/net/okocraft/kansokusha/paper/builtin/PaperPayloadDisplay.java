@@ -2,15 +2,13 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ByteArrayTag;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtAccounter;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
@@ -18,6 +16,9 @@ import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventRenderer;
 import org.jetbrains.annotations.NotNullByDefault;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,6 +45,12 @@ final class PaperPayloadDisplay {
             if (compound.contains("result") && compound.contains("ingredients")) {
                 return preview(compound.get("ingredients"), "ingredients").append(Component.text(" → "))
                     .append(preview(compound.get("result"), "result"));
+            }
+            if (compound.contains("uuid")) {
+                var type = compound.getStringOr("type", "");
+                var name = type.isEmpty() ? EventFieldMessages.label(field)
+                    : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.ENTITY);
+                return name.hoverEvent(HoverEvent.showText(Component.text(compound.getStringOr("uuid", ""))));
             }
             if (compound.contains("Name")) {
                 return PaperEventNames.name(Key.key(compound.getStringOr("Name", "minecraft:air")),
@@ -74,7 +81,7 @@ final class PaperPayloadDisplay {
             if (field.equals("component") || field.equals("death_message")) {
                 value = componentText(value);
             }
-            return Component.text(EventRenderer.preview(value));
+            return EventFieldMessages.value(field, EventRenderer.preview(value));
         }
         return Component.text(EventRenderer.preview(tag.toString()));
     }

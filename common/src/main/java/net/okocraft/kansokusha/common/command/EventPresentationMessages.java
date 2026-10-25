@@ -17,6 +17,8 @@ public final class EventPresentationMessages {
     public static final MessageKey SOON = DEFINER.define("kansokusha.display.time.soon", "in less than a minute");
     public static final MessageKey UNAVAILABLE = DEFINER.define("kansokusha.display.unavailable",
         "Payload unavailable or unsupported; showing common fields");
+    public static final MessageKey NO_ACTOR = DEFINER.define("kansokusha.display.no-actor", "(actor not recorded)");
+    public static final MessageKey MORE_IN_DETAILS = DEFINER.define("kansokusha.display.more-in-details", "(payload omitted; see details)");
     private static final Map<String, MessageKey.Arg1<Long>> RELATIVE = new LinkedHashMap<>();
 
     static {

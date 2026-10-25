@@ -1,19 +1,19 @@
 package net.okocraft.kansokusha.paper.inspection;
 
 import net.kyori.adventure.text.event.ClickEvent;
-import net.okocraft.kansokusha.common.command.EventRenderer;
-import java.time.Clock;
-import java.time.ZoneId;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
+import net.okocraft.kansokusha.common.command.EventRenderer;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
+import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 import org.bukkit.Server;
 import org.jetbrains.annotations.NotNullByDefault;
-import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
 
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -84,8 +84,11 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
 
                 currentPlayer.sendMessage(InspectionSearchMessages.HISTORY.apply(position));
                 for (var event : page.events()) {
+                    if (!currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType()))) {
+                        continue;
+                    }
                     currentPlayer.sendMessage(SearchCommandMessages.RESULT.apply(
-                        this.renderer.row(event, eventDetailsPermitted, false)
+                        this.renderer.row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
                     ));
                 }
                 if (fullSearchPermitted && page.nextCursor().isPresent()) {

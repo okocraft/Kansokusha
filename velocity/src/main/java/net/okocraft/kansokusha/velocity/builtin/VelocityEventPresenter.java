@@ -78,7 +78,7 @@ public final class VelocityEventPresenter implements EventPresenter {
             for (var field : view.summaryFields()) {
                 if (facts.containsKey(field)) {
                     context = context.append(Component.text(" | ")).append(EventFieldMessages.field(field,
-                        Component.text(EventRenderer.preview(facts.get(field)))));
+                        EventFieldMessages.value(field, EventRenderer.preview(facts.get(field)))));
                 }
             }
             var lines = new ArrayList<Component>();

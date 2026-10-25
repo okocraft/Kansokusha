@@ -2,7 +2,6 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.text.Component;
 import net.minecraft.nbt.CompoundTag;
-import net.okocraft.kansokusha.common.command.EventRenderer;
 import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
 import org.bukkit.Material;

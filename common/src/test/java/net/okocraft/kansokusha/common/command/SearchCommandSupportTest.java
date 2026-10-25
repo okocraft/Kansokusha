@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.common.command;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.position.BlockPosition;
@@ -231,6 +230,24 @@ class SearchCommandSupportTest {
         ).join().values();
     }
 
+    @Test
+    void testRevokedEventPermissionIsCheckedBeforePayloadPresentation() {
+        this.backend.metadata = metadata(BREAK);
+        this.backend.pending = new CompletableFuture<>();
+        var permitted = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var renderer = new EventRenderer(CLOCK, ZoneOffset.UTC, (event, detailed, context) -> {
+            calls.incrementAndGet();
+            return Optional.empty();
+        }, (key, kind) -> Component.text(key.asString()));
+        var source = new SearchCommandSupport.SearchSource(permission -> permitted.get(), this.messages::add, true, null);
+        SearchCommandSupport.execute(this.backend, source, "", CLOCK, ZoneOffset.UTC, renderer);
+        permitted.set(false);
+        this.backend.pending.complete(new SearchPage(List.of(event()), Optional.empty(), Optional.empty()));
+        Assertions.assertEquals(0, calls.get());
+        Assertions.assertTrue(this.messages.isEmpty());
+    }
+
     private static SearchMetadata metadata(Key... eventTypes) {
         var events = new java.util.LinkedHashMap<Key, SearchMetadata.EventValues>();
         for (var eventType : eventTypes) {
@@ -261,6 +278,7 @@ class SearchCommandSupportTest {
         private List<String> playerNames = List.of();
         private SearchPage page = new SearchPage(List.of(), Optional.empty(), Optional.empty());
         private @Nullable Throwable failure;
+        private CompletableFuture<SearchPage> pending;
 
         private SearchRequest lastRequest() {
             return this.requests.getLast();
@@ -279,6 +297,9 @@ class SearchCommandSupportTest {
         @Override
         public CompletableFuture<SearchPage> search(SearchRequest request) {
             this.requests.add(request);
+            if (this.pending != null) {
+                return this.pending;
+            }
             return this.failure != null
                 ? CompletableFuture.failedFuture(this.failure)
                 : CompletableFuture.completedFuture(this.page);
