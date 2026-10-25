@@ -84,7 +84,7 @@ public final class PaperEventPresenter implements EventPresenter {
                 for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced", "state")) {
                     var state = payload.get(field);
                     if (state instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
-                        states.add(EventFieldMessages.field(field, renderer.debug() ? PaperPayloadDisplay.hoverValue(state, field) : PaperPayloadDisplay.preview(state, field, false)));
+                        states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field, renderer.debug())));
                     }
                 }
                 if (event.targetType().isPresent()) {

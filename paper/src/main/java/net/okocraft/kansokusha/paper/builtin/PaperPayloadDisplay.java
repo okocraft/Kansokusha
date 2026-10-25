@@ -124,10 +124,14 @@ final class PaperPayloadDisplay {
     }
 
     static Component hoverValue(Tag tag, String field) {
+        return hoverValue(tag, field, true);
+    }
+
+    static Component hoverValue(Tag tag, String field, boolean debug) {
         if (tag instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
-            return preview(tag, field).hoverEvent(null).append(Component.newline()).append(stateHover(compound));
+            return preview(tag, field, debug).hoverEvent(null).append(Component.newline()).append(stateHover(compound, debug));
         }
-        return preview(tag, field);
+        return preview(tag, field, debug);
     }
 
     static Component stateHover(CompoundTag compound) {
