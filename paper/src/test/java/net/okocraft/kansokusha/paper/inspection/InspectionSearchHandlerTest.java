@@ -71,7 +71,7 @@ class InspectionSearchHandlerTest {
         );
         Mockito.verify(fixture.player()).sendMessage(
             SearchCommandMessages.RESULT.apply(
-                net.okocraft.kansokusha.common.command.EventRenderer.generic(
+                net.okocraft.kansokusha.paper.builtin.PaperEventPresenter.renderer(
                     java.time.Clock.fixed(event.occurredAt(), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC)
                     .row(event, true, false)
             )

@@ -72,7 +72,13 @@ public final class VelocityEventPresenter implements EventPresenter {
     @Override
     public Optional<Content> present(SearchPage.Event event, boolean detailed, EventRenderer renderer) {
         var view = event.eventType().namespace().equals("kansokusha") ? VIEWS.get(event.eventType().value()) : null;
-        if (view == null || event.payload().isEmpty() || event.payload().get().generation().value() != 1) {
+        if (view == null) {
+            return Optional.empty();
+        }
+        if (event.payload().isEmpty()) {
+            return Optional.of(view.sentence().withoutPayload(event, renderer, event.server().map(key -> Component.text(key.asString())).orElse(Component.empty())));
+        }
+        if (event.payload().get().generation().value() != 1) {
             return Optional.empty();
         }
         try {
