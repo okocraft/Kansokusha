@@ -88,6 +88,21 @@ class CompactEventViewTest {
         return expected.equals(component.clickEvent()) || component.children().stream().anyMatch(child -> hasClick(child, expected));
     }
 
+    @Test
+    void testDebugPermissionHidesMetadataButtonsAndKnownPlayerUuid() {
+        var playerId = UUID.randomUUID();
+        var event = new SearchPage.Event(UUID.randomUUID(), Key.key("custom:event"), Instant.now(),
+            Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.of(new net.okocraft.kansokusha.api.actor.PlayerActor(playerId)), Optional.of("Alice"),
+            Optional.empty(), Optional.empty());
+        var renderer = EventRenderer.generic(Clock.systemUTC(), ZoneOffset.UTC).withDebug(false);
+        Assertions.assertNull(renderer.actor(event).hoverEvent());
+        var detail = new EventDetail(event, PayloadGeneration.FIRST, Instant.now().plusSeconds(60));
+        Assertions.assertFalse(renderer.detail(detail).toString().contains("record " ));
+        Assertions.assertEquals(List.of(EventCommandMessages.PERMISSION_DENIED.asComponent()), renderer.view(detail, "raw", 1));
+        Assertions.assertNotNull(renderer.withDebug(true).actor(event).hoverEvent());
+    }
+
     private static String plain(Component component) {
         var value = GlobalTranslator.render(component, Locale.ENGLISH);
         var text = new StringBuilder(value instanceof TextComponent part ? part.content() : "");

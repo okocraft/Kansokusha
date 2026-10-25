@@ -111,7 +111,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                         continue;
                     }
                     currentPlayer.sendMessage(SearchCommandMessages.RESULT.apply(
-                        this.renderer.row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
+                        this.renderer.withDebug(currentPlayer.hasPermission(EventCommandSupport.DEBUG_PERMISSION)).row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
                     ));
                 }
                 net.kyori.adventure.text.Component navigation = net.kyori.adventure.text.Component.empty();

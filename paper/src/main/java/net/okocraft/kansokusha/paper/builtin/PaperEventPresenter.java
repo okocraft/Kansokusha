@@ -70,8 +70,9 @@ public final class PaperEventPresenter implements EventPresenter {
             var payload = PaperPayloadNbtCodec.decode(event.payload().get().bytes());
             var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());
             var hover = new ArrayList<Component>();
+            hover.add(PaperViewMessages.OPERATION_SCOPE.asComponent());
             for (var spec : view.fields()) {
-                var value = field(event, payload, spec);
+                var value = field(event, payload, spec, renderer.debug());
                 if (value != null) {
                     hover.add(EventFieldMessages.field(label(spec), value));
                 }
@@ -84,14 +85,14 @@ public final class PaperEventPresenter implements EventPresenter {
                 for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced", "state")) {
                     var state = payload.get(field);
                     if (state instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
-                        states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field)));
+                        states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field, renderer.debug())));
                     }
                 }
                 if (event.targetType().isPresent()) {
                     if (view.type().equals("block_break")) {
-                        states.add(properties(event.targetType().get(), payload));
+                        states.add(properties(event.targetType().get(), payload, renderer.debug()));
                     } else if (view.type().equals("block_place") && payload.get("placed") instanceof CompoundTag placed) {
-                        states.add(properties(event.targetType().get(), placed));
+                        states.add(properties(event.targetType().get(), placed, renderer.debug()));
                     }
                 }
                 if (!states.isEmpty()) {
@@ -101,12 +102,12 @@ public final class PaperEventPresenter implements EventPresenter {
             if (!view.quantity().isEmpty()) {
                 if (view.quantity().equals("amount_delta")) {
                     var delta = payload.getIntOr("amount_delta", 0);
-                    target = target.append(Component.text(" " + (delta > 0 ? "+" : "") + delta));
+                    target = target.append(Component.text(" x" + Math.abs((long) delta)));
                 } else {
                     var item = PaperPayloadDisplay.at(payload, view.quantity());
                     if (item != null) {
                         // The item view contains the type once, alongside its saved quantity.
-                        target = PaperPayloadDisplay.preview(item, view.quantity());
+                        target = PaperPayloadDisplay.preview(item, view.quantity(), renderer.debug());
                     }
                 }
             }
@@ -115,12 +116,19 @@ public final class PaperEventPresenter implements EventPresenter {
             if (event.actor().isEmpty() && payload.contains("source_name")) {
                 context = Component.space().append(Component.text(EventRenderer.preview(payload.getStringOr("source_name", "")))).append(context);
             }
+            var actor = renderer.actor(event);
+            if (view.type().equals("container_transaction")) {
+                var delta = payload.getIntOr("amount_delta", 0);
+                if (delta != 0) actor = (delta > 0 ? PaperViewMessages.ADDED : PaperViewMessages.REMOVED)
+                    .asComponent().append(Component.space()).append(actor);
+            }
             var details = new ArrayList<Component>();
+            if (detailed) details.add(PaperViewMessages.OPERATION_SCOPE.asComponent());
             var sections = new LinkedHashMap<String, Section>();
             sections.put("raw", new Section(EventPresentationMessages.RAW.asComponent(), () -> PaperPayloadDisplay.details(payload)));
             if (detailed) {
                 for (var spec : view.primary()) {
-                    var value = field(event, payload, spec);
+                    var value = field(event, payload, spec, renderer.debug());
                     if (value == null) {
                         continue;
                     }
@@ -144,25 +152,25 @@ public final class PaperEventPresenter implements EventPresenter {
             if (detailed && PaperRecordedItems.hasItems(payload)) {
                 sections.put("items", new Section(PaperViewMessages.ITEMS.asComponent(), () -> PaperRecordedItems.items(payload, event.eventId())));
             }
-            return Optional.of(new Content(view.sentence().summary(renderer.actor(event), EventPresentationMessages.TARGET.apply(target), context),
+            return Optional.of(new Content(view.sentence().summary(actor, EventPresentationMessages.TARGET.apply(target), context),
                 details, EventRenderer.join(hover), sections));
         } catch (IOException | IllegalArgumentException e) {
             return Optional.empty();
         }
     }
-    private static Component properties(net.kyori.adventure.key.Key type, CompoundTag properties) {
+    private static Component properties(net.kyori.adventure.key.Key type, CompoundTag properties, boolean debug) {
         // These schemas deliberately store the type in common columns and only properties in the payload.
         var state = new CompoundTag();
         state.putString("id", type.asString());
         state.put("properties", properties);
-        return PaperPayloadDisplay.stateHover(state);
+        return PaperPayloadDisplay.stateHover(state, debug);
     }
 
     private static String label(String spec) {
         return spec.startsWith("$") || spec.startsWith("~") ? spec.substring(1) : spec;
     }
 
-    private static @org.jetbrains.annotations.Nullable Component field(SearchPage.Event event, CompoundTag payload, String spec) {
+    private static @org.jetbrains.annotations.Nullable Component field(SearchPage.Event event, CompoundTag payload, String spec, boolean debug) {
         var label = label(spec);
         if (spec.equals("$server") || spec.equals("$world")) {
             return (spec.equals("$server") ? event.server() : event.world()).map(key -> (Component) Component.text(key.asString())).orElse(null);
@@ -172,6 +180,6 @@ public final class PaperEventPresenter implements EventPresenter {
             return null;
         }
         return spec.startsWith("~") ? Component.text(EventRenderer.preview(PaperPayloadDisplay.text(value, spec)))
-            : PaperPayloadDisplay.preview(value, label);
+            : PaperPayloadDisplay.preview(value, label, debug);
     }
 }

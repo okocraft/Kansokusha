@@ -29,6 +29,7 @@ public final class EventRenderer {
 
     public enum NameKind { BLOCK, ITEM, ENTITY, OTHER }
 
+    private final boolean debug;
     private final Optional<String> returnCommand;
     private final Clock clock;
     private final ZoneId timezone;
@@ -37,11 +38,12 @@ public final class EventRenderer {
 
     public EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
                          BiFunction<Key, NameKind, Component> names) {
-        this(clock, timezone, presenter, names, Optional.empty());
+        this(clock, timezone, presenter, names, true, Optional.empty());
     }
 
     private EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
-                          BiFunction<Key, NameKind, Component> names, Optional<String> returnCommand) {
+                          BiFunction<Key, NameKind, Component> names, boolean debug, Optional<String> returnCommand) {
+        this.debug = debug;
         this.returnCommand = returnCommand;
         this.clock = clock;
         this.timezone = timezone;
@@ -49,15 +51,22 @@ public final class EventRenderer {
         this.names = names;
     }
 
+    public EventRenderer withDebug(boolean debug) {
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, debug, this.returnCommand);
+    }
+
     public EventRenderer withReturnCommand(Optional<String> command) {
-        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, command);
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, this.debug, command);
     }
 
     private Component backLink(Component navigation) {
-        return this.returnCommand.map(command -> navigation.append(Component.space())
-            .append(EventPresentationMessages.BACK.asComponent().clickEvent(ClickEvent.runCommand(command))))
-            .orElse(navigation);
+        return this.returnCommand.map(command -> {
+            var back = EventPresentationMessages.BACK.asComponent().clickEvent(ClickEvent.runCommand(command));
+            return navigation.equals(Component.empty()) ? back : navigation.append(Component.space()).append(back);
+        }).orElse(navigation);
     }
+
+    public boolean debug() { return this.debug; }
 
     public static EventRenderer generic(Clock clock, ZoneId timezone) {
         return new EventRenderer(clock, timezone, (event, detailed, renderer) -> Optional.empty(),
@@ -71,9 +80,9 @@ public final class EventRenderer {
     public Component actor(SearchPage.Event event) {
         return switch (event.actor().orElse(null)) {
             case null -> Component.empty();
-            case PlayerActor player -> SearchCommandSupport.withUuidHover(
+            case PlayerActor player -> !this.debug && event.actorName().isPresent() ? Component.text(event.actorName().get()) : SearchCommandSupport.withUuidHover(
                 event.actorName().map(name -> (Component) Component.text(name)).orElse(EventCommandMessages.ACTOR_PLAYER.asComponent()), player.uniqueId());
-            case EntityActor entity -> SearchCommandSupport.withUuidHover(
+            case EntityActor entity -> !this.debug ? this.name(entity.entityType(), NameKind.ENTITY) : SearchCommandSupport.withUuidHover(
                 this.name(entity.entityType(), NameKind.ENTITY), entity.uniqueId());
             case BlockActor block -> this.name(block.blockType(), NameKind.BLOCK);
         };
@@ -111,8 +120,10 @@ public final class EventRenderer {
 
     public List<Component> view(EventDetail detail, String view, int page) {
         var event = detail.event();
+        if (!this.debug && (view.equals("record") || view.equals("raw"))) {
+            return List.of(EventCommandMessages.PERMISSION_DENIED.asComponent());
+        }
         var content = this.content(event, true);
-        var metadata = EventCommandSupport.metadata(detail, this);
         if (!view.isEmpty()) {
             Supplier<List<Component>> lines = view.equals("record") ? () -> {
                 var all = new ArrayList<>(EventCommandSupport.commonFields(detail, this));
@@ -134,15 +145,17 @@ public final class EventRenderer {
         if (event.world().isPresent() || event.server().isPresent() || event.position().isPresent()) {
             result.add(EventCommandMessages.DETAIL_LINE.apply(EventPresentationMessages.LOCATION.asComponent(), location(event, true)));
         }
-        var actions = EventPresentationMessages.RECORD.asComponent().hoverEvent(HoverEvent.showText(join(metadata)))
-            .clickEvent(ClickEvent.runCommand(command(event.eventId(), "record", 1)));
+        Component actions = this.debug ? EventPresentationMessages.RECORD.asComponent()
+            .hoverEvent(HoverEvent.showText(join(EventCommandSupport.metadata(detail, this))))
+            .clickEvent(ClickEvent.runCommand(command(event.eventId(), "record", 1))) : Component.empty();
         for (var entry : content.sections().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             if (!entry.getKey().equals("raw")) {
                 actions = actions.append(Component.space()).append(entry.getValue().label()
                     .clickEvent(ClickEvent.runCommand(command(event.eventId(), entry.getKey(), 1))));
             }
         }
-        result.add(backLink(actions));
+        var navigation = backLink(actions);
+        if (!navigation.equals(Component.empty())) result.add(navigation);
         return List.copyOf(result);
     }
 
@@ -196,8 +209,9 @@ public final class EventRenderer {
             // A corrupt/unsupported provider payload must not hide the rest of the page.
         }
         var summary = this.actor(event).append(Component.space())
-            .append(Component.text(SearchCommandSupport.displayEventType(event.eventType())));
-        if (event.targetType().isPresent()) {
+            .append(this.debug ? Component.text(SearchCommandSupport.displayEventType(event.eventType()))
+                : EventPresentationMessages.UNKNOWN_EVENT.asComponent());
+        if (this.debug && event.targetType().isPresent()) {
             summary = summary.append(Component.space()).append(this.name(event.targetType().get(), NameKind.OTHER));
         }
         if (event.searchText().isPresent()) {
@@ -205,7 +219,7 @@ public final class EventRenderer {
         }
         var sections = event.searchText().map(text -> Map.of("text", new EventPresenter.Section(
             EventPresentationMessages.FULL.asComponent(), () -> textLines(text)))).orElse(Map.of());
-        return new EventPresenter.Content(summary, List.of(), EventPresentationMessages.UNAVAILABLE.asComponent(), sections);
+        return new EventPresenter.Content(summary, List.of(), (this.debug ? EventPresentationMessages.UNAVAILABLE : EventPresentationMessages.UNAVAILABLE_USER).asComponent(), sections);
     }
 
     public static List<Component> textLines(String text) {
