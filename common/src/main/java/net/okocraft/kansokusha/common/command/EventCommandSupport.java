@@ -35,6 +35,17 @@ public final class EventCommandSupport {
         Predicate<String> hasPermission,
         Consumer<Component> sendMessage
     ) {
+        return execute(backend, rawEventId, hasPermission, sendMessage,
+            EventRenderer.generic(java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC));
+    }
+
+    public static boolean execute(
+        EventSearchBackend backend,
+        String rawEventId,
+        Predicate<String> hasPermission,
+        Consumer<Component> sendMessage,
+        EventRenderer renderer
+    ) {
         final UUID eventId;
         try {
             eventId = parseEventId(rawEventId);
@@ -59,17 +70,21 @@ public final class EventCommandSupport {
                 return;
             }
 
-            formatEvent(detail).forEach(sendMessage);
+            renderer.detail(detail).forEach(sendMessage);
         });
         return true;
     }
 
     public static List<Component> formatEvent(EventDetail detail) {
+        return commonFields(detail, EventRenderer.generic(java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC));
+    }
+
+    static List<Component> commonFields(EventDetail detail, EventRenderer renderer) {
         var event = detail.event();
         var lines = new ArrayList<Component>();
 
         lines.add(line(EventCommandMessages.EVENT_ID, Component.text(event.eventId().toString())));
-        lines.add(line(EventCommandMessages.OCCURRED_AT, Component.text(event.occurredAt().toString())));
+        lines.add(line(EventCommandMessages.OCCURRED_AT, renderer.absolute(event.occurredAt())));
         lines.add(line(EventCommandMessages.EVENT_TYPE, eventType(event.eventType())));
         event.server().ifPresent(value ->
             lines.add(line(EventCommandMessages.SERVER, Component.text(value.asString())))
@@ -91,12 +106,12 @@ public final class EventCommandSupport {
             case EntityActor entity -> SearchCommandSupport.withUuidHover(
                 EventCommandMessages.ACTOR_ENTITY.asComponent()
                     .append(Component.space())
-                    .append(Component.text(entity.entityType().asString())),
+                    .append(renderer.name(entity.entityType(), EventRenderer.NameKind.ENTITY)),
                 entity.uniqueId()
             );
             case BlockActor block -> EventCommandMessages.ACTOR_BLOCK.asComponent()
                 .append(Component.space())
-                .append(Component.text(block.blockType().asString()));
+                .append(renderer.name(block.blockType(), EventRenderer.NameKind.BLOCK));
         })));
         event.targetType().ifPresent(value ->
             lines.add(line(EventCommandMessages.TARGET_TYPE, Component.text(value.asString())))
@@ -105,10 +120,10 @@ public final class EventCommandSupport {
             EventCommandMessages.PAYLOAD_GENERATION,
             Component.text(Integer.toString(detail.payloadGeneration().value()))
         ));
-        lines.add(line(EventCommandMessages.EXPIRES_AT, Component.text(detail.expiresAt().toString())));
+        lines.add(line(EventCommandMessages.EXPIRES_AT, renderer.absolute(detail.expiresAt())));
         event.searchText().ifPresent(value -> lines.add(line(
             EventCommandMessages.COMMUNICATION_TEXT,
-            Component.text(value.replace('\r', ' ').replace('\n', ' '))
+            Component.text(value)
         )));
         return List.copyOf(lines);
     }

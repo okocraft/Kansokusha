@@ -28,7 +28,7 @@ class EventCommandTest {
     private static final Key EVENT_TYPE = Key.key("kansokusha", "velocity_chat");
 
     private final EventSearchBackend api = Mockito.mock(EventSearchBackend.class);
-    private final CommandTester tester = CommandTester.of(EventCommand.createEventCommand(this.api));
+    private final CommandTester tester = CommandTester.of(EventCommand.createEventCommand(this.api, java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC));
 
     @Test
     void testEventPermissionIsRequired() {

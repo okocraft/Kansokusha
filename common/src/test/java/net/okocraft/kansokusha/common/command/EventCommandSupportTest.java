@@ -165,7 +165,7 @@ class EventCommandSupportTest {
         Assertions.assertTrue(lines.contains(
             EventCommandMessages.DETAIL_LINE.apply(
                 EventCommandMessages.COMMUNICATION_TEXT.asComponent(),
-                Component.text("hello world")
+                Component.text("hello\nworld")
             )
         ));
     }

@@ -122,28 +122,11 @@ class SearchCommandSupportTest {
         Assertions.assertTrue(this.execute(false, null, "", BREAK));
         Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
 
-        var actor = Component.text("Alice").hoverEvent(HoverEvent.showText(Component.text(PLAYER_ID.toString())));
-        var line = Component.empty()
-            .append(Component.text(NOW.toString()))
-            .append(Component.text(" | "))
-            .append(Component.text("block_break"))
-            .append(Component.text(" | "))
-            .append(actor.append(Component.text(" -> ")).append(Component.text("minecraft:stone")))
-            .append(Component.text(" | "))
-            .append(Component.text("@ minecraft:overworld 1 64 -2"))
-            .append(Component.text(" | "))
-            .append(Component.text("\"/say hello world\""))
-            .hoverEvent(HoverEvent.showText(Component.text(event().eventId().toString())));
-        Assertions.assertEquals(
-            List.of(
-                SearchCommandMessages.RESULT.apply(line),
-                SearchCommandMessages.RESULT.apply(
-                    line.hoverEvent(HoverEvent.showText(SearchCommandMessages.VIEW_EVENT.apply(event().eventId().toString())))
-                        .clickEvent(ClickEvent.runCommand("/kansokusha event " + event().eventId()))
-                )
-            ),
-            this.messages
-        );
+        var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
+        Assertions.assertEquals(List.of(
+            SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
+            SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
+        ), this.messages);
     }
 
     @Test

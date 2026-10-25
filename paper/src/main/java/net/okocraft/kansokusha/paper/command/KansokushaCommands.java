@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.paper.command;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import net.okocraft.kansokusha.common.command.EventPresentationMessages;
 import net.okocraft.kansokusha.common.command.CommandHelp;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
@@ -24,10 +25,14 @@ public final class KansokushaCommands {
     public static List<Map<String, String>> getDefaultMessages() {
         return List.of(
             CommandMessages.defaultMessages(),
+            EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
+            EventPresentationMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages(),
+            EventPresentationMessages.defaultMessages(),
             InspectionCommandMessages.defaultMessages(),
+            EventPresentationMessages.defaultMessages(),
             InspectionSearchMessages.defaultMessages()
         );
     }
@@ -56,7 +61,7 @@ public final class KansokushaCommands {
             .then(Commands.literal("help").executes(context -> sendHelp(context.getSource())))
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
-            .then(EventCommand.createEventCommand(backend))
+            .then(EventCommand.createEventCommand(backend, clock, searchTimeZone))
             .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
             .then(InspectCommand.createInspectCommand("i", inspectionSessions))
             .build();

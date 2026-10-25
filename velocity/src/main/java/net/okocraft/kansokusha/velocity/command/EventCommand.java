@@ -5,6 +5,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
+import net.okocraft.kansokusha.common.command.EventRenderer;
+import java.time.Clock;
+import java.time.ZoneId;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
@@ -15,7 +18,7 @@ final class EventCommand {
 
     static final String PERMISSION = EventCommandSupport.PERMISSION;
 
-    static LiteralCommandNode<CommandSource> createEventCommand(EventSearchBackend backend) {
+    static LiteralCommandNode<CommandSource> createEventCommand(EventSearchBackend backend, Clock clock, ZoneId timezone) {
         return BrigadierCommand.literalArgumentBuilder("event")
             .requires(source -> source.hasPermission(PERMISSION))
             .executes(context -> {
@@ -29,7 +32,8 @@ final class EventCommand {
                         backend,
                         StringArgumentType.getString(context, "event-id"),
                         source::hasPermission,
-                        source::sendMessage
+                        source::sendMessage,
+                        EventRenderer.generic(clock, timezone)
                     ) ? Command.SINGLE_SUCCESS : 0;
                 }))
             .build();
