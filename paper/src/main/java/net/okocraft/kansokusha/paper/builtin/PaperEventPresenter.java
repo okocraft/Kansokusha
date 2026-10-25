@@ -24,7 +24,8 @@ public final class PaperEventPresenter implements EventPresenter {
 
     private static Map<String, PaperEventView> views() {
         var views = new LinkedHashMap<String, PaperEventView>();
-        for (var group : List.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS, PaperPlayerViews.VIEWS)) {
+        for (var group : List.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS, PaperPlayerViews.VIEWS,
+            PaperEntityViews.VIEWS, PaperAdministrativeViews.VIEWS)) {
             for (var view : group) {
                 if (views.putIfAbsent(view.type(), view) != null) {
                     throw new IllegalStateException("Duplicate event view: " + view.type());
