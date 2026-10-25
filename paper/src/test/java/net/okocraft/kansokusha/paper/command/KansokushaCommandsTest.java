@@ -58,7 +58,7 @@ class KansokushaCommandsTest {
         Mockito.mock(org.bukkit.plugin.Plugin.class)
         );
 
-        for (var name : List.of("version", "search", "event", "inspect", "i")) {
+        for (var name : List.of("version", "search", "event", "inspect", "i", "teleport")) {
             Assertions.assertNotNull(command.getChild(name), name);
         }
     }

@@ -36,6 +36,7 @@ public final class KansokushaCommands {
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages(),
             InspectionCommandMessages.defaultMessages(),
+            TeleportMessages.defaultMessages(),
             InspectionSearchMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
             PaperViewMessages.defaultMessages()
@@ -69,6 +70,7 @@ public final class KansokushaCommands {
             .executes(context -> sendHelp(context.getSource()))
             .then(Commands.literal("help").executes(context -> sendHelp(context.getSource())))
             .then(VersionCommand.createVersionCommand())
+            .then(TeleportCommand.create(plugin))
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
             .then(EventCommand.createEventCommand(backend, clock, searchTimeZone, plugin))
             .then(InspectCommand.createInspectCommand("inspect", inspectionSessions, backend, clock, searchTimeZone))

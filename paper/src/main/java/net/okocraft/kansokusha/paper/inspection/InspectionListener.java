@@ -82,12 +82,31 @@ public final class InspectionListener implements Listener {
             ? clickedBlock.getRelative(event.getBlockFace())
             : clickedBlock;
 
+        if (action == Action.RIGHT_CLICK_BLOCK && clickedBlock.getState() instanceof org.bukkit.block.Container container) {
+            var positions = new java.util.LinkedHashSet<SearchQuery.Position>();
+            positions.add(new SearchQuery.Position(PaperKansokusha.key(clickedBlock.getWorld().getKey()),
+                clickedBlock.getX(), clickedBlock.getY(), clickedBlock.getZ()));
+            if (container.getInventory() instanceof org.bukkit.inventory.DoubleChestInventory chest) {
+                for (var inventory : java.util.List.of(chest.getLeftSide(), chest.getRightSide())) {
+                    var location = inventory.getLocation();
+                    if (location != null && location.getWorld() != null) positions.add(position(location));
+                }
+            }
+            this.targetHandler.inspectContainer(player.getUniqueId(), java.util.Set.copyOf(positions));
+            return;
+        }
+
         this.targetHandler.inspect(player.getUniqueId(), new SearchQuery.Position(
             PaperKansokusha.key(targetBlock.getWorld().getKey()),
             targetBlock.getX(),
             targetBlock.getY(),
             targetBlock.getZ()
         ));
+    }
+
+    private static SearchQuery.Position position(org.bukkit.Location location) {
+        return new SearchQuery.Position(PaperKansokusha.key(location.getWorld().getKey()),
+            location.getBlockX(), location.getBlockY(), location.getBlockZ());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

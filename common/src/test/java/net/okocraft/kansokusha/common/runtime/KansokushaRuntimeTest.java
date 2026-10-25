@@ -388,6 +388,9 @@ class KansokushaRuntimeTest {
         }
 
         @Override
+        public long count(SearchRequest request) { return 0; }
+
+        @Override
         public SearchMetadata searchMetadata() {
             return SearchMetadata.empty();
         }

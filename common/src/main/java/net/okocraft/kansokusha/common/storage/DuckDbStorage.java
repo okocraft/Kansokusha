@@ -374,6 +374,11 @@ public final class DuckDbStorage {
         }
 
         @Override
+        public long count(SearchRequest request) throws SQLException {
+            return this.delegate.count(request);
+        }
+
+        @Override
         public SearchMetadata searchMetadata() throws SQLException {
             return this.delegate.searchMetadata();
         }

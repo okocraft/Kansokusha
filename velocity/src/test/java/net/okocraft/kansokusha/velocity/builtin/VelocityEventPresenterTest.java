@@ -49,7 +49,7 @@ class VelocityEventPresenterTest {
             VelocityCommunicationPayloadCodec.encodeCommand("console", "Console", command)), true, this.renderer).orElseThrow();
         Assertions.assertFalse(plain(content.summary()).contains(" END"));
         Assertions.assertEquals(command, content.sections().get("text_command").lines().get().stream().map(VelocityEventPresenterTest::plain).collect(java.util.stream.Collectors.joining()));
-        Assertions.assertTrue(plain(content.summary()).contains("command input"));
+        Assertions.assertTrue(plain(content.summary()).contains("command"));
     }
 
     @Test

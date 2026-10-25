@@ -121,7 +121,7 @@ class SearchCommandSupportTest {
         Assertions.assertTrue(this.execute(true, null, "", BREAK));
         Assertions.assertTrue(this.execute(true, null, "", BREAK, EventCommandSupport.PERMISSION));
 
-        var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
+        var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC).withDebug(false);
         Assertions.assertEquals(List.of(
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
@@ -205,6 +205,35 @@ class SearchCommandSupportTest {
         Assertions.assertEquals(Set.of(BREAK), this.backend.lastRequest().query().conditions().actions());
         Assertions.assertFalse(this.execute(true, null, "action block"));
         Assertions.assertFalse(this.execute(true, null, "action block action block_place", BREAK));
+    }
+
+    @Test
+    void testCountRunsOnlyOnDemandAndPageNumbersRoundTrip() {
+        this.backend.metadata = metadata(BREAK);
+        var cursor = new SearchRequest.Cursor(NOW, event().eventId(), SearchRequest.Direction.NEXT);
+        this.backend.page = new SearchPage(List.of(event()), Optional.of(cursor), Optional.empty());
+        Assertions.assertTrue(this.execute(true, null, "action block_break", BREAK));
+        Assertions.assertEquals(0, this.backend.countCalls);
+        this.messages.clear();
+        Assertions.assertTrue(this.execute(true, null, "action block_break count", BREAK));
+        Assertions.assertEquals(1, this.backend.countCalls);
+        var query = "action block_break count";
+        var next = "/kansokusha search " + query + " __cursor=" + SearchCommandSupport.serializeCursor(cursor) + ",2";
+        Assertions.assertEquals(Component.empty().append(SearchCommandMessages.NEXT.asComponent()
+            .clickEvent(ClickEvent.runCommand(next))).append(Component.space())
+            .append(SearchCommandMessages.COUNT.apply(124L, 1, 13L)), this.messages.getLast());
+        Assertions.assertEquals(2, SearchCommandSupport.parseInvocation(next.substring("/kansokusha search ".length()),
+            CLOCK, ZoneOffset.UTC, null).page());
+        var previous = new SearchRequest.Cursor(NOW, event().eventId(), SearchRequest.Direction.PREVIOUS);
+        var page = new SearchPage(List.of(event()), Optional.empty(), Optional.of(previous));
+        var navigation = SearchCommandSupport.paginationComponent(query, page, java.util.OptionalLong.of(124), 2, 10);
+        Assertions.assertEquals(Component.empty().append(SearchCommandMessages.PREVIOUS.asComponent().clickEvent(
+            ClickEvent.runCommand("/kansokusha search " + query + " __cursor=" + SearchCommandSupport.serializeCursor(previous) + ",1")))
+            .append(Component.space()).append(SearchCommandMessages.COUNT.apply(124L, 2, 13L)), navigation);
+        Assertions.assertEquals(Optional.of(cursor), SearchCommandSupport.parseInvocation(
+            query + " __cursor=" + SearchCommandSupport.serializeCursor(cursor), CLOCK, ZoneOffset.UTC, null).cursor());
+        Assertions.assertThrows(net.okocraft.kansokusha.common.search.query.SearchQueryParseException.class,
+            () -> SearchCommandSupport.parseCursor(SearchCommandSupport.serializeCursor(cursor) + ",0"));
     }
 
     private boolean execute(boolean player, SearchQuery.@Nullable Position origin, String input, Key... permittedEventTypes) {
@@ -307,6 +336,14 @@ class SearchCommandSupportTest {
     }
 
     private static final class FakeBackend implements EventSearchBackend {
+
+        private int countCalls;
+
+        @Override
+        public CompletableFuture<Long> count(SearchRequest request) {
+            this.countCalls++;
+            return CompletableFuture.completedFuture(124L);
+        }
 
         private final List<SearchRequest> requests = new ArrayList<>();
         private SearchMetadata metadata = SearchMetadata.empty();

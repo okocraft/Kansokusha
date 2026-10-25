@@ -23,8 +23,13 @@ public record SearchQuery(
     Conditions conditions,
     Conditions exclusions,
     Order order,
-    OptionalInt limit
+    OptionalInt limit,
+    boolean count
 ) {
+
+    public SearchQuery(Conditions conditions, Conditions exclusions, Order order, OptionalInt limit) {
+        this(conditions, exclusions, order, limit, false);
+    }
 
     public SearchQuery {
         Objects.requireNonNull(conditions, "conditions");

@@ -58,7 +58,7 @@ Examples:
 ## Time zone
 
 `config.yml` contains `search-time-zone`, an IANA time-zone ID such as `UTC`,
-`Asia/Tokyo`, or `Europe/London`. The bundled default is `UTC`. It controls `today`,
+`Asia/Tokyo`, or `Europe/London`. The bundled default is empty and uses the server system time zone; explicit `UTC` settings are preserved. It controls `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit UTC offset. Datetimes with an
 offset keep that offset. Configuration changes take effect after restart.
 
@@ -146,6 +146,12 @@ Each Paper/Folia server and Velocity proxy searches only its own local DuckDB da
 `server`, `payload_generation`, and `expires_at` values may still be persisted or displayed
 where applicable; their presence does not make them user-facing search filters.
 
+`kansokusha.command.event.debug` permits technical event information, actor UUID hovers,
+and the `record` / `raw` saved-data views. Without it, known player names have no UUID hover,
+record metadata and payload buttons are hidden, and direct saved-data view requests are denied.
+Paper defaults this permission to false, including for operators; grant it explicitly to developers.
+Console output still includes addressable event IDs for searches.
+
 ### Action categories
 
 `action` and `exclude action` accept the following aliases. Individual event names remain valid;
@@ -165,6 +171,15 @@ A category with no permitted members is rejected; literal names retain their str
 | `death` / `kill` | `player_death` / `entity_death` |
 
 Container direction aliases are not provided because direction is not an SQL-searchable field.
+
+### Optional result counts
+
+Append the singleton flag `count` to show total matching results and current/total pages:
+`/kansokusha search user Alice time 1d count`. Without it, no count query is executed.
+Counting uses the same filters and allowed event types as the page search, ignoring its
+cursor and page size. It runs on the storage thread and may be expensive for wide searches.
+The hidden cursor optionally includes a fourth page-number field; old three-field cursors
+remain accepted. Counts and pages are recalculated on each invocation, not a fixed snapshot.
 
 Running `/kansokusha search` without conditions shows a guide without querying storage.
 Click examples to fill the input line. Paper players see `radius`; console and Velocity users

@@ -17,6 +17,8 @@ public final class EventPresentationMessages {
     public static final MessageKey SOON = DEFINER.define("kansokusha.display.time.soon", "in less than a minute");
     public static final MessageKey UNAVAILABLE = DEFINER.define("kansokusha.display.unavailable",
         "Payload unavailable or unsupported; showing common fields");
+    public static final MessageKey UNAVAILABLE_USER = DEFINER.define("kansokusha.display.details-unavailable", "Details for this record cannot be displayed.");
+    public static final MessageKey UNKNOWN_EVENT = DEFINER.define("kansokusha.display.unknown-event", "Recorded event");
     public static final MessageKey NO_ACTOR = DEFINER.define("kansokusha.display.no-actor", "(actor not recorded)");
     public static final MessageKey MORE_IN_DETAILS = DEFINER.define("kansokusha.display.more-in-details", "(payload omitted; see details)");
     private static final Map<String, MessageKey.Arg1<Long>> RELATIVE = new LinkedHashMap<>();
@@ -58,6 +60,7 @@ public final class EventPresentationMessages {
     public static final MessageKey HINT = DEFINER.define("kansokusha.display.compact.hint",
         "Hover for context; click a row for details");
     public static final MessageKey RECORD = DEFINER.define("kansokusha.display.compact.record", "[Record information]");
+    public static final MessageKey BACK = DEFINER.define("kansokusha.display.compact.back", "[Back to results]");
     public static final MessageKey FULL = DEFINER.define("kansokusha.display.compact.full", "[Full text]");
     public static final MessageKey RAW = DEFINER.define("kansokusha.display.compact.raw", "[Saved data]");
     public static final MessageKey OVERVIEW = DEFINER.define("kansokusha.display.compact.overview", "[Overview]");

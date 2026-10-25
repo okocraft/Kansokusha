@@ -230,6 +230,11 @@ public final class DuckDbStorageImpl implements Storage {
     }
 
     @Override
+    public long count(SearchRequest request) throws SQLException {
+        return DuckDbEventSearch.count(this.connection, request);
+    }
+
+    @Override
     public SearchMetadata searchMetadata() throws SQLException {
         var eventTypes = new LinkedHashSet<Key>();
         var worlds = new LinkedHashMap<Key, LinkedHashSet<Key>>();
