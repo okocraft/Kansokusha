@@ -46,6 +46,7 @@ public final class KansokushaVelocityPlugin {
         try {
             LanguageProvider.load(this.dataDirectory.resolve("languages"), KansokushaCommands.getDefaultMessages());
             config = KansokushaConfig.load(this.dataDirectory);
+            this.logger.info("Search time zone: {}", config.searchTimeZone());
             runtime = KansokushaRuntime.start(
                 this.dataDirectory,
                 config,

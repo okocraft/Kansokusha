@@ -30,6 +30,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             LanguageProvider.load(this.getDataPath().resolve("languages"), KansokushaCommands.getDefaultMessages());
 
             var config = KansokushaConfig.load(this.getDataPath());
+            this.getLogger().info("Search time zone: " + config.searchTimeZone());
             var serverKey = PaperServerIdentity.resolve(config.serverKey(), Path.of("."));
             var runtime = KansokushaRuntime.start(
                 this.getDataPath(),
