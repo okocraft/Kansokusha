@@ -692,6 +692,25 @@ class DuckDbEventSearchTest {
         }
     }
 
+    @Test
+    void testCountUsesSearchPredicatesAndPermissionsButIgnoresLimitAndCursor(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("count.duckdb"))) {
+            storage.append(List.of(
+                queued(event(AUDIT, NOW, OVERWORLD, new BlockPosition(1, 64, 2), new PlayerActor(PLAYER_ONE), STONE), "match"),
+                queued(event(AUDIT, NOW.plusSeconds(1), OVERWORLD, new BlockPosition(1, 64, 2), new PlayerActor(PLAYER_ONE), STONE), "match"),
+                queued(event(AUDIT, NOW.plusSeconds(2), OVERWORLD, new BlockPosition(1, 64, 2), new PlayerActor(PLAYER_ONE), DIRT), "match"),
+                queued(event(OTHER, NOW, OVERWORLD, new BlockPosition(1, 64, 2), new PlayerActor(PLAYER_ONE), STONE), "match"),
+                queued(event(AUDIT, NOW, NETHER, new BlockPosition(1, 64, 2), new PlayerActor(PLAYER_ONE), STONE), "match")
+            ));
+            var input = "world minecraft:overworld filter match exclude target minecraft:dirt limit 1 count";
+            var first = storage.search(request(input, Set.of(AUDIT), Optional.empty(), Optional.empty(), 10));
+            Assertions.assertEquals(1, first.events().size());
+            Assertions.assertEquals(2L, storage.count(request(input, Set.of(AUDIT), Optional.empty(), first.nextCursor(), 10)));
+            Assertions.assertEquals(3L, storage.count(request(input, Set.of(AUDIT, OTHER), Optional.empty(), Optional.empty(), 10)));
+            Assertions.assertEquals(0L, storage.count(request(input, Set.of(), Optional.empty(), Optional.empty(), 10)));
+        }
+    }
+
     private static SearchRequest request(
         String input,
         Set<Key> allowedEventTypes,

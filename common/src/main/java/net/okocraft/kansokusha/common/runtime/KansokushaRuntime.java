@@ -183,6 +183,12 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     }
 
     @Override
+    public CompletableFuture<Long> count(SearchRequest request) {
+        Objects.requireNonNull(request, "request");
+        return this.queryStorage(() -> this.storage.count(request));
+    }
+
+    @Override
     public CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId) {
         Objects.requireNonNull(eventId, "eventId");
         return this.queryStorage(() -> this.storage.findEvent(eventId));

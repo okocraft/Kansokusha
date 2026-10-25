@@ -28,6 +28,8 @@ public interface Storage extends AutoCloseable {
 
     SearchPage search(SearchRequest request) throws SQLException;
 
+    long count(SearchRequest request) throws SQLException;
+
     SearchMetadata searchMetadata() throws SQLException;
 
     int deleteExpired(Instant now) throws SQLException;

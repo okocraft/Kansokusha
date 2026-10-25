@@ -28,6 +28,14 @@ class SearchQueryParserTest {
     private static final ZoneId TOKYO = ZoneId.of("Asia/Tokyo");
 
     @Test
+    void testCountFlagIsOptionalSingletonAndTakesNoValue() {
+        Assertions.assertTrue(parse("user Alice count limit 10").count());
+        Assertions.assertFalse(parse("user Alice").count());
+        Assertions.assertThrows(SearchQueryParseException.class, () -> parse("count count"));
+        Assertions.assertThrows(SearchQueryParseException.class, () -> parse("count true"));
+    }
+
+    @Test
     void testSharedActionCategoryExpansionAndExclusion() {
         var query = SearchQueryParser.parse("action block action example:custom exclude action chat",
             java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, null);

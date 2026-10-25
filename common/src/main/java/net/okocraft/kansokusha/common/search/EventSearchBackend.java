@@ -36,6 +36,11 @@ public interface EventSearchBackend {
      */
     CompletableFuture<SearchPage> search(SearchRequest request);
 
+    /** Counts all matches using the same visibility constraints, without cursor or page limit. */
+    default CompletableFuture<Long> count(SearchRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Counting is unavailable"));
+    }
+
     CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);
 
     /**

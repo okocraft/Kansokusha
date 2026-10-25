@@ -93,25 +93,9 @@ final class DuckDbEventSearch {
             return emptyPage();
         }
 
-        var includedUsers = resolveUsers(connection, request.query().conditions().users());
-        var excludedUsers = resolveUsers(connection, request.query().exclusions().users());
-
-        var where = new ArrayList<String>();
-        var parameters = new ArrayList<Object>();
-
-        addAllowedEventTypes(where, parameters, request.constraints().allowedEventTypes());
-
-        var included = compileConditions(request.query().conditions(), includedUsers);
-        if (!included.sql().isEmpty()) {
-            where.add(included.sql());
-            parameters.addAll(included.parameters());
-        }
-
-        if (!request.query().exclusions().isEmpty()) {
-            var excluded = compileConditions(request.query().exclusions(), excludedUsers);
-            where.add("NOT COALESCE((" + excluded.sql() + "), FALSE)");
-            parameters.addAll(excluded.parameters());
-        }
+        var predicate = compilePredicate(connection, request);
+        var where = new ArrayList<String>(List.of(predicate.sql()));
+        var parameters = new ArrayList<Object>(predicate.parameters());
 
         var cursor = request.cursor();
         var logicalAscending = request.query().order() == SearchQuery.Order.OLDEST;
@@ -173,6 +157,43 @@ final class DuckDbEventSearch {
             : Optional.<SearchRequest.Cursor>empty();
 
         return new SearchPage(events, nextCursor, previousCursor);
+    }
+
+    static long count(DuckDBConnection connection, SearchRequest request) throws SQLException {
+        if (request.constraints().allowedEventTypes().isEmpty()) return 0;
+        var predicate = compilePredicate(connection, request);
+        try (var statement = connection.prepareStatement("SELECT COUNT(*) FROM events e WHERE " + predicate.sql())) {
+            var index = 1;
+            for (var parameter : predicate.parameters()) statement.setObject(index++, parameter);
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                return rows.getLong(1);
+            }
+        }
+    }
+
+    private static Predicate compilePredicate(DuckDBConnection connection, SearchRequest request) throws SQLException {
+        var includedUsers = resolveUsers(connection, request.query().conditions().users());
+        var excludedUsers = resolveUsers(connection, request.query().exclusions().users());
+
+        var where = new ArrayList<String>();
+        var parameters = new ArrayList<Object>();
+
+        addAllowedEventTypes(where, parameters, request.constraints().allowedEventTypes());
+
+        var included = compileConditions(request.query().conditions(), includedUsers);
+        if (!included.sql().isEmpty()) {
+            where.add(included.sql());
+            parameters.addAll(included.parameters());
+        }
+
+        if (!request.query().exclusions().isEmpty()) {
+            var excluded = compileConditions(request.query().exclusions(), excludedUsers);
+            where.add("NOT COALESCE((" + excluded.sql() + "), FALSE)");
+            parameters.addAll(excluded.parameters());
+        }
+
+        return new Predicate(String.join(" AND ", where), List.copyOf(parameters));
     }
 
     private static SearchPage emptyPage() {
