@@ -76,7 +76,7 @@ final class PaperPayloadDisplay {
                 var type = compound.getStringOr("type", "");
                 var name = type.isEmpty() ? EventFieldMessages.label(field)
                     : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.ENTITY);
-                return debug ? name.hoverEvent(HoverEvent.showText(Component.text(compound.getStringOr("uuid", "")))) : name;
+                return debug ? name.hoverEvent(HoverEvent.showText(Component.text(compound.getStringOr("uuid", "")))) : name.hoverEvent(null);
             }
             if (compound.contains("component")) {
                 return Component.text(EventRenderer.preview(text(compound, field)));
@@ -142,7 +142,7 @@ final class PaperPayloadDisplay {
         var properties = compound.getCompoundOrEmpty(compound.contains("properties") ? "properties" : "Properties");
         var lines = new ArrayList<Component>();
         var type = compound.getStringOr("id", compound.getStringOr("Name", ""));
-        lines.add(debug || type.isEmpty() ? Component.text(type) : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.BLOCK));
+        lines.add(debug || type.isEmpty() ? Component.text(type) : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.BLOCK).hoverEvent(null));
         for (var key : properties.keySet().stream().sorted().limit(6).toList()) {
             lines.add(EventFieldMessages.field(key, preview(properties.get(key), key)));
         }

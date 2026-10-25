@@ -85,7 +85,8 @@ public final class EventRenderer {
     }
 
     public Component name(Key key, NameKind kind) {
-        return this.names.apply(key, kind);
+        var name = this.names.apply(key, kind);
+        return this.debug ? name : name.hoverEvent(null);
     }
 
     public Component actor(SearchPage.Event event) {
