@@ -81,7 +81,8 @@ plugin disable, and server restart. Permission is rechecked when the inspection 
 consumed, so losing `kansokusha.command.inspect` invalidates an enabled session.
 
 While inspection is enabled, left-clicking a block selects that block coordinate and
-right-clicking a block selects the coordinate one block beyond the clicked face. Air
+right-clicking an interactable block (such as a chest, door, or sign) selects that block.
+Right-clicking other blocks selects the coordinate one block beyond the clicked face. Air
 clicks are ignored. Block and held-item use are denied for both hands, while only the
 main-hand interaction selects a target. Block damage and block break are also cancelled
 as safety guards, so inspection clicks do not mutate the world or create normal

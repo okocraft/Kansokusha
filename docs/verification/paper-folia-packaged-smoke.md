@@ -58,7 +58,7 @@ coordinate that is currently air. Then verify all of the following:
 5. Right-clicking while holding a placeable block does not place it. Right-clicking with
    a bucket does not fill or empty it.
 6. A left click reports history for the clicked block coordinate.
-7. A right click reports history for the coordinate one block beyond the clicked face.
+7. Right-clicking a chest, door, lever, or sign reports its own coordinate; right-clicking stone reports the coordinate one block beyond the clicked face.
    Use this to inspect the prepared air coordinate from an adjacent solid block.
 8. Only event types permitted by
    `kansokusha.command.search.event.<event-type>` appear. Removing one such permission

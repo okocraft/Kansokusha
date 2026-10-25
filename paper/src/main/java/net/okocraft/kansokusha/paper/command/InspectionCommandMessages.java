@@ -15,7 +15,7 @@ public final class InspectionCommandMessages {
     public static final MessageKey ENABLED = DEFINER
         .define(
             "kansokusha.command.inspect.enabled",
-            "<gray>Inspection mode <green>enabled</green>. Left-click a block to view its history; right-click to inspect the position beyond the clicked face.<newline>Run <aqua>/kansokusha inspect off</aqua> to resume normal block interactions.</gray>"
+            "<gray>Inspection mode <green>enabled</green>. Left-click a block to view its history; right-click an interactable block to inspect it, or another block to inspect beyond its clicked face.<newline>Run <aqua>/kansokusha inspect off</aqua> to resume normal block interactions.</gray>"
         );
 
     public static final MessageKey DISABLED = DEFINER
@@ -30,7 +30,7 @@ public final class InspectionCommandMessages {
     public static final MessageKey HELP_INSPECT = DEFINER
         .define(
             "kansokusha.command.help.inspect",
-            "<aqua>/kansokusha inspect [on/off]</aqua><dark_gray> - </dark_gray><gray>Inspect history at a block: left-click the block or right-click its adjacent position. Use off to finish.</gray>"
+            "<aqua>/kansokusha inspect [on/off]</aqua><dark_gray> - </dark_gray><gray>Inspect history at a block: left-click the block; right-click interactable blocks themselves or the adjacent position of other blocks. Use off to finish.</gray>"
         );
 
     public static @UnmodifiableView Map<String, String> defaultMessages() {
