@@ -107,10 +107,10 @@ public final class EventRenderer {
 
     public List<Component> view(EventDetail detail, String view, int page) {
         var event = detail.event();
-        var content = this.content(event, true);
         if (!this.debug && (view.equals("record") || view.equals("raw"))) {
             return List.of(EventCommandMessages.PERMISSION_DENIED.asComponent());
         }
+        var content = this.content(event, true);
         if (!view.isEmpty()) {
             Supplier<List<Component>> lines = view.equals("record") ? () -> {
                 var all = new ArrayList<>(EventCommandSupport.commonFields(detail, this));

@@ -151,3 +151,23 @@ and the `record` / `raw` saved-data views. Without it, known player names have n
 record metadata and payload buttons are hidden, and direct saved-data view requests are denied.
 Paper defaults this permission to false, including for operators; grant it explicitly to developers.
 Console output still includes addressable event IDs for searches.
+
+### Action categories
+
+`action` and `exclude action` accept the following aliases. Individual event names remain valid;
+use a namespaced event name to bypass aliases. Categories are suggested before individual names.
+Only events present in this instance and permitted for the sender can appear in results.
+A category with no permitted members is rejected; literal names retain their strict permission check.
+
+| Category | Events |
+| --- | --- |
+| `block` | `block_break`, `block_place` |
+| `-block` / `+block` | `block_break` / `block_place` |
+| `container` | `container_transaction`, `container_pickup`, `container_transfer` |
+| `item` | `item_drop`, `item_pickup` |
+| `chat` | `paper_chat`, `velocity_chat` |
+| `command` | `paper_player_command`, `paper_server_command`, `velocity_command` |
+| `session` | `paper_join`, `paper_quit`, `paper_kick`, `velocity_post_login`, `velocity_disconnect`, `server_connected`, `backend_kick` |
+| `death` / `kill` | `player_death` / `entity_death` |
+
+Container direction aliases are not provided because direction is not an SQL-searchable field.

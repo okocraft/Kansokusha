@@ -45,6 +45,10 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
 
     @Override
     public void inspect(UUID playerId, SearchQuery.Position target) {
+        this.page(playerId, target, Optional.empty());
+    }
+
+    public void page(UUID playerId, SearchQuery.Position target, Optional<SearchRequest.Cursor> cursor) {
         var player = this.server.getPlayer(playerId);
         if (player == null) {
             return;
@@ -63,7 +67,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
             .thenCompose(metadata -> this.backend.search(new SearchRequest(
                 query,
                 new SearchRequest.Constraints(SearchCommandSupport.allowedEventTypes(player::hasPermission, metadata)),
-                Optional.empty(),
+                cursor,
                 SearchCommandSupport.PLAYER_DEFAULT_LIMIT
             )))
             .whenComplete((page, failure) -> {
@@ -77,7 +81,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                 }
 
                 var position = target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z();
-                if (page.events().isEmpty()) {
+                if (page.events().stream().noneMatch(event -> currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType())))) {
                     currentPlayer.sendMessage(InspectionSearchMessages.NO_HISTORY.apply(position));
                     return;
                 }
@@ -91,11 +95,27 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                         this.renderer.withDebug(currentPlayer.hasPermission(EventCommandSupport.DEBUG_PERMISSION)).row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
                     ));
                 }
-                if (fullSearchPermitted && page.nextCursor().isPresent()) {
+                net.kyori.adventure.text.Component navigation = net.kyori.adventure.text.Component.empty();
+                if (page.previousCursor().isPresent()) {
+                    navigation = navigation.append(SearchCommandMessages.PREVIOUS.asComponent().clickEvent(
+                        ClickEvent.runCommand(pageCommand(target, page.previousCursor().get()))));
+                }
+                if (page.nextCursor().isPresent()) {
+                    navigation = navigation.append(net.kyori.adventure.text.Component.space()).append(
+                        SearchCommandMessages.NEXT.asComponent().clickEvent(
+                            ClickEvent.runCommand(pageCommand(target, page.nextCursor().get()))));
+                }
+                if (!navigation.equals(net.kyori.adventure.text.Component.empty())) currentPlayer.sendMessage(navigation);
+                if (fullSearchPermitted && currentPlayer.hasPermission(SearchCommandSupport.PERMISSION) && page.nextCursor().isPresent()) {
                     currentPlayer.sendMessage(InspectionSearchMessages.VIEW_FULL.asComponent().clickEvent(
                         ClickEvent.runCommand("/kansokusha search position " + position)
                     ));
                 }
             });
     }
+    public static String pageCommand(SearchQuery.Position target, SearchRequest.Cursor cursor) {
+        return "/kansokusha inspect page " + target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z()
+            + " " + SearchCommandSupport.serializeCursor(cursor);
+    }
+
 }
