@@ -60,12 +60,12 @@ public final class SearchQueryParser {
     );
     private static final List<String> MODIFIER_SUGGESTIONS = Stream.concat(
         CONDITION_SUGGESTIONS.stream(),
-        Stream.of("from", "to", "exclude", "order", "limit")
+        Stream.of("from", "to", "exclude", "order", "limit", "count")
     ).toList();
     private static final List<String> ACTOR_KIND_SUGGESTIONS =
         List.of("player", "entity", "block");
     private static final List<String> ORDER_SUGGESTIONS = List.of("newest", "oldest");
-    private static final Set<String> SINGLETON_MODIFIERS = Set.of("from", "to", "order", "limit");
+    private static final Set<String> SINGLETON_MODIFIERS = Set.of("from", "to", "order", "limit", "count");
 
     private SearchQueryParser() {
     }
@@ -112,6 +112,7 @@ public final class SearchQueryParser {
         var singletons = new HashSet<String>();
         var order = Order.NEWEST;
         var limit = OptionalInt.empty();
+        var count = false;
         var from = Optional.<Instant>empty();
         var to = Optional.<Instant>empty();
 
@@ -126,6 +127,7 @@ public final class SearchQueryParser {
                 case "exclude" -> parseCondition(cursor.next("exclude condition"), "exclude ", cursor, exclusions, context);
                 case "order" -> order = parseOrder(cursor.next("order"));
                 case "limit" -> limit = OptionalInt.of(parsePositiveInt(cursor.next("limit"), "limit"));
+                case "count" -> count = true;
                 default -> parseCondition(modifier, "", cursor, conditions, context);
             }
         }
@@ -141,7 +143,7 @@ public final class SearchQueryParser {
             }
         }
 
-        return new SearchQuery(conditions.freeze(), exclusions.freeze(), order, limit);
+        return new SearchQuery(conditions.freeze(), exclusions.freeze(), order, limit, count);
     }
 
     /**

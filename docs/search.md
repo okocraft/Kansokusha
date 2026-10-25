@@ -165,3 +165,12 @@ A category with no permitted members is rejected; literal names retain their str
 | `death` / `kill` | `player_death` / `entity_death` |
 
 Container direction aliases are not provided because direction is not an SQL-searchable field.
+
+### Optional result counts
+
+Append the singleton flag `count` to show total matching results and current/total pages:
+`/kansokusha search user Alice time 1d count`. Without it, no count query is executed.
+Counting uses the same filters and allowed event types as the page search, ignoring its
+cursor and page size. It runs on the storage thread and may be expensive for wide searches.
+The hidden cursor optionally includes a fourth page-number field; old three-field cursors
+remain accepted. Counts and pages are recalculated on each invocation, not a fixed snapshot.

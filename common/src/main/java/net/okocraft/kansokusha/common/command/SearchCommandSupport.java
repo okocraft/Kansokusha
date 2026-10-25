@@ -94,18 +94,23 @@ public final class SearchCommandSupport {
         var defaultLimit = source.player() ? PLAYER_DEFAULT_LIMIT : NON_PLAYER_DEFAULT_LIMIT;
         var eventDetailsPermitted = source.hasPermission().test(EventCommandSupport.PERMISSION);
         backend.searchMetadata()
-            .thenCompose(metadata -> backend.search(new SearchRequest(
-                query,
-                new SearchRequest.Constraints(allowedEventTypes(source.hasPermission(), metadata)),
-                invocation.cursor(),
-                defaultLimit
-            )))
-            .whenComplete((page, failure) -> {
+            .thenCompose(metadata -> {
+                var request = new SearchRequest(query,
+                    new SearchRequest.Constraints(allowedEventTypes(source.hasPermission(), metadata)),
+                    invocation.cursor(), defaultLimit);
+                return backend.search(request).thenCompose(page -> query.count()
+                    ? backend.count(request).thenApply(total -> new CountedPage(page, java.util.OptionalLong.of(total), request))
+                    : CompletableFuture.completedFuture(new CountedPage(page, java.util.OptionalLong.empty(), request)));
+            })
+            .whenComplete((result, failure) -> {
                 if (failure != null) {
                     source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission(), SearchDisplayScope.of(query), source.player());
+                var total = result.request().constraints().allowedEventTypes().stream()
+                    .allMatch(type -> source.hasPermission().test(eventPermission(type))) ? result.total() : java.util.OptionalLong.empty();
+                renderPage(source.sendMessage(), invocation.queryText(), result.page(), eventDetailsPermitted, renderer,
+                    source.hasPermission(), SearchDisplayScope.of(query), source.player(), total, invocation.page(), result.request().limit());
             });
         return true;
     }
@@ -170,14 +175,15 @@ public final class SearchCommandSupport {
         var input = rawInput.strip();
         var lastToken = SearchQueryParser.trailingToken(input).orElse(null);
         if (lastToken == null || lastToken.quotedOrEscaped() || !lastToken.value().startsWith(CURSOR_PREFIX)) {
-            return new Invocation(input, SearchQueryParser.parse(input, clock, timezone, origin, categories), Optional.empty());
+            return new Invocation(input, SearchQueryParser.parse(input, clock, timezone, origin, categories), Optional.empty(), 1);
         }
 
         var queryText = input.substring(0, lastToken.start()).stripTrailing();
         return new Invocation(
             queryText,
             SearchQueryParser.parse(queryText, clock, timezone, origin, categories),
-            Optional.of(parseCursor(lastToken.value().substring(CURSOR_PREFIX.length())))
+            Optional.of(parseCursor(lastToken.value().substring(CURSOR_PREFIX.length()))),
+            cursorPage(lastToken.value().substring(CURSOR_PREFIX.length()))
         );
     }
 
@@ -262,7 +268,10 @@ public final class SearchCommandSupport {
         EventRenderer renderer,
         Predicate<String> hasPermission,
         SearchDisplayScope scope,
-        boolean interactive
+        boolean interactive,
+        java.util.OptionalLong total,
+        int currentPage,
+        int pageSize
     ) {
         if (!page.events().isEmpty() && page.events().stream().noneMatch(event -> hasPermission.test(eventPermission(event.eventType())))) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
@@ -286,13 +295,18 @@ public final class SearchCommandSupport {
             sendMessage.accept(SearchCommandMessages.RESULT.apply(line));
         }
 
-        var pagination = paginationComponent(query, page);
+        var pagination = paginationComponent(query, page, total, currentPage, pageSize);
         if (pagination != null) {
             sendMessage.accept(pagination);
         }
     }
 
     static @Nullable Component paginationComponent(String query, SearchPage page) {
+        return paginationComponent(query, page, java.util.OptionalLong.empty(), 1, 10);
+    }
+
+    static @Nullable Component paginationComponent(String query, SearchPage page, java.util.OptionalLong total,
+                                                    int currentPage, int pageSize) {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(page, "page");
 
@@ -302,7 +316,7 @@ public final class SearchCommandSupport {
         if (page.previousCursor().isPresent()) {
             result = result.append(
                 SearchCommandMessages.PREVIOUS.asComponent()
-                    .clickEvent(ClickEvent.runCommand(pageCommand(query, page.previousCursor().get())))
+                    .clickEvent(ClickEvent.runCommand(pageCommand(query, page.previousCursor().get(), total.isPresent() ? Math.max(1, currentPage - 1) : 0)))
             );
             present = true;
         }
@@ -313,11 +327,17 @@ public final class SearchCommandSupport {
             }
             result = result.append(
                 SearchCommandMessages.NEXT.asComponent()
-                    .clickEvent(ClickEvent.runCommand(pageCommand(query, page.nextCursor().get())))
+                    .clickEvent(ClickEvent.runCommand(pageCommand(query, page.nextCursor().get(), total.isPresent() ? Math.addExact(currentPage, 1) : 0)))
             );
             present = true;
         }
 
+        if (total.isPresent()) {
+            if (present) result = result.append(Component.space());
+            var pages = Math.max(1L, (total.getAsLong() + pageSize - 1) / pageSize);
+            result = result.append(SearchCommandMessages.COUNT.apply(total.getAsLong(), currentPage, pages));
+            present = true;
+        }
         return present ? result : null;
     }
 
@@ -332,12 +352,13 @@ public final class SearchCommandSupport {
         return type.asString();
     }
 
-    private static String pageCommand(String query, SearchRequest.Cursor cursor) {
+    private static String pageCommand(String query, SearchRequest.Cursor cursor, int page) {
         var command = new StringBuilder("/kansokusha search");
         if (!query.isBlank()) {
             command.append(' ').append(query.strip());
         }
         command.append(' ').append(CURSOR_PREFIX).append(serializeCursor(cursor));
+        if (page > 0) command.append(',').append(page);
         return command.toString();
     }
 
@@ -350,12 +371,13 @@ public final class SearchCommandSupport {
     }
 
     public static SearchRequest.Cursor parseCursor(String value) {
-        var parts = value.split(",", 3);
-        if (parts.length != 3) {
+        var parts = value.split(",", -1);
+        if (parts.length != 3 && parts.length != 4) {
             throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent());
         }
 
         try {
+            cursorPage(value);
             var direction = switch (parts[0]) {
                 case "next" -> SearchRequest.Direction.NEXT;
                 case "previous" -> SearchRequest.Direction.PREVIOUS;
@@ -370,6 +392,21 @@ public final class SearchCommandSupport {
             throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent(), e);
         }
     }
+
+    private static int cursorPage(String value) {
+        var parts = value.split(",", -1);
+        if (parts.length == 3) return 1;
+        try {
+            if (parts.length != 4) throw new IllegalArgumentException();
+            var page = Integer.parseInt(parts[3]);
+            if (page < 1 || page == Integer.MAX_VALUE) throw new IllegalArgumentException();
+            return page;
+        } catch (IllegalArgumentException e) {
+            throw new SearchQueryParseException("invalid search cursor page", SearchQueryMessages.INVALID_CURSOR.asComponent(), e);
+        }
+    }
+
+    private record CountedPage(SearchPage page, java.util.OptionalLong total, SearchRequest request) { }
 
     /**
      * The sender of {@code /kansokusha search}.
@@ -393,7 +430,8 @@ public final class SearchCommandSupport {
     record Invocation(
         String queryText,
         SearchQuery query,
-        Optional<SearchRequest.Cursor> cursor
+        Optional<SearchRequest.Cursor> cursor,
+        int page
     ) {
 
         public Invocation {

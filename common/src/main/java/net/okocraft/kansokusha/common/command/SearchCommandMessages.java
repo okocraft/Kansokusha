@@ -48,6 +48,10 @@ public final class SearchCommandMessages {
         .define("kansokusha.command.search.result", "<gray><line></gray>")
         .with(line -> Argument.component("line", line));
 
+    public static final MessageKey.Arg3<Long, Integer, Long> COUNT = DEFINER
+        .define("kansokusha.command.search.count", "<gray><total> results <page>/<pages></gray>")
+        .with(total -> Argument.numeric("total", total), page -> Argument.numeric("page", page), pages -> Argument.numeric("pages", pages));
+
     public static final MessageKey PREVIOUS = DEFINER
         .define("kansokusha.command.search.previous", "<gold>[Previous]</gold>");
 
