@@ -9,6 +9,7 @@ import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
+import net.okocraft.kansokusha.common.command.SearchGuide;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -49,6 +50,11 @@ final class SearchCommand {
         Clock clock,
         ZoneId timezone
     ) {
+        if (rawInput.isBlank()) {
+            SearchGuide.send(source::hasPermission, source::sendMessage, false);
+            return Command.SINGLE_SUCCESS;
+        }
+
         // A proxy has no world position, so radius is never available.
         var searchSource = new SearchCommandSupport.SearchSource(
             source::hasPermission,

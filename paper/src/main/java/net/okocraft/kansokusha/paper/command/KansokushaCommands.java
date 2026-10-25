@@ -30,6 +30,7 @@ public final class KansokushaCommands {
     public static List<Map<String, String>> getDefaultMessages() {
         var defaults = new ArrayList<>(List.of(
             CommandMessages.defaultMessages(),
+            net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),

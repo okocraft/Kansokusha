@@ -73,7 +73,7 @@ public final class SearchCommandSupport {
         try {
             invocation = parseInvocation(rawInput, clock, timezone, source.origin(), source.hasPermission());
         } catch (SearchQueryParseException e) {
-            source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.reason()));
+            source.sendMessage().accept(SearchCommandMessages.PARSE_ERROR.apply(e.reason()).append(Component.space()).append(SearchGuide.link()));
             return false;
         }
 

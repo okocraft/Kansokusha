@@ -15,7 +15,8 @@ public final class CommandHelp {
             sendMessage.accept(CommandMessages.HELP_VERSION.asComponent());
         }
         if (hasPermission.test(SearchCommandSupport.PERMISSION)) {
-            sendMessage.accept(CommandMessages.HELP_SEARCH.asComponent());
+            sendMessage.accept(CommandMessages.HELP_SEARCH.asComponent().clickEvent(
+                net.kyori.adventure.text.event.ClickEvent.runCommand("/kansokusha search")));
         }
         if (hasPermission.test(EventCommandSupport.PERMISSION)) {
             sendMessage.accept(CommandMessages.HELP_EVENT.asComponent());

@@ -180,3 +180,7 @@ Counting uses the same filters and allowed event types as the page search, ignor
 cursor and page size. It runs on the storage thread and may be expensive for wide searches.
 The hidden cursor optionally includes a fourth page-number field; old three-field cursors
 remain accepted. Counts and pages are recalculated on each invocation, not a fixed snapshot.
+
+Running `/kansokusha search` without conditions shows a guide without querying storage.
+Click examples to fill the input line. Paper players see `radius`; console and Velocity users
+are guided to explicit `around` coordinates. Examples are limited by event visibility permissions.
