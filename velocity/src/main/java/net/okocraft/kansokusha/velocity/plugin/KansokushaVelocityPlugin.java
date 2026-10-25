@@ -61,12 +61,12 @@ public final class KansokushaVelocityPlugin {
         this.runtime = runtime;
 
         var listeners = List.of(
-            new net.okocraft.kansokusha.velocity.command.CommandNavigation(),
             VelocityServerConnectedListener.register(runtime, this.logger),
             VelocityPlayerSessionListener.register(runtime, this.logger),
             VelocityChatSubscriber.register(runtime),
             VelocityCommandSubscriber.register(runtime),
-            VelocityBackendRegistryChangeListener.register(runtime, this.logger)
+            VelocityBackendRegistryChangeListener.register(runtime, this.logger),
+            new net.okocraft.kansokusha.velocity.command.CommandNavigation()
         );
         for (var listener : listeners) {
             this.proxyServer.getEventManager().register(this, listener);

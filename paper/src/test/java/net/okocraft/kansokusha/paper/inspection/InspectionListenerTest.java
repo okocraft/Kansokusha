@@ -244,10 +244,11 @@ class InspectionListenerTest {
     void testEitherDoubleChestHalfSelectsBothCoordinates() {
         var left = block(10, 64, -3);
         var right = block(11, 64, -3);
+        var world = left.getWorld();
         var leftInventory = Mockito.mock(org.bukkit.inventory.Inventory.class);
         var rightInventory = Mockito.mock(org.bukkit.inventory.Inventory.class);
-        Mockito.when(leftInventory.getLocation()).thenReturn(new org.bukkit.Location(left.getWorld(), 10, 64, -3));
-        Mockito.when(rightInventory.getLocation()).thenReturn(new org.bukkit.Location(left.getWorld(), 11, 64, -3));
+        Mockito.when(leftInventory.getLocation()).thenReturn(new org.bukkit.Location(world, 10, 64, -3));
+        Mockito.when(rightInventory.getLocation()).thenReturn(new org.bukkit.Location(world, 11, 64, -3));
         var chest = Mockito.mock(org.bukkit.inventory.DoubleChestInventory.class);
         Mockito.when(chest.getLeftSide()).thenReturn(leftInventory);
         Mockito.when(chest.getRightSide()).thenReturn(rightInventory);
