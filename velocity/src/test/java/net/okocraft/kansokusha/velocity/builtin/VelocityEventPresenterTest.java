@@ -89,7 +89,8 @@ class VelocityEventPresenterTest {
                 new com.velocitypowered.api.proxy.server.ServerInfo("Lobby", InetSocketAddress.createUnresolved("example.invalid", 25565)))
         );
         var defaults = VelocityEventPresenter.defaultMessages().stream().flatMap(map -> map.keySet().stream())
-            .map(key -> key.substring("kansokusha.display.event.".length())).collect(java.util.stream.Collectors.toSet());
+            .filter(key -> key.startsWith("kansokusha.display.compact.event."))
+            .map(key -> key.substring("kansokusha.display.compact.event.".length())).collect(java.util.stream.Collectors.toSet());
         Assertions.assertEquals(fixtures.keySet(), defaults);
         for (var fixture : fixtures.entrySet()) {
             var content = new VelocityEventPresenter().present(event(fixture.getKey(), fixture.getValue()), true, this.renderer);

@@ -180,11 +180,7 @@ public final class EventRenderer {
         if (event.searchText().isPresent()) {
             summary = summary.append(Component.space()).append(Component.text(preview(event.searchText().get())));
         }
-        if (!detailed && event.payload().isEmpty()) {
-            summary = summary.append(Component.space()).append(EventPresentationMessages.MORE_IN_DETAILS.asComponent());
-        }
-        return new EventPresenter.Content(summary, detailed
-            ? List.of(EventPresentationMessages.UNAVAILABLE.asComponent()) : List.of());
+        return new EventPresenter.Content(summary, List.of(), EventPresentationMessages.UNAVAILABLE.asComponent(), Map.of());
     }
 
     public static String preview(String text) {

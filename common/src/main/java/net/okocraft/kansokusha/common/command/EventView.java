@@ -19,20 +19,22 @@ public final class EventView {
     private final MessageKey.Arg3<Component, Component, Component> message;
 
     public EventView(String type, String english) {
-        this.message = this.definer.define("kansokusha.display.event." + type, english)
+        // Keep legacy keys registered for existing custom files. The new layout has its own keys.
+        this.definer.define("kansokusha.display.event." + type, english);
+        this.message = this.definer.define("kansokusha.display.compact.event." + type, english)
             .with(actor -> Argument.component("actor", actor),
                 target -> Argument.component("target", target), context -> Argument.component("context", context));
     }
 
     public Component summary(Component actor, Component target, Component context) {
-        return this.message.apply(actor, target, context);
+        return this.message.apply(actor.equals(Component.empty()) ? actor : actor.append(Component.space()), target, context);
     }
 
     public EventPresenter.Content withoutPayload(SearchPage.Event event, EventRenderer renderer, Component target) {
-        var context = event.searchText().map(text -> Component.text(" | " + EventRenderer.preview(text)))
-            .orElse(Component.empty()).append(Component.space()).append(EventPresentationMessages.MORE_IN_DETAILS.asComponent());
-        return new EventPresenter.Content(this.summary(renderer.actor(event), target, context),
-            java.util.List.of(EventPresentationMessages.UNAVAILABLE.asComponent()));
+        var context = event.searchText().map(text -> Component.text(" “" + EventRenderer.preview(text) + "”"))
+            .orElse(Component.empty());
+        return new EventPresenter.Content(this.summary(renderer.actor(event), target, context), java.util.List.of(),
+            EventPresentationMessages.MORE_IN_DETAILS.asComponent(), java.util.Map.of());
     }
 
     public Map<String, String> defaultMessages() {

@@ -2,6 +2,11 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.text.Component;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
+import net.okocraft.kansokusha.common.command.EventPresentationMessages;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.kyori.adventure.text.event.HoverEvent;
+import java.util.ArrayList;
 import net.okocraft.kansokusha.common.command.EventPresenter;
 import net.okocraft.kansokusha.common.command.EventRenderer;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -60,28 +65,82 @@ public final class PaperEventPresenter implements EventPresenter {
         }
         try {
             var payload = PaperPayloadNbtCodec.decode(event.payload().get().bytes());
-            var context = Component.empty();
+            var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());
+            var hover = new ArrayList<Component>();
             for (var spec : view.fields()) {
-                var field = spec.startsWith("~") ? spec.substring(1) : spec;
-                if (field.equals("$server") || field.equals("$world")) {
-                    var key = field.equals("$server") ? event.server() : event.world();
-                    if (key.isPresent()) {
-                        context = context.append(Component.text(" | ")).append(
-                            EventFieldMessages.field(field.substring(1), Component.text(key.get().asString())));
-                    }
-                    continue;
-                }
-                var value = payload.get(field);
+                var value = field(event, payload, spec);
                 if (value != null) {
-                    context = context.append(Component.text(" | "))
-                        .append(EventFieldMessages.field(field, spec.startsWith("~") ? PaperPayloadDisplay.componentPreview(value) : PaperPayloadDisplay.preview(value, field)));
+                    hover.add(EventFieldMessages.field(label(spec), value));
+                }
+                if (hover.size() == 4) {
+                    break;
                 }
             }
-            var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());
+            if (view.targetKind() == EventRenderer.NameKind.BLOCK) {
+                var states = new ArrayList<Component>();
+                for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced")) {
+                    var state = payload.get(field);
+                    if (state instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
+                        states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field)));
+                    }
+                }
+                if (!states.isEmpty()) {
+                    target = target.hoverEvent(HoverEvent.showText(EventRenderer.join(states)));
+                }
+            }
+            if (!view.quantity().isEmpty()) {
+                if (view.quantity().equals("amount_delta")) {
+                    var delta = payload.getIntOr("amount_delta", 0);
+                    target = target.append(Component.text(" " + (delta > 0 ? "+" : "") + delta));
+                } else {
+                    var item = PaperPayloadDisplay.at(payload, view.quantity());
+                    if (item != null) {
+                        // The item view contains the type once, alongside its saved quantity.
+                        target = PaperPayloadDisplay.preview(item, view.quantity());
+                    }
+                }
+            }
+            var context = event.searchText().map(text -> Component.text(" “" + EventRenderer.preview(text) + "”"))
+                .orElse(Component.empty());
+            var details = new ArrayList<Component>();
+            var sections = new LinkedHashMap<String, Section>();
+            sections.put("raw", new Section(EventPresentationMessages.RAW.asComponent(), () -> PaperPayloadDisplay.details(payload)));
+            if (detailed) {
+                for (var spec : view.primary()) {
+                    var value = field(event, payload, spec);
+                    if (value == null) {
+                        continue;
+                    }
+                    details.add(EventFieldMessages.field(label(spec), value));
+                    var tag = PaperPayloadDisplay.at(payload, spec.startsWith("~") ? spec.substring(1) : spec);
+                    if (tag != null && PaperPayloadDisplay.isText(tag)) {
+                        var text = PaperPayloadDisplay.text(tag, spec);
+                        sections.put("text_" + label(spec), new Section(EventFieldMessages.label(label(spec))
+                            .append(Component.space()).append(EventPresentationMessages.FULL.asComponent()),
+                            () -> PaperPayloadDisplay.textLines(text)));
+                    }
+                }
+            }
             return Optional.of(new Content(view.sentence().summary(renderer.actor(event), target, context),
-                detailed ? PaperPayloadDisplay.details(payload) : List.of()));
+                details, EventRenderer.join(hover), sections));
         } catch (IOException | IllegalArgumentException e) {
             return Optional.empty();
         }
+    }
+    private static String label(String spec) {
+        return spec.startsWith("$") || spec.startsWith("~") ? spec.substring(1) : spec;
+    }
+
+    private static @org.jetbrains.annotations.Nullable Component field(SearchPage.Event event, CompoundTag payload, String spec) {
+        var label = label(spec);
+        if (spec.equals("$server") || spec.equals("$world")) {
+            return (spec.equals("$server") ? event.server() : event.world()).map(key -> (Component) Component.text(key.asString())).orElse(null);
+        }
+        var value = PaperPayloadDisplay.at(payload, label);
+        if (value == null) {
+            return null;
+        }
+        return spec.startsWith("~") ? Component.text(EventRenderer.preview(PaperPayloadDisplay.text(value, spec)))
+            : PaperPayloadDisplay.preview(value, label);
     }
 }
