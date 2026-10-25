@@ -8,6 +8,10 @@ import java.util.Map;
 public final class PaperViewMessages {
 
     private static final DefaultMessageDefiner DEFINER = DefaultMessageDefiner.create();
+    public static final MessageKey ADDED = DEFINER.define("kansokusha.display.compact.added", "<green>+</green>");
+    public static final MessageKey REMOVED = DEFINER.define("kansokusha.display.compact.removed", "<red>-</red>");
+    public static final MessageKey OPERATION_SCOPE = DEFINER.define("kansokusha.display.compact.operation-scope",
+        "Recorded operation; completion or the final result may differ. Container deltas are committed net changes.");
     public static final MessageKey READ = DEFINER.define("kansokusha.display.compact.read", "[Read]");
     public static final MessageKey ITEMS = DEFINER.define("kansokusha.display.compact.items", "[Items]");
     public static final MessageKey EMPTY_ITEM = DEFINER.define("kansokusha.display.compact.empty-item", "(empty)");

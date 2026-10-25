@@ -133,3 +133,11 @@ Paper の現行 `id/properties` と従来の `Name/Properties` のブロック�
 | `world_border_change` | `—` | `before after before_size after_size transition_duration_ticks` |
 | `world_difficulty_change` | `—` | `before after` |
 | `world_spawn_change` | `—` | `before after` |
+
+## Concise action wording
+
+Lists use short actions; recording guarantees belong in hover/detail. `+` / `-` indicate
+block/entity placement/removal, container-side committed net changes, player-side item
+pickup/drop, and liquid addition/removal for buckets. These signs use different reference
+objects; they do not imply that a whole observed operation completed successfully.
+Container quantities show the absolute committed delta.

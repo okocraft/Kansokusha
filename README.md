@@ -129,3 +129,11 @@ the intentionally unsupported initial search scope.
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.
 
 Copyright © 2026, OKOCRAFT
+
+### Adopting concise action messages
+
+Existing language customizations are preserved. To adopt the concise +/- defaults, back up
+`languages/*.properties`, remove the `kansokusha.display.compact.event.*` entries, and restart.
+The added `kansokusha.display.compact.added` / `removed` keys control container marker colors;
+other marker colors are part of each event sentence. Item signs refer to player inventory,
+container signs to container contents, and bucket signs to liquid blocks.
