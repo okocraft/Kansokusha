@@ -31,7 +31,7 @@ public final class EventTime {
         } else {
             var unit = seconds < 3600 ? "minutes" : seconds < 86400 ? "hours" : "days";
             var amount = seconds / (seconds < 3600 ? 60 : seconds < 86400 ? 3600 : 86400);
-            text = EventPresentationMessages.relative(unit, future).apply(amount);
+            text = EventPresentationMessages.relative(unit, future, amount).apply(amount);
         }
         return text.hoverEvent(HoverEvent.showText(absolute(occurredAt, timezone)));
     }

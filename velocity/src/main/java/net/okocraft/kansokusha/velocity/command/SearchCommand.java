@@ -10,8 +10,8 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
-import org.jetbrains.annotations.NotNullByDefault;
 import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
+import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.ZoneId;

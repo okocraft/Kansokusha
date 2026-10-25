@@ -4,6 +4,7 @@ import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import dev.siroshun.mcmsgdef.MessageKey;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.translation.Argument;
+import net.okocraft.kansokusha.common.search.SearchPage;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -25,6 +26,13 @@ public final class EventView {
 
     public Component summary(Component actor, Component target, Component context) {
         return this.message.apply(actor, target, context);
+    }
+
+    public EventPresenter.Content withoutPayload(SearchPage.Event event, EventRenderer renderer, Component target) {
+        var context = event.searchText().map(text -> Component.text(" | " + EventRenderer.preview(text)))
+            .orElse(Component.empty()).append(Component.space()).append(EventPresentationMessages.MORE_IN_DETAILS.asComponent());
+        return new EventPresenter.Content(this.summary(renderer.actor(event), target, context),
+            java.util.List.of(EventPresentationMessages.UNAVAILABLE.asComponent()));
     }
 
     public Map<String, String> defaultMessages() {

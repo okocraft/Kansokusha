@@ -17,6 +17,8 @@ public final class EventPresentationMessages {
     public static final MessageKey SOON = DEFINER.define("kansokusha.display.time.soon", "in less than a minute");
     public static final MessageKey UNAVAILABLE = DEFINER.define("kansokusha.display.unavailable",
         "Payload unavailable or unsupported; showing common fields");
+    public static final MessageKey NO_ACTOR = DEFINER.define("kansokusha.display.no-actor", "(actor not recorded)");
+    public static final MessageKey MORE_IN_DETAILS = DEFINER.define("kansokusha.display.more-in-details", "(payload omitted; see details)");
     private static final Map<String, MessageKey.Arg1<Long>> RELATIVE = new LinkedHashMap<>();
 
     static {
@@ -26,12 +28,16 @@ public final class EventPresentationMessages {
                 RELATIVE.put(key, DEFINER.define("kansokusha.display.time." + key,
                     future ? "in <amount> " + unit : "<amount> " + unit + " ago")
                     .with((Long amount) -> Argument.numeric("amount", amount)));
+                RELATIVE.put(key + ".one", DEFINER.define("kansokusha.display.time." + key + ".one",
+                    future ? "in <amount> " + unit.substring(0, unit.length() - 1)
+                        : "<amount> " + unit.substring(0, unit.length() - 1) + " ago")
+                    .with((Long amount) -> Argument.numeric("amount", amount)));
             }
         }
     }
 
-    public static MessageKey.Arg1<Long> relative(String unit, boolean future) {
-        return RELATIVE.get(unit + (future ? ".future" : ".past"));
+    public static MessageKey.Arg1<Long> relative(String unit, boolean future, long amount) {
+        return RELATIVE.get(unit + (future ? ".future" : ".past") + (amount == 1 ? ".one" : ""));
     }
 
     public static final MessageKey.Arg2<Component, Component> ROW = DEFINER

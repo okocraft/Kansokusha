@@ -5,14 +5,14 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
-import net.okocraft.kansokusha.common.command.EventRenderer;
-import java.time.Clock;
-import java.time.ZoneId;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
-import org.jetbrains.annotations.NotNullByDefault;
 import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
+import org.jetbrains.annotations.NotNullByDefault;
+
+import java.time.Clock;
+import java.time.ZoneId;
 
 @NotNullByDefault
 final class EventCommand {

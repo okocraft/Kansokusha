@@ -49,7 +49,13 @@ public final class PaperEventPresenter implements EventPresenter {
             return Optional.empty();
         }
         var view = VIEWS.get(event.eventType().value());
-        if (view == null || event.payload().isEmpty() || event.payload().get().generation().value() != 1) {
+        if (view == null) {
+            return Optional.empty();
+        }
+        if (event.payload().isEmpty()) {
+            return Optional.of(view.sentence().withoutPayload(event, renderer, event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty())));
+        }
+        if (event.payload().get().generation().value() != 1) {
             return Optional.empty();
         }
         try {

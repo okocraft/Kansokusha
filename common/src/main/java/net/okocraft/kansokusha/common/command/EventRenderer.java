@@ -50,7 +50,7 @@ public final class EventRenderer {
 
     public Component actor(SearchPage.Event event) {
         return switch (event.actor().orElse(null)) {
-            case null -> Component.empty();
+            case null -> EventPresentationMessages.NO_ACTOR.asComponent();
             case PlayerActor player -> SearchCommandSupport.withUuidHover(
                 Component.text(event.actorName().orElse(player.uniqueId().toString())), player.uniqueId());
             case EntityActor entity -> SearchCommandSupport.withUuidHover(
@@ -102,6 +102,9 @@ public final class EventRenderer {
         }
         if (event.searchText().isPresent()) {
             summary = summary.append(Component.space()).append(Component.text(preview(event.searchText().get())));
+        }
+        if (!detailed && event.payload().isEmpty()) {
+            summary = summary.append(Component.space()).append(EventPresentationMessages.MORE_IN_DETAILS.asComponent());
         }
         return new EventPresenter.Content(summary, detailed
             ? List.of(EventPresentationMessages.UNAVAILABLE.asComponent()) : List.of());

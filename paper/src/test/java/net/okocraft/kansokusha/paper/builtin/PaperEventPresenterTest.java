@@ -123,6 +123,18 @@ class PaperEventPresenterTest {
         Assertions.assertTrue(summary.contains("minecraft:overworld"), summary);
     }
 
+    @Test
+    void testLargePayloadStillHasAUsefulSentence(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var original = event("block_break", new CompoundTag());
+        var event = new SearchPage.Event(original.eventId(), original.eventType(), original.occurredAt(),
+            original.server(), original.world(), original.position(), original.actor(), original.actorName(),
+            original.targetType(), original.searchText());
+        var text = plain(this.renderer.row(event, true, false), Locale.ENGLISH);
+        Assertions.assertTrue(text.contains("Alice attempted to break"), text);
+        Assertions.assertTrue(text.contains("payload omitted"), text);
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),

@@ -5,14 +5,14 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
-import net.okocraft.kansokusha.common.command.EventRenderer;
-import java.time.Clock;
-import java.time.ZoneId;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
-import org.jetbrains.annotations.NotNullByDefault;
 import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
+import org.jetbrains.annotations.NotNullByDefault;
+
+import java.time.Clock;
+import java.time.ZoneId;
 
 @NotNullByDefault
 final class EventCommand {

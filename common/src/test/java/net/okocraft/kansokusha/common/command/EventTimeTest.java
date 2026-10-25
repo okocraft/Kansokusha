@@ -49,6 +49,31 @@ class EventTimeTest {
             ZoneId.of("Europe/London"))).contains("Z [Europe/London]"));
     }
 
+    @Test
+    void testTimeHoverSurvivesRowClickAndProviderFailure(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, List.of(EventPresentationMessages.defaultMessages(), SearchCommandMessages.defaultMessages()));
+        var now = Instant.parse("2026-10-25T00:00:00Z");
+        var timezone = ZoneId.of("Asia/Tokyo");
+        var event = new net.okocraft.kansokusha.common.search.SearchPage.Event(java.util.UUID.randomUUID(),
+            net.kyori.adventure.key.Key.key("custom:event"), now, java.util.Optional.empty(), java.util.Optional.empty(),
+            java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(),
+            java.util.Optional.of("😀".repeat(101)));
+        var renderer = new EventRenderer(java.time.Clock.fixed(now.plusSeconds(300), timezone), timezone,
+            (value, detailed, context) -> { throw new IllegalArgumentException("bad provider data"); },
+            (key, kind) -> Component.text(key.asString()));
+        var row = GlobalTranslator.render(renderer.row(event, true, false), Locale.JAPANESE);
+        Assertions.assertEquals(net.kyori.adventure.text.event.ClickEvent.runCommand("/kansokusha event " + event.eventId()), row.clickEvent());
+        Assertions.assertTrue(hasHover(row, EventTime.absolute(now, timezone)));
+        Assertions.assertTrue(plain(row).contains("5分前"));
+        Assertions.assertEquals("😀".repeat(100) + "…", EventRenderer.preview("😀".repeat(101)));
+        Assertions.assertFalse(plain(row).contains("bad provider data"));
+    }
+
+    private static boolean hasHover(Component component, Component expected) {
+        return component.hoverEvent() != null && component.hoverEvent().value().equals(expected)
+            || component.children().stream().anyMatch(child -> hasHover(child, expected));
+    }
+
     private static String plain(Component value) {
         var result = new StringBuilder(value instanceof TextComponent text ? text.content() : "");
         value.children().forEach(child -> result.append(plain(child)));

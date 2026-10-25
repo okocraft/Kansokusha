@@ -121,10 +121,16 @@ public final class EventCommandSupport {
             Component.text(Integer.toString(detail.payloadGeneration().value()))
         ));
         lines.add(line(EventCommandMessages.EXPIRES_AT, renderer.absolute(detail.expiresAt())));
-        event.searchText().ifPresent(value -> lines.add(line(
-            EventCommandMessages.COMMUNICATION_TEXT,
-            Component.text(value)
-        )));
+        event.searchText().ifPresent(value -> {
+            if (value.isEmpty()) {
+                lines.add(line(EventCommandMessages.COMMUNICATION_TEXT, Component.empty()));
+            }
+            while (!value.isEmpty()) {
+                var end = value.offsetByCodePoints(0, Math.min(256, value.codePointCount(0, value.length())));
+                lines.add(line(EventCommandMessages.COMMUNICATION_TEXT, Component.text(value.substring(0, end))));
+                value = value.substring(end);
+            }
+        });
         return List.copyOf(lines);
     }
 

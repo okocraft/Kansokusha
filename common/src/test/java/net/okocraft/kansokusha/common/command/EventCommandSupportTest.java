@@ -209,6 +209,22 @@ class EventCommandSupportTest {
         ));
     }
 
+    @Test
+    void testPermissionIsCheckedBeforeAnyPayloadPresentation() {
+        var api = new TestApi();
+        api.lookup = CompletableFuture.completedFuture(Optional.of(minimalEvent(BREAK)));
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var renderer = new EventRenderer(java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC,
+            (event, detailed, context) -> {
+                calls.incrementAndGet();
+                return Optional.empty();
+            }, (key, kind) -> Component.text(key.asString()));
+        var messages = new ArrayList<Component>();
+        EventCommandSupport.execute(api, EVENT_ID.toString(), permission -> false, messages::add, renderer);
+        Assertions.assertEquals(0, calls.get());
+        Assertions.assertEquals(List.of(EventCommandMessages.PERMISSION_DENIED.asComponent()), messages);
+    }
+
     private static EventDetail minimalEvent(Key eventType) {
         return event(eventType, Optional.empty());
     }

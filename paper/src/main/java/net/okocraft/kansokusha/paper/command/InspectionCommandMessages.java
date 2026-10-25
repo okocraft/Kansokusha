@@ -30,7 +30,7 @@ public final class InspectionCommandMessages {
     public static final MessageKey HELP_INSPECT = DEFINER
         .define(
             "kansokusha.command.help.inspect",
-            "<aqua>/kansokusha inspect [on/off]</aqua><dark_gray> - </dark_gray><gray>Toggle inspection mode</gray>"
+            "<aqua>/kansokusha inspect [on/off]</aqua><dark_gray> - </dark_gray><gray>Inspect history at a block: left-click the block or right-click its adjacent position. Use off to finish.</gray>"
         );
 
     public static @UnmodifiableView Map<String, String> defaultMessages() {

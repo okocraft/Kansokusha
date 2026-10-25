@@ -64,8 +64,38 @@ class VelocityEventPresenterTest {
             VelocityPlayerSessionPayloadCodec.encodeBackendKick(reason, false,
                 VelocityPlayerSessionPayloadCodec.ProxyAction.REDIRECT, Key.key("velocity:lobby"), reason)), true, this.renderer).orElseThrow();
         Assertions.assertTrue(plain(content.summary()).contains("Reason"));
-        Assertions.assertFalse(content.toString().contains("/danger"));
+        Assertions.assertFalse(content.summary().toString().contains("/danger"));
+        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain)
+            .anyMatch(text -> text.contains("/danger")));
         Assertions.assertTrue(plain(content.summary()).contains("velocity:lobby"));
+    }
+
+    @Test
+    void testAllSevenRegisteredVelocityTypesHaveDecoders(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var backend = Key.key("velocity:lobby");
+        var fixtures = java.util.Map.of(
+            "server_connected", VelocityServerConnectedPayloadCodec.encode(null),
+            "velocity_post_login", VelocityPlayerSessionPayloadCodec.encodePostLogin("Alice",
+                InetSocketAddress.createUnresolved("192.0.2.1", 12345), null, null),
+            "velocity_disconnect", VelocityPlayerSessionPayloadCodec.encodeDisconnect("Alice",
+                com.velocitypowered.api.event.connection.DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN, backend),
+            "backend_kick", VelocityPlayerSessionPayloadCodec.encodeBackendKick(null, false,
+                VelocityPlayerSessionPayloadCodec.ProxyAction.DISCONNECT, null, null),
+            "velocity_chat", VelocityCommunicationPayloadCodec.encodeChat("original"),
+            "velocity_command", VelocityCommunicationPayloadCodec.encodeCommand("console", "Console", "original"),
+            "backend_registry_change", VelocityBackendRegistryChangePayloadCodec.encode(
+                VelocityBackendRegistryChangePayloadCodec.Action.REGISTER, backend,
+                new com.velocitypowered.api.proxy.server.ServerInfo("Lobby", InetSocketAddress.createUnresolved("example.invalid", 25565)))
+        );
+        var defaults = VelocityEventPresenter.defaultMessages().stream().flatMap(map -> map.keySet().stream())
+            .map(key -> key.substring("kansokusha.display.event.".length())).collect(java.util.stream.Collectors.toSet());
+        Assertions.assertEquals(fixtures.keySet(), defaults);
+        for (var fixture : fixtures.entrySet()) {
+            var content = new VelocityEventPresenter().present(event(fixture.getKey(), fixture.getValue()), true, this.renderer);
+            Assertions.assertTrue(content.isPresent(), fixture.getKey());
+            Assertions.assertFalse(plain(content.orElseThrow().summary()).contains("kansokusha.display.event."));
+        }
     }
 
     private static SearchPage.Event event(String type, EventPayload payload) {

@@ -19,7 +19,6 @@ import org.jetbrains.annotations.Nullable;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -105,7 +104,7 @@ public final class SearchCommandSupport {
                     source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer);
+                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission());
             });
         return true;
     }
@@ -235,13 +234,17 @@ public final class SearchCommandSupport {
         String query,
         SearchPage page,
         boolean eventDetailsPermitted,
-        EventRenderer renderer
+        EventRenderer renderer,
+        Predicate<String> hasPermission
     ) {
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
         }
         for (var event : page.events()) {
-            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted, true)));
+            if (!hasPermission.test(eventPermission(event.eventType()))) {
+                continue;
+            }
+            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), true)));
         }
 
         var pagination = paginationComponent(query, page);

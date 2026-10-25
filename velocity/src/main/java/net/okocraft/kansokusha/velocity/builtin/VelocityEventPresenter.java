@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.velocity.builtin;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresenter;
@@ -39,9 +40,11 @@ public final class VelocityEventPresenter implements EventPresenter {
         "backend_kick", view("backend_kick", "<actor> was kicked by <target><context>", payload -> {
             var data = VelocityPlayerSessionPayloadCodec.decodeBackendKick(payload);
             return facts("reason", data.originalReason(), "during_server_connect", data.duringServerConnect(),
-                "action", data.action(), "destination", data.redirectTarget(), "message", data.message());
+                "action", data.action(), "destination", data.redirectTarget(), "message", data.message(),
+                "reason_component", data.originalReason() == null ? null : GsonComponentSerializer.gson().serialize(data.originalReason()),
+                "message_component", data.message() == null ? null : GsonComponentSerializer.gson().serialize(data.message()));
         }, "reason", "action", "destination"),
-        "velocity_chat", view("velocity_chat", "<actor> said<context>",
+        "velocity_chat", view("velocity_chat", "<actor> chat input<context>",
             payload -> facts("message", VelocityCommunicationPayloadCodec.decodeChat(payload)), "message"),
         "velocity_command", view("velocity_command", "<actor> entered a command<context>", payload -> {
             var data = VelocityCommunicationPayloadCodec.decodeCommand(payload);
@@ -69,7 +72,13 @@ public final class VelocityEventPresenter implements EventPresenter {
     @Override
     public Optional<Content> present(SearchPage.Event event, boolean detailed, EventRenderer renderer) {
         var view = event.eventType().namespace().equals("kansokusha") ? VIEWS.get(event.eventType().value()) : null;
-        if (view == null || event.payload().isEmpty() || event.payload().get().generation().value() != 1) {
+        if (view == null) {
+            return Optional.empty();
+        }
+        if (event.payload().isEmpty()) {
+            return Optional.of(view.sentence().withoutPayload(event, renderer, event.server().map(key -> Component.text(key.asString())).orElse(Component.empty())));
+        }
+        if (event.payload().get().generation().value() != 1) {
             return Optional.empty();
         }
         try {
@@ -78,7 +87,7 @@ public final class VelocityEventPresenter implements EventPresenter {
             for (var field : view.summaryFields()) {
                 if (facts.containsKey(field)) {
                     context = context.append(Component.text(" | ")).append(EventFieldMessages.field(field,
-                        Component.text(EventRenderer.preview(facts.get(field)))));
+                        EventFieldMessages.value(field, EventRenderer.preview(facts.get(field)))));
                 }
             }
             var lines = new ArrayList<Component>();

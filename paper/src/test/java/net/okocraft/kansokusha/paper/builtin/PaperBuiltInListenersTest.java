@@ -42,6 +42,18 @@ class PaperBuiltInListenersTest {
 
         Assertions.assertEquals(PaperBuiltInListeners.FACTORIES.size(), listenerClasses.size());
         Assertions.assertEquals(58, api.registered.size());
+        var displayed = java.util.stream.Stream.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS,
+                PaperPlayerViews.VIEWS, PaperEntityViews.VIEWS, PaperAdministrativeViews.VIEWS)
+            .flatMap(java.util.Collection::stream).map(view -> Key.key("kansokusha", view.type()))
+            .collect(java.util.stream.Collectors.toSet());
+        Assertions.assertEquals(api.registered.stream().map(EventTypeDefinition::key)
+            .collect(java.util.stream.Collectors.toSet()), displayed);
+        var renderer = PaperEventPresenter.renderer(java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC);
+        for (var type : displayed) {
+            Assertions.assertTrue(new PaperEventPresenter().present(
+                PaperEventPresenterTest.event(type.value(), new net.minecraft.nbt.CompoundTag()),
+                false, renderer).isPresent(), type.asString());
+        }
         Assertions.assertTrue(api.registered.stream().allMatch(
             definition -> definition.key().namespace().equals("kansokusha")
                 && definition.payloadGeneration().equals(PayloadGeneration.FIRST)
