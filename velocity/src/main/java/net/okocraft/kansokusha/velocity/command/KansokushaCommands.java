@@ -30,7 +30,6 @@ public final class KansokushaCommands {
             EventPresentationMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
-            net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
         ));

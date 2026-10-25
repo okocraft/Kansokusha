@@ -33,12 +33,9 @@ public final class KansokushaCommands {
             net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
-            net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages(),
-            net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             InspectionCommandMessages.defaultMessages(),
-            net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             InspectionSearchMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
             PaperViewMessages.defaultMessages()
@@ -74,8 +71,8 @@ public final class KansokushaCommands {
             .then(VersionCommand.createVersionCommand())
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
             .then(EventCommand.createEventCommand(backend, clock, searchTimeZone, plugin))
-            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions))
-            .then(InspectCommand.createInspectCommand("i", inspectionSessions))
+            .then(InspectCommand.createInspectCommand("inspect", inspectionSessions, backend, clock, searchTimeZone))
+            .then(InspectCommand.createInspectCommand("i", inspectionSessions, backend, clock, searchTimeZone))
             .build();
     }
 

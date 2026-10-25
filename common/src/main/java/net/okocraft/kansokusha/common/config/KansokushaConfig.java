@@ -81,7 +81,7 @@ public record KansokushaConfig(
         String flushInterval = "";
         String cleanupInterval = "";
         @Setting("search-time-zone")
-        String searchTimeZone = "UTC";
+        String searchTimeZone = "";
         RawRetention retention = new RawRetention();
 
         KansokushaConfig validate() throws IOException {
@@ -149,7 +149,7 @@ public record KansokushaConfig(
 
     private static ZoneId parseZoneId(String value, String path) throws IOException {
         try {
-            return ZoneId.of(Objects.requireNonNullElse(value, ""));
+            return value == null || value.isBlank() ? ZoneId.systemDefault() : ZoneId.of(value);
         } catch (DateTimeException e) {
             throw invalid(path + " must be a valid IANA time zone such as UTC or Asia/Tokyo: " + value);
         }

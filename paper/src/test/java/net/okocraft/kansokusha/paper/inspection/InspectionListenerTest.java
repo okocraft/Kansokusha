@@ -86,6 +86,25 @@ class InspectionListenerTest {
     }
 
     @Test
+    void testRightClickSelectsInteractableBlockAndContainerItself() {
+        for (var material : List.of(org.bukkit.Material.CHEST, org.bukkit.Material.OAK_DOOR,
+            org.bukkit.Material.LEVER, org.bukkit.Material.OAK_SIGN, org.bukkit.Material.STONE)) {
+            var fixture = fixture();
+            var clicked = block(10, 64, -3);
+            Mockito.when(clicked.getType()).thenReturn(material);
+            if (material == org.bukkit.Material.STONE) {
+                // Container implementations are supported even when Material is not interactable.
+                Mockito.when(clicked.getState()).thenReturn(Mockito.mock(org.bukkit.block.Container.class));
+            }
+            var event = interaction(fixture.player(), Action.RIGHT_CLICK_BLOCK, clicked, BlockFace.UP, EquipmentSlot.HAND);
+            fixture.listener().inspect(event);
+            assertSuppressed(event);
+            Assertions.assertEquals(List.of(new SearchQuery.Position(Key.key("example", "world"), 10, 64, -3)), fixture.targets());
+            Mockito.verify(clicked, Mockito.never()).getRelative(Mockito.any(BlockFace.class));
+        }
+    }
+
+    @Test
     void testOffHandIsSuppressedWithoutDuplicateTarget() {
         var fixture = fixture();
         var clicked = block(10, 64, -3);
@@ -252,6 +271,7 @@ class InspectionListenerTest {
 
         var block = Mockito.mock(Block.class);
         Mockito.when(block.getWorld()).thenReturn(world);
+        Mockito.when(block.getType()).thenReturn(org.bukkit.Material.STONE);
         Mockito.when(block.getX()).thenReturn(x);
         Mockito.when(block.getY()).thenReturn(y);
         Mockito.when(block.getZ()).thenReturn(z);

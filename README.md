@@ -58,9 +58,11 @@ contained in the packaged artifact and verifies the flushed event.
 
 `config.yml` is created in the plugin data directory on first start. It contains the
 retention periods recommended by `docs/v1-built-in-event-catalog.md` and
-`search-time-zone` (default `UTC`) for search expressions such as `today`,
+`search-time-zone` (empty by default, using the server system time zone) for search expressions such as `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit offset. Restart the
-server or proxy to apply changes. See `docs/design.md` for the recording pipeline and
+server or proxy to apply changes. Existing configurations with `search-time-zone: UTC`
+keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
+The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
 
 ## Inspection mode
@@ -79,7 +81,8 @@ plugin disable, and server restart. Permission is rechecked when the inspection 
 consumed, so losing `kansokusha.command.inspect` invalidates an enabled session.
 
 While inspection is enabled, left-clicking a block selects that block coordinate and
-right-clicking a block selects the coordinate one block beyond the clicked face. Air
+right-clicking an interactable block (such as a chest, door, or sign) selects that block.
+Right-clicking other blocks selects the coordinate one block beyond the clicked face. Air
 clicks are ignored. Block and held-item use are denied for both hands, while only the
 main-hand interaction selects a target. Block damage and block break are also cancelled
 as safety guards, so inspection clicks do not mutate the world or create normal
@@ -129,3 +132,7 @@ the intentionally unsupported initial search scope.
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.
 
 Copyright © 2026, OKOCRAFT
+
+Inspection results have their own previous/next links under `kansokusha.command.inspect`.
+The hidden `inspect page` command accepts an exact world/X/Y/Z and a cursor only; it cannot
+run arbitrary search conditions. Search permission is not needed for these links.

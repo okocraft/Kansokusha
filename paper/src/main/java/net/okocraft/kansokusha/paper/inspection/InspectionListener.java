@@ -77,6 +77,8 @@ public final class InspectionListener implements Listener {
         }
 
         var targetBlock = action == Action.RIGHT_CLICK_BLOCK
+            && !(clickedBlock.getState() instanceof org.bukkit.block.Container)
+            && !clickedBlock.getType().isInteractable()
             ? clickedBlock.getRelative(event.getBlockFace())
             : clickedBlock;
 
