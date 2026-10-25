@@ -25,7 +25,6 @@ public final class KansokushaCommands {
             CommandMessages.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
-            EventPresentationMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
         );
