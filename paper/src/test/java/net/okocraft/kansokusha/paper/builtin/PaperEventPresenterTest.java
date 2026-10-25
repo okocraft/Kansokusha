@@ -61,8 +61,8 @@ class PaperEventPresenterTest {
         var inspection = this.renderer.row(event, true, false);
         var english = plain(search, Locale.ENGLISH);
         Assertions.assertTrue(english.contains("Alice attempted to break"), english);
-        Assertions.assertTrue(english.contains("1 64 2"), english);
-        Assertions.assertFalse(plain(inspection, Locale.ENGLISH).contains("1 64 2"));
+        Assertions.assertTrue(english.contains("(1,64,2)"), english);
+        Assertions.assertFalse(plain(inspection, Locale.ENGLISH).contains("(1,64,2)"));
         Assertions.assertEquals(ClickEvent.runCommand("/kansokusha event " + event.eventId()), search.clickEvent());
         Assertions.assertNull(this.renderer.row(event, false, true).clickEvent());
         Assertions.assertTrue(plain(inspection, Locale.JAPANESE).contains("破壊を試みた"));
