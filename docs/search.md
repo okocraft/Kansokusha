@@ -145,3 +145,9 @@ The initial search scope intentionally does **not** include:
 Each Paper/Folia server and Velocity proxy searches only its own local DuckDB database. The
 `server`, `payload_generation`, and `expires_at` values may still be persisted or displayed
 where applicable; their presence does not make them user-facing search filters.
+
+`kansokusha.command.event.debug` permits technical event information, actor UUID hovers,
+and the `record` / `raw` saved-data views. Without it, known player names have no UUID hover,
+record metadata and payload buttons are hidden, and direct saved-data view requests are denied.
+Paper defaults this permission to false, including for operators; grant it explicitly to developers.
+Console output still includes addressable event IDs for searches.

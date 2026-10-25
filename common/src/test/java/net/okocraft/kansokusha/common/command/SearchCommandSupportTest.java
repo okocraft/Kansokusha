@@ -121,7 +121,7 @@ class SearchCommandSupportTest {
         Assertions.assertTrue(this.execute(true, null, "", BREAK));
         Assertions.assertTrue(this.execute(true, null, "", BREAK, EventCommandSupport.PERMISSION));
 
-        var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
+        var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC).withDebug(false);
         Assertions.assertEquals(List.of(
             EventPresentationMessages.HOVER_HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),

@@ -254,7 +254,7 @@ public final class SearchCommandSupport {
             if (!hasPermission.test(eventPermission(event.eventType()))) {
                 continue;
             }
-            var line = renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty());
+            var line = renderer.withDebug(hasPermission.test(EventCommandSupport.DEBUG_PERMISSION)).row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty());
             if (!interactive) {
                 line = line.append(Component.text(" [" + event.eventId() + "]"));
             }
