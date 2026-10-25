@@ -179,7 +179,7 @@ class PaperEventPresenterTest {
         Assertions.assertFalse(visible.contains("\n"), visible);
         Assertions.assertFalse(visible.contains("facing"), visible);
         Assertions.assertFalse(visible.contains("block_grow"), visible);
-        Assertions.assertTrue(row.toString().contains("facing"));
+        Assertions.assertTrue(GlobalTranslator.render(row, Locale.ENGLISH).toString().contains("facing"));
         Assertions.assertTrue(visible.codePointCount(0, visible.length()) < 100, visible);
         var mode = new CompoundTag();
         mode.putString("old_gamemode", "survival");
@@ -199,7 +199,7 @@ class PaperEventPresenterTest {
             original.searchText(), original.payload());
         var row = this.renderer.row(event, true, false);
         Assertions.assertFalse(plain(row, Locale.ENGLISH).contains("axis"));
-        Assertions.assertTrue(row.toString().contains("axis"));
+        Assertions.assertTrue(GlobalTranslator.render(row, Locale.ENGLISH).toString().contains("axis"));
     }
 
     static SearchPage.Event event(String type, CompoundTag payload) {
