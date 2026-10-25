@@ -70,14 +70,20 @@ public final class EventRenderer {
         var content = this.content(event, false);
         var result = EventPresentationMessages.ROW.apply(
             EventTime.relative(event.occurredAt(), this.clock.instant(), this.timezone), content.summary());
-        if (location) {
+        if (location && (event.position().isPresent() || event.world().isPresent())) {
             result = result.append(Component.space()).append(location(event, world));
         }
-        var hover = EventFieldMessages.field("location", location(event, true))
-            .append(Component.newline()).append(content.hover());
-        if (detailsPermitted) {
-            hover = hover.append(Component.newline()).append(EventPresentationMessages.HINT.asComponent());
+        var context = new ArrayList<Component>();
+        if (event.position().isPresent() || event.world().isPresent() || event.server().isPresent()) {
+            context.add(EventFieldMessages.field("location", location(event, true)));
         }
+        if (!content.hover().equals(Component.empty())) {
+            context.add(content.hover());
+        }
+        if (detailsPermitted) {
+            context.add(EventPresentationMessages.HINT.asComponent());
+        }
+        var hover = join(context);
         result = result.hoverEvent(HoverEvent.showText(hover));
         return detailsPermitted ? result.clickEvent(ClickEvent.runCommand(command(event.eventId(), "", 1))) : result;
     }

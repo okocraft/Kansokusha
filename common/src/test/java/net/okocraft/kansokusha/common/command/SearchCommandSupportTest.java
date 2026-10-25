@@ -251,12 +251,25 @@ class SearchCommandSupportTest {
     }
 
     @Test
-    void testConsoleRetainsAnAddressableIdWithoutHover() {
+    void testConsoleRetainsAnAddressableIdWithoutHover(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        net.okocraft.kansokusha.common.language.LanguageProvider.load(dir, List.of(
+            SearchCommandMessages.defaultMessages(), EventPresentationMessages.defaultMessages()));
+        try {
         this.backend.metadata = metadata(BREAK);
         this.backend.page = new SearchPage(List.of(event()), Optional.empty(), Optional.empty());
         Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
         Assertions.assertEquals(EventPresentationMessages.CONSOLE_HINT.asComponent(), this.messages.getFirst());
-        Assertions.assertTrue(this.messages.getLast().toString().contains(event().eventId().toString()));
+        var rendered = net.kyori.adventure.translation.GlobalTranslator.render(this.messages.getLast(), java.util.Locale.ENGLISH);
+        Assertions.assertTrue(plain(rendered).contains(event().eventId().toString()));
+        } finally {
+            net.okocraft.kansokusha.common.language.LanguageProvider.unload();
+        }
+    }
+
+    private static String plain(Component value) {
+        var text = new StringBuilder(value instanceof net.kyori.adventure.text.TextComponent part ? part.content() : "");
+        value.children().forEach(child -> text.append(plain(child)));
+        return text.toString();
     }
 
     private static SearchMetadata metadata(Key... eventTypes) {
