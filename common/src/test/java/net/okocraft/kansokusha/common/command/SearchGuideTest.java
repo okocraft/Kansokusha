@@ -13,14 +13,14 @@ class SearchGuideTest {
         SearchGuide.send(permission -> permission.endsWith("block_break"), player::add, true);
         Assertions.assertTrue(player.stream().anyMatch(line -> line.clickEvent() != null
             && line.clickEvent().action() == ClickEvent.Action.SUGGEST_COMMAND
-            && line.clickEvent().value().contains("radius 10")));
+            && line.clickEvent().equals(ClickEvent.suggestCommand("/kansokusha search radius 10 time 1d action block"))));
         Assertions.assertFalse(player.stream().anyMatch(line -> line.clickEvent() != null
-            && line.clickEvent().value().contains("action container")));
+            && line.clickEvent().equals(ClickEvent.suggestCommand("/kansokusha search action container time 1d"))));
         var console = new ArrayList<Component>();
         SearchGuide.send(permission -> true, console::add, false);
         Assertions.assertFalse(console.stream().anyMatch(line -> line.clickEvent() != null
-            && line.clickEvent().value().contains("radius")));
+            && line.clickEvent().equals(ClickEvent.suggestCommand("/kansokusha search radius 10 time 1d action block"))));
         Assertions.assertTrue(console.stream().anyMatch(line -> line.clickEvent() != null
-            && line.clickEvent().value().contains("around minecraft:overworld")));
+            && line.clickEvent().equals(ClickEvent.suggestCommand("/kansokusha search around minecraft:overworld 0 0 10 time 1d action block"))));
     }
 }
