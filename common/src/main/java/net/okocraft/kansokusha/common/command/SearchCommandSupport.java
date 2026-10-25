@@ -341,7 +341,7 @@ public final class SearchCommandSupport {
         return command.toString();
     }
 
-    private static String serializeCursor(SearchRequest.Cursor cursor) {
+    public static String serializeCursor(SearchRequest.Cursor cursor) {
         return cursor.direction().name().toLowerCase(Locale.ROOT)
             + ","
             + cursor.occurredAt().toEpochMilli()
@@ -349,7 +349,7 @@ public final class SearchCommandSupport {
             + cursor.eventId();
     }
 
-    private static SearchRequest.Cursor parseCursor(String value) {
+    public static SearchRequest.Cursor parseCursor(String value) {
         var parts = value.split(",", 3);
         if (parts.length != 3) {
             throw new SearchQueryParseException("invalid search cursor", SearchQueryMessages.INVALID_CURSOR.asComponent());

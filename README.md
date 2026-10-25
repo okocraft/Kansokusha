@@ -132,3 +132,7 @@ the intentionally unsupported initial search scope.
 This project is under the GPL-3.0 license. Please see [LICENSE](LICENSE) for more info.
 
 Copyright © 2026, OKOCRAFT
+
+Inspection results have their own previous/next links under `kansokusha.command.inspect`.
+The hidden `inspect page` command accepts an exact world/X/Y/Z and a cursor only; it cannot
+run arbitrary search conditions. Search permission is not needed for these links.
