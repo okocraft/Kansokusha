@@ -191,6 +191,21 @@ class InspectionSearchHandlerTest {
             .append(SearchCommandMessages.NEXT.asComponent().clickEvent(ClickEvent.runCommand(command))));
     }
 
+    @Test
+    void testContainerInspectionFiltersEventsAndKeepsBothChestPositions() {
+        var backend = new RecordingBackend();
+        var transaction = Key.key("kansokusha", "container_transaction");
+        backend.metadata = metadata(transaction, BREAK);
+        var fixture = fixture(backend);
+        TestSources.grant(fixture.player(), SearchCommandSupport.eventPermission(transaction));
+        var positions = Set.of(TARGET, new SearchQuery.Position(WORLD, TARGET.x() + 1, TARGET.y(), TARGET.z()));
+        fixture.handler().inspectContainer(PLAYER_ID, positions);
+        Assertions.assertEquals(positions, backend.lastRequest.query().conditions().positions());
+        Assertions.assertEquals(Set.of(transaction), backend.lastRequest.constraints().allowedEventTypes());
+        Assertions.assertEquals(Set.of(transaction, Key.key("kansokusha", "container_pickup"),
+            Key.key("kansokusha", "container_transfer")), backend.lastRequest.query().conditions().actions());
+    }
+
     private static Fixture fixture(RecordingBackend backend) {
         var server = Mockito.mock(Server.class);
         var player = Mockito.mock(Player.class);

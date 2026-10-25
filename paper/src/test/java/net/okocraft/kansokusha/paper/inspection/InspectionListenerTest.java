@@ -240,6 +240,35 @@ class InspectionListenerTest {
         Assertions.assertFalse(sessions.isEnabled(PLAYER_ID));
     }
 
+    @Test
+    void testEitherDoubleChestHalfSelectsBothCoordinates() {
+        var left = block(10, 64, -3);
+        var right = block(11, 64, -3);
+        var world = left.getWorld();
+        var leftInventory = Mockito.mock(org.bukkit.inventory.Inventory.class);
+        var rightInventory = Mockito.mock(org.bukkit.inventory.Inventory.class);
+        Mockito.when(leftInventory.getLocation()).thenReturn(new org.bukkit.Location(world, 10, 64, -3));
+        Mockito.when(rightInventory.getLocation()).thenReturn(new org.bukkit.Location(world, 11, 64, -3));
+        var chest = Mockito.mock(org.bukkit.inventory.DoubleChestInventory.class);
+        Mockito.when(chest.getLeftSide()).thenReturn(leftInventory);
+        Mockito.when(chest.getRightSide()).thenReturn(rightInventory);
+        var state = Mockito.mock(org.bukkit.block.Container.class);
+        Mockito.when(state.getInventory()).thenReturn(chest);
+        var expected = java.util.Set.of(new SearchQuery.Position(Key.key("example", "world"), 10, 64, -3),
+            new SearchQuery.Position(Key.key("example", "world"), 11, 64, -3));
+        for (var clicked : List.of(left, right)) {
+            Mockito.when(clicked.getState()).thenReturn(state);
+            var sessions = new InspectionSessionManager();
+            var player = player();
+            sessions.enable(PLAYER_ID);
+            var handler = Mockito.mock(InspectionTargetHandler.class);
+            new InspectionListener(sessions, handler).inspect(interaction(player, Action.RIGHT_CLICK_BLOCK,
+                clicked, BlockFace.UP, EquipmentSlot.HAND));
+            Mockito.verify(handler).inspectContainer(PLAYER_ID, expected);
+            Mockito.verify(handler, Mockito.never()).inspect(Mockito.any(), Mockito.any());
+        }
+    }
+
     private static Fixture fixture() {
         var sessions = new InspectionSessionManager();
         var player = player();

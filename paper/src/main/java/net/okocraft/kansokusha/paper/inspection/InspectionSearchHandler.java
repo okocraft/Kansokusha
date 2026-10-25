@@ -49,6 +49,18 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
     }
 
     public void page(UUID playerId, SearchQuery.Position target, Optional<SearchRequest.Cursor> cursor) {
+        this.page(playerId, target, cursor, false, java.util.Set.of(target));
+    }
+
+    @Override
+    public void inspectContainer(UUID playerId, java.util.Set<SearchQuery.Position> positions) {
+        var target = positions.stream().min(java.util.Comparator.comparingInt(SearchQuery.Position::x)
+            .thenComparingInt(SearchQuery.Position::z)).orElseThrow();
+        this.page(playerId, target, Optional.empty(), true, positions);
+    }
+
+    public void page(UUID playerId, SearchQuery.Position target, Optional<SearchRequest.Cursor> cursor,
+                     boolean container, java.util.Set<SearchQuery.Position> positions) {
         var player = this.server.getPlayer(playerId);
         if (player == null) {
             return;
@@ -57,7 +69,12 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
         var eventDetailsPermitted = player.hasPermission(EventCommandSupport.PERMISSION);
         var fullSearchPermitted = player.hasPermission(SearchCommandSupport.PERMISSION);
         var query = new SearchQuery(
-            SearchQuery.Conditions.position(target),
+            new SearchQuery.Conditions(java.util.Set.of(), container ? java.util.Set.of(
+                net.kyori.adventure.key.Key.key("kansokusha", "container_transaction"),
+                net.kyori.adventure.key.Key.key("kansokusha", "container_pickup"),
+                net.kyori.adventure.key.Key.key("kansokusha", "container_transfer")) : java.util.Set.of(),
+                java.util.Set.of(), java.util.Set.of(), java.util.Set.of(), java.util.Set.of(), java.util.Set.of(),
+                java.util.Set.of(), java.util.Set.of(), positions, java.util.Set.of()),
             SearchQuery.Conditions.empty(),
             SearchQuery.Order.NEWEST,
             OptionalInt.empty()
@@ -86,7 +103,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                     return;
                 }
 
-                currentPlayer.sendMessage(InspectionSearchMessages.HISTORY.apply(position));
+                currentPlayer.sendMessage((container ? InspectionSearchMessages.CONTAINER_HISTORY : InspectionSearchMessages.HISTORY).apply(position));
                 for (var event : page.events()) {
                     if (!currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType()))) {
                         continue;
@@ -98,24 +115,35 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                 net.kyori.adventure.text.Component navigation = net.kyori.adventure.text.Component.empty();
                 if (page.previousCursor().isPresent()) {
                     navigation = navigation.append(SearchCommandMessages.PREVIOUS.asComponent().clickEvent(
-                        ClickEvent.runCommand(pageCommand(target, page.previousCursor().get()))));
+                        ClickEvent.runCommand(pageCommand(target, page.previousCursor().get(), container, positions))));
                 }
                 if (page.nextCursor().isPresent()) {
                     navigation = navigation.append(net.kyori.adventure.text.Component.space()).append(
                         SearchCommandMessages.NEXT.asComponent().clickEvent(
-                            ClickEvent.runCommand(pageCommand(target, page.nextCursor().get()))));
+                            ClickEvent.runCommand(pageCommand(target, page.nextCursor().get(), container, positions))));
                 }
                 if (!navigation.equals(net.kyori.adventure.text.Component.empty())) currentPlayer.sendMessage(navigation);
                 if (fullSearchPermitted && currentPlayer.hasPermission(SearchCommandSupport.PERMISSION) && page.nextCursor().isPresent()) {
                     currentPlayer.sendMessage(InspectionSearchMessages.VIEW_FULL.asComponent().clickEvent(
-                        ClickEvent.runCommand("/kansokusha search position " + position)
+                        ClickEvent.runCommand("/kansokusha search " + positions.stream().sorted(java.util.Comparator.comparingInt(SearchQuery.Position::x)
+                            .thenComparingInt(SearchQuery.Position::z))
+                            .map(value -> "position " + value.world().asString() + " " + value.x() + " " + value.y() + " " + value.z())
+                            .collect(java.util.stream.Collectors.joining(" "))
+                            + (container ? " action container_transaction action container_pickup action container_transfer" : ""))
                     ));
                 }
             });
     }
     public static String pageCommand(SearchQuery.Position target, SearchRequest.Cursor cursor) {
+        return pageCommand(target, cursor, false, java.util.Set.of(target));
+    }
+
+    public static String pageCommand(SearchQuery.Position target, SearchRequest.Cursor cursor, boolean container,
+                                     java.util.Set<SearchQuery.Position> positions) {
+        var extra = container ? " container" + positions.stream().filter(position -> !position.equals(target))
+            .map(position -> " " + position.x() + " " + position.y() + " " + position.z()).collect(java.util.stream.Collectors.joining()) : "";
         return "/kansokusha inspect page " + target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z()
-            + " " + SearchCommandSupport.serializeCursor(cursor);
+            + " " + SearchCommandSupport.serializeCursor(cursor) + extra;
     }
 
 }

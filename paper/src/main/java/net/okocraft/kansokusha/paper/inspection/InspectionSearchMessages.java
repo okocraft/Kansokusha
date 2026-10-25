@@ -24,6 +24,10 @@ public final class InspectionSearchMessages {
         )
         .with(position -> Argument.string("position", position));
 
+    public static final MessageKey.Arg1<String> CONTAINER_HISTORY = DEFINER
+        .define("kansokusha.inspect.container-history", "<gold>Container contents history at <aqua><position></aqua></gold>")
+        .with(position -> Argument.string("position", position));
+
     public static final MessageKey VIEW_FULL = DEFINER
         .define("kansokusha.inspect.view-full", "<gold>[View full history]</gold>");
 

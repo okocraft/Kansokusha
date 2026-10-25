@@ -13,4 +13,8 @@ import java.util.UUID;
 public interface InspectionTargetHandler {
 
     void inspect(UUID playerId, SearchQuery.Position target);
+
+    default void inspectContainer(UUID playerId, java.util.Set<SearchQuery.Position> positions) {
+        inspect(playerId, positions.iterator().next());
+    }
 }
