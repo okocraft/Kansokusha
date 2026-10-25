@@ -269,7 +269,7 @@ public final class SearchCommandSupport {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
             return;
         }
-        scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
+        scope.header(renderer).ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
         if (!interactive && !page.events().isEmpty()) {
             sendMessage.accept(EventPresentationMessages.CONSOLE_HINT.asComponent());
         }

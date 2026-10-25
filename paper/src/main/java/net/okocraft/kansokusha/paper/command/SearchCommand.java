@@ -70,7 +70,8 @@ final class SearchCommand {
             origin,
             command -> CommandNavigation.remember(sender, command)
         );
-        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, PaperEventPresenter.renderer(clock, timezone))
+        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, PaperEventPresenter.renderer(clock, timezone).withLocations((location, world) ->
+                PaperEventLocations.format(location, world, sender instanceof Player && sender.hasPermission(TeleportCommand.PERMISSION))))
             ? Command.SINGLE_SUCCESS
             : 0;
     }

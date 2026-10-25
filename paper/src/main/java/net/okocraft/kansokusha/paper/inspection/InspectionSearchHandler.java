@@ -105,13 +105,17 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                     return;
                 }
 
-                currentPlayer.sendMessage((container ? InspectionSearchMessages.CONTAINER_HISTORY : InspectionSearchMessages.HISTORY).apply(position));
+                var renderer = this.renderer.withLocations((location, showWorld) ->
+                    net.okocraft.kansokusha.paper.command.PaperEventLocations.format(location, showWorld,
+                        currentPlayer.hasPermission("kansokusha.command.teleport")));
+                currentPlayer.sendMessage((container ? InspectionSearchMessages.CONTAINER_HISTORY_AT : InspectionSearchMessages.HISTORY_AT)
+                    .apply(renderer.location(net.okocraft.kansokusha.common.command.EventLocation.of(target), true)));
                 for (var event : page.events()) {
                     if (!currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType()))) {
                         continue;
                     }
                     currentPlayer.sendMessage(SearchCommandMessages.RESULT.apply(
-                        this.renderer.row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
+                        renderer.row(event, eventDetailsPermitted && currentPlayer.hasPermission(EventCommandSupport.PERMISSION), false)
                     ));
                 }
                 net.kyori.adventure.text.Component navigation = net.kyori.adventure.text.Component.empty();

@@ -67,13 +67,14 @@ class InspectionSearchHandlerTest {
         Assertions.assertEquals(SearchCommandSupport.PLAYER_DEFAULT_LIMIT, request.limit());
         Assertions.assertTrue(request.cursor().isEmpty());
         Mockito.verify(fixture.player()).sendMessage(
-            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456")
+            InspectionSearchMessages.HISTORY_AT.apply(net.okocraft.kansokusha.paper.command.PaperEventLocations.format(
+                net.okocraft.kansokusha.common.command.EventLocation.of(TARGET), true, false))
         );
         Mockito.verify(fixture.player()).sendMessage(
             SearchCommandMessages.RESULT.apply(
                 net.okocraft.kansokusha.paper.builtin.PaperEventPresenter.renderer(
                     java.time.Clock.fixed(event.occurredAt(), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC)
-                    .row(event, true, false)
+                    .withLocations((location, world) -> net.okocraft.kansokusha.paper.command.PaperEventLocations.format(location, world, false)).row(event, true, false)
             )
         );
     }
@@ -95,7 +96,8 @@ class InspectionSearchHandlerTest {
         );
 
         Mockito.verify(noHistory.player(), Mockito.never()).sendMessage(
-            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456")
+            InspectionSearchMessages.HISTORY_AT.apply(net.okocraft.kansokusha.paper.command.PaperEventLocations.format(
+                net.okocraft.kansokusha.common.command.EventLocation.of(TARGET), true, false))
         );
 
         var failedBackend = new RecordingBackend();
@@ -168,7 +170,8 @@ class InspectionSearchHandlerTest {
         Mockito.verify(fixture.player()).sendMessage(
             InspectionSearchMessages.NO_HISTORY.apply("minecraft:overworld 123 64 -456"));
         Mockito.verify(fixture.player(), Mockito.never()).sendMessage(
-            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456"));
+            InspectionSearchMessages.HISTORY_AT.apply(net.okocraft.kansokusha.paper.command.PaperEventLocations.format(
+                net.okocraft.kansokusha.common.command.EventLocation.of(TARGET), true, false)));
     }
 
     @Test

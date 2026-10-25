@@ -29,6 +29,7 @@ public final class EventRenderer {
 
     public enum NameKind { BLOCK, ITEM, ENTITY, OTHER }
 
+    private final BiFunction<EventLocation, Boolean, Component> locations;
     private final Optional<String> returnCommand;
     private final Clock clock;
     private final ZoneId timezone;
@@ -42,6 +43,13 @@ public final class EventRenderer {
 
     private EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
                           BiFunction<Key, NameKind, Component> names, Optional<String> returnCommand) {
+        this(clock, timezone, presenter, names, returnCommand, EventLocation::plain);
+    }
+
+    private EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
+        BiFunction<Key, NameKind, Component> names, Optional<String> returnCommand,
+        BiFunction<EventLocation, Boolean, Component> locations) {
+        this.locations = locations;
         this.returnCommand = returnCommand;
         this.clock = clock;
         this.timezone = timezone;
@@ -50,7 +58,15 @@ public final class EventRenderer {
     }
 
     public EventRenderer withReturnCommand(Optional<String> command) {
-        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, command);
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, command, this.locations);
+    }
+
+    public EventRenderer withLocations(BiFunction<EventLocation, Boolean, Component> locations) {
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, this.returnCommand, locations);
+    }
+
+    public Component location(EventLocation location, boolean showWorld) {
+        return this.locations.apply(location, showWorld);
     }
 
     private Component backLink(Component navigation) {
@@ -229,12 +245,7 @@ public final class EventRenderer {
         return count <= 36 ? line : line.substring(0, line.offsetByCodePoints(0, 36)) + "…";
     }
 
-    private static Component location(SearchPage.Event event, boolean world) {
-        var value = world ? event.world().map(Key::asString).orElseGet(() -> event.server().map(Key::asString).orElse("")) : "";
-        if (event.position().isPresent()) {
-            var position = event.position().get();
-            value += " (" + position.x() + "," + position.y() + "," + position.z() + ")";
-        }
-        return value.isEmpty() ? Component.empty() : Component.text(value);
+    private Component location(SearchPage.Event event, boolean world) {
+        return this.location(EventLocation.of(event), world);
     }
 }
