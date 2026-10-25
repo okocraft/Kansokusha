@@ -181,7 +181,7 @@ class SearchCommandSupportTest {
         ));
 
         Assertions.assertEquals(List.of("Bob"), this.suggest(false, "user b"));
-        Assertions.assertEquals(List.of("block_break", "example:custom"), this.suggest(false, "action "));
+        Assertions.assertEquals(List.of("block", "-block", "block_break", "example:custom"), this.suggest(false, "action "));
         Assertions.assertEquals(List.of("kansokusha:block_break"), this.suggest(false, "action kansokusha:"));
         Assertions.assertEquals(List.of("minecraft:overworld"), this.suggest(false, "world "));
         Assertions.assertEquals(List.of("minecraft:stone"), this.suggest(false, "target "));
@@ -192,6 +192,19 @@ class SearchCommandSupportTest {
             this.backend, permission -> true, false, "user Alice action blo", CLOCK, ZoneOffset.UTC
         ).join();
         Assertions.assertEquals(18, suggestions.replacementStart());
+    }
+
+    @Test
+    void testCategoriesRetainPermittedMembersAndLiteralNamesRemainStrict() {
+        var place = Key.key("kansokusha", "block_place");
+        this.backend.metadata = metadata(BREAK, place);
+        Assertions.assertTrue(this.execute(true, null, "action block exclude action +block", BREAK, place));
+        Assertions.assertEquals(Set.of(BREAK, place), this.backend.lastRequest().query().conditions().actions());
+        Assertions.assertEquals(Set.of(place), this.backend.lastRequest().query().exclusions().actions());
+        Assertions.assertTrue(this.execute(true, null, "action block", BREAK));
+        Assertions.assertEquals(Set.of(BREAK), this.backend.lastRequest().query().conditions().actions());
+        Assertions.assertFalse(this.execute(true, null, "action block"));
+        Assertions.assertFalse(this.execute(true, null, "action block action block_place", BREAK));
     }
 
     private boolean execute(boolean player, SearchQuery.@Nullable Position origin, String input, Key... permittedEventTypes) {

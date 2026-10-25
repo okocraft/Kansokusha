@@ -31,6 +31,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -93,8 +94,19 @@ public final class SearchQueryParser {
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(timezone, "timezone");
 
+        return parse(arguments, clock, timezone, origin, ActionCategories::events);
+    }
+
+    /** Resolves category members before combining them with literal action names. */
+    public static SearchQuery parse(String input, Clock clock, ZoneId timezone, @Nullable Position origin,
+                                    Function<String, Set<Key>> categories) {
+        return parse(tokenize(input), clock, timezone, origin, categories);
+    }
+
+    private static SearchQuery parse(List<String> arguments, Clock clock, ZoneId timezone, @Nullable Position origin,
+                                     Function<String, Set<Key>> categories) {
         var cursor = new Cursor(arguments);
-        var context = new Context(clock.instant(), timezone, origin);
+        var context = new Context(clock.instant(), timezone, origin, categories);
         var conditions = new MutableConditions();
         var exclusions = new MutableConditions();
         var singletons = new HashSet<String>();
@@ -287,7 +299,15 @@ public final class SearchQueryParser {
         var label = labelPrefix + field;
         switch (field) {
             case "user" -> target.users.add(nonEmpty(cursor.next(label), label));
-            case "action" -> target.actions.add(parseActionKey(cursor.next(label)));
+            case "action" -> {
+                var value = cursor.next(label);
+                var members = context.categories().apply(value);
+                if (members.isEmpty()) {
+                    target.actions.add(parseActionKey(value));
+                } else {
+                    target.actions.addAll(members);
+                }
+            }
             case "time" -> target.timeRanges.add(parseRelativeTime(cursor.next(label), context));
             case "radius" -> {
                 var radius = parsePositiveInt(cursor.next(label), label);
@@ -614,7 +634,7 @@ public final class SearchQueryParser {
         return new SearchQueryParseException(message, reason, cause);
     }
 
-    private record Context(Instant now, ZoneId timezone, @Nullable Position origin) {
+    private record Context(Instant now, ZoneId timezone, @Nullable Position origin, Function<String, Set<Key>> categories) {
     }
 
     private static final class Cursor {
