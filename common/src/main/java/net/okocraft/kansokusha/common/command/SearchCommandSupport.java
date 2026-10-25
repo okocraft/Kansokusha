@@ -240,12 +240,12 @@ public final class SearchCommandSupport {
         boolean interactive
     ) {
         if (!page.events().isEmpty() && page.events().stream().noneMatch(event -> hasPermission.test(eventPermission(event.eventType())))) {
+            sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
             return;
         }
         scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
-        if (!page.events().isEmpty()) {
-            sendMessage.accept((interactive ? eventDetailsPermitted ? EventPresentationMessages.HINT : EventPresentationMessages.HOVER_HINT
-                : EventPresentationMessages.CONSOLE_HINT).asComponent());
+        if (!interactive && !page.events().isEmpty()) {
+            sendMessage.accept(EventPresentationMessages.CONSOLE_HINT.asComponent());
         }
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());

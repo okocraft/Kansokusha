@@ -77,7 +77,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                 }
 
                 var position = target.world().asString() + " " + target.x() + " " + target.y() + " " + target.z();
-                if (page.events().isEmpty()) {
+                if (page.events().stream().noneMatch(event -> currentPlayer.hasPermission(SearchCommandSupport.eventPermission(event.eventType())))) {
                     currentPlayer.sendMessage(InspectionSearchMessages.NO_HISTORY.apply(position));
                     return;
                 }

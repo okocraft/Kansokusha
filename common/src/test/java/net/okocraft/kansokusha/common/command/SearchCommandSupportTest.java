@@ -123,9 +123,7 @@ class SearchCommandSupportTest {
 
         var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
         Assertions.assertEquals(List.of(
-            EventPresentationMessages.HOVER_HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
-            EventPresentationMessages.HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
         ), this.messages);
     }
@@ -247,7 +245,7 @@ class SearchCommandSupportTest {
         permitted.set(false);
         this.backend.pending.complete(new SearchPage(List.of(event()), Optional.empty(), Optional.empty()));
         Assertions.assertEquals(0, calls.get());
-        Assertions.assertTrue(this.messages.isEmpty());
+        Assertions.assertEquals(List.of(SearchCommandMessages.NO_RESULTS.asComponent()), this.messages);
     }
 
     @Test

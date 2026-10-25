@@ -158,6 +158,19 @@ class InspectionSearchHandlerTest {
         );
     }
 
+    @Test
+    void testPageWithNoVisibleRowsReportsNoHistory() {
+        var backend = new RecordingBackend();
+        backend.metadata = metadata(BREAK);
+        backend.page = new SearchPage(List.of(event(BREAK)), Optional.empty(), Optional.empty());
+        var fixture = fixture(backend);
+        fixture.handler().inspect(PLAYER_ID, TARGET);
+        Mockito.verify(fixture.player()).sendMessage(
+            InspectionSearchMessages.NO_HISTORY.apply("minecraft:overworld 123 64 -456"));
+        Mockito.verify(fixture.player(), Mockito.never()).sendMessage(
+            InspectionSearchMessages.HISTORY.apply("minecraft:overworld 123 64 -456"));
+    }
+
     private static Fixture fixture(RecordingBackend backend) {
         var server = Mockito.mock(Server.class);
         var player = Mockito.mock(Player.class);
