@@ -44,6 +44,23 @@ public final class EventPresentationMessages {
         .define("kansokusha.display.row", "<dark_gray>[<time>]</dark_gray> <summary>")
         .with(time -> Argument.component("time", time), summary -> Argument.component("summary", summary));
 
+    public static final MessageKey HINT = DEFINER.define("kansokusha.display.compact.hint",
+        "Hover for context; click a row for details");
+    public static final MessageKey RECORD = DEFINER.define("kansokusha.display.compact.record", "[Record information]");
+    public static final MessageKey FULL = DEFINER.define("kansokusha.display.compact.full", "[Full text]");
+    public static final MessageKey RAW = DEFINER.define("kansokusha.display.compact.raw", "[Saved data]");
+    public static final MessageKey OVERVIEW = DEFINER.define("kansokusha.display.compact.overview", "[Overview]");
+    public static final MessageKey INVALID_VIEW = DEFINER.define("kansokusha.display.compact.invalid-view",
+        "<red>This view or page is unavailable. Open the event overview again.</red>");
+    public static final MessageKey LOCATION = DEFINER.define("kansokusha.display.compact.location", "Location");
+    public static final MessageKey SUMMARY = DEFINER.define("kansokusha.display.compact.summary", "Summary");
+    public static final MessageKey.Arg1<Component> SCOPE = DEFINER
+        .define("kansokusha.display.compact.scope", "<gray>History: <location></gray>")
+        .with(location -> Argument.component("location", location));
+    public static final MessageKey.Arg2<Integer, Integer> PAGE = DEFINER
+        .define("kansokusha.display.compact.page", "<gray><page>/<pages></gray>")
+        .with(page -> Argument.numeric("page", page), pages -> Argument.numeric("pages", pages));
+
     public static Map<String, String> defaultMessages() {
         return DEFINER.getCollectedMessages();
     }

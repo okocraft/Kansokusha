@@ -123,7 +123,9 @@ class SearchCommandSupportTest {
 
         var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
         Assertions.assertEquals(List.of(
+            EventPresentationMessages.HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
+            EventPresentationMessages.HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
         ), this.messages);
     }

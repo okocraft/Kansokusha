@@ -104,7 +104,7 @@ public final class SearchCommandSupport {
                     source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission());
+                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission(), SearchDisplayScope.of(query));
             });
         return true;
     }
@@ -235,8 +235,16 @@ public final class SearchCommandSupport {
         SearchPage page,
         boolean eventDetailsPermitted,
         EventRenderer renderer,
-        Predicate<String> hasPermission
+        Predicate<String> hasPermission,
+        SearchDisplayScope scope
     ) {
+        if (!page.events().isEmpty() && page.events().stream().noneMatch(event -> hasPermission.test(eventPermission(event.eventType())))) {
+            return;
+        }
+        scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
+        if (!page.events().isEmpty()) {
+            sendMessage.accept(EventPresentationMessages.HINT.asComponent());
+        }
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
         }
@@ -244,7 +252,7 @@ public final class SearchCommandSupport {
             if (!hasPermission.test(eventPermission(event.eventType()))) {
                 continue;
             }
-            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), true)));
+            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty())));
         }
 
         var pagination = paginationComponent(query, page);
