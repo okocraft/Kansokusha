@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
 import net.okocraft.kansokusha.common.command.EventPresentationMessages;
+import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.CommandHelp;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
@@ -24,6 +25,7 @@ public final class KansokushaCommands {
         return List.of(
             CommandMessages.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
+            EventFieldMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
