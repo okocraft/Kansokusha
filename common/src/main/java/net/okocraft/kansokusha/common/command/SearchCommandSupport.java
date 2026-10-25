@@ -4,9 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.okocraft.kansokusha.api.actor.BlockActor;
-import net.okocraft.kansokusha.api.actor.EntityActor;
-import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -61,6 +58,17 @@ public final class SearchCommandSupport {
         Clock clock,
         ZoneId timezone
     ) {
+        return execute(backend, source, rawInput, clock, timezone, EventRenderer.generic(clock, timezone));
+    }
+
+    public static boolean execute(
+        EventSearchBackend backend,
+        SearchSource source,
+        String rawInput,
+        Clock clock,
+        ZoneId timezone,
+        EventRenderer renderer
+    ) {
         final Invocation invocation;
         try {
             invocation = parseInvocation(rawInput, clock, timezone, source.origin());
@@ -97,7 +105,7 @@ public final class SearchCommandSupport {
                     source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted);
+                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer);
             });
         return true;
     }
@@ -219,67 +227,21 @@ public final class SearchCommandSupport {
     }
 
     public static Component formatEvent(SearchPage.Event event, boolean eventDetailsPermitted) {
-        Objects.requireNonNull(event, "event");
-        var parts = new ArrayList<Component>();
-        parts.add(Component.text(event.occurredAt().toString()));
-        parts.add(Component.text(displayEventType(event.eventType())));
-
-        var actor = formatActor(event);
-        var target = event.targetType().map(type -> Component.text(type.asString())).orElse(null);
-        if (actor != null || target != null) {
-            if (actor != null && target != null) {
-                parts.add(actor.append(Component.text(" -> ")).append(target));
-            } else if (actor != null) {
-                parts.add(actor);
-            } else {
-                parts.add(Component.text("-> ").append(target));
-            }
-        }
-
-        event.world().ifPresent(world -> {
-            var location = new StringBuilder("@ ").append(world.asString());
-            event.position().ifPresent(position -> location.append(' ')
-                .append(position.x())
-                .append(' ')
-                .append(position.y())
-                .append(' ')
-                .append(position.z()));
-            parts.add(Component.text(location.toString()));
-        });
-
-        event.searchText()
-            .map(SearchCommandSupport::singleLine)
-            .filter(text -> !text.isEmpty())
-            .ifPresent(text -> parts.add(Component.text('"' + text + '"')));
-
-        var result = Component.empty();
-        for (var index = 0; index < parts.size(); index++) {
-            if (index > 0) {
-                result = result.append(Component.text(" | "));
-            }
-            result = result.append(parts.get(index));
-        }
-        result = result.hoverEvent(HoverEvent.showText(
-            eventDetailsPermitted
-                ? SearchCommandMessages.VIEW_EVENT.apply(event.eventId().toString())
-                : Component.text(event.eventId().toString())
-        ));
-        return eventDetailsPermitted
-            ? result.clickEvent(ClickEvent.runCommand("/kansokusha event " + event.eventId()))
-            : result;
+        return EventRenderer.generic(Clock.systemUTC(), java.time.ZoneOffset.UTC).row(event, eventDetailsPermitted, true);
     }
 
     private static void renderPage(
         Consumer<Component> sendMessage,
         String query,
         SearchPage page,
-        boolean eventDetailsPermitted
+        boolean eventDetailsPermitted,
+        EventRenderer renderer
     ) {
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
         }
         for (var event : page.events()) {
-            sendMessage.accept(SearchCommandMessages.RESULT.apply(formatEvent(event, eventDetailsPermitted)));
+            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted, true)));
         }
 
         var pagination = paginationComponent(query, page);
@@ -317,21 +279,6 @@ public final class SearchCommandSupport {
         return present ? result : null;
     }
 
-    private static @Nullable Component formatActor(SearchPage.Event event) {
-        return switch (event.actor().orElse(null)) {
-            case null -> null;
-            case PlayerActor player -> withUuidHover(
-                Component.text(event.actorName().orElse(player.uniqueId().toString())),
-                player.uniqueId()
-            );
-            case EntityActor entity -> withUuidHover(
-                Component.text(entity.entityType().asString()),
-                entity.uniqueId()
-            );
-            case BlockActor block -> Component.text(block.blockType().asString());
-        };
-    }
-
     static Component withUuidHover(Component component, UUID uuid) {
         return component.hoverEvent(HoverEvent.showText(Component.text(uuid.toString())));
     }
@@ -341,10 +288,6 @@ public final class SearchCommandSupport {
             return type.value();
         }
         return type.asString();
-    }
-
-    private static String singleLine(String text) {
-        return text.replace('\r', ' ').replace('\n', ' ');
     }
 
     private static String pageCommand(String query, SearchRequest.Cursor cursor) {

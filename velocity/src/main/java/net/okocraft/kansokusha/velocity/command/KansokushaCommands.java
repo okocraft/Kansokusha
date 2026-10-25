@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.velocity.command;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
+import net.okocraft.kansokusha.common.command.EventPresentationMessages;
 import net.okocraft.kansokusha.common.command.CommandHelp;
 import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
@@ -22,6 +23,7 @@ public final class KansokushaCommands {
     public static List<Map<String, String>> getDefaultMessages() {
         return List.of(
             CommandMessages.defaultMessages(),
+            EventPresentationMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
@@ -47,7 +49,7 @@ public final class KansokushaCommands {
                     .executes(context -> sendHelp(context.getSource())))
                 .then(VersionCommand.createVersionCommand())
                 .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
-                .then(EventCommand.createEventCommand(backend))
+                .then(EventCommand.createEventCommand(backend, clock, searchTimeZone))
         );
     }
 

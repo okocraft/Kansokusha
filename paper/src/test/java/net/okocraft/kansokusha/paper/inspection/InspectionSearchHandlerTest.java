@@ -71,7 +71,9 @@ class InspectionSearchHandlerTest {
         );
         Mockito.verify(fixture.player()).sendMessage(
             SearchCommandMessages.RESULT.apply(
-                SearchCommandSupport.formatEvent(event, true)
+                net.okocraft.kansokusha.common.command.EventRenderer.generic(
+                    java.time.Clock.fixed(event.occurredAt(), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC)
+                    .row(event, true, false)
             )
         );
     }
@@ -161,7 +163,8 @@ class InspectionSearchHandlerTest {
         var player = Mockito.mock(Player.class);
         Mockito.when(player.getUniqueId()).thenReturn(PLAYER_ID);
         Mockito.when(server.getPlayer(PLAYER_ID)).thenReturn(player);
-        return new Fixture(player, new InspectionSearchHandler(server, backend));
+        return new Fixture(player, new InspectionSearchHandler(server, backend,
+            java.time.Clock.fixed(Instant.parse("2026-09-27T00:00:00Z"), java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC));
     }
 
     private static SearchMetadata metadata(Key... eventTypes) {

@@ -1,6 +1,9 @@
 package net.okocraft.kansokusha.paper.inspection;
 
 import net.kyori.adventure.text.event.ClickEvent;
+import net.okocraft.kansokusha.common.command.EventRenderer;
+import java.time.Clock;
+import java.time.ZoneId;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
@@ -27,7 +30,14 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
     private final Server server;
     private final EventSearchBackend backend;
 
+    private final EventRenderer renderer;
+
     public InspectionSearchHandler(Server server, EventSearchBackend backend) {
+        this(server, backend, Clock.systemUTC(), java.time.ZoneOffset.UTC);
+    }
+
+    public InspectionSearchHandler(Server server, EventSearchBackend backend, Clock clock, ZoneId timezone) {
+        this.renderer = EventRenderer.generic(clock, timezone);
         this.server = Objects.requireNonNull(server, "server");
         this.backend = Objects.requireNonNull(backend, "backend");
     }
@@ -74,7 +84,7 @@ public final class InspectionSearchHandler implements InspectionTargetHandler {
                 currentPlayer.sendMessage(InspectionSearchMessages.HISTORY.apply(position));
                 for (var event : page.events()) {
                     currentPlayer.sendMessage(SearchCommandMessages.RESULT.apply(
-                        SearchCommandSupport.formatEvent(event, eventDetailsPermitted)
+                        this.renderer.row(event, eventDetailsPermitted, false)
                     ));
                 }
                 if (fullSearchPermitted && page.nextCursor().isPresent()) {

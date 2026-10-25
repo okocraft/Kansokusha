@@ -50,7 +50,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             InspectionListener.register(
                 this,
                 this.inspectionSessions,
-                new InspectionSearchHandler(this.getServer(), runtime)
+                new InspectionSearchHandler(this.getServer(), runtime, java.time.Clock.systemUTC(), config.searchTimeZone())
             );
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
