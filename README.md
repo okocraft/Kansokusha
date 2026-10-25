@@ -162,3 +162,10 @@ search or inspection. The last displayed page is held per sender, including its 
 and container mode, and discarded on logout or plugin shutdown. Opening an event with
 no preceding results does not show a back link. Returning re-runs the query; results are
 not a frozen snapshot of the database.
+
+Paper/Folia players with `kansokusha.command.teleport` can click coordinates in search,
+inspection headers, and event details to run `/kansokusha teleport <world> <x> <y> <z>`.
+Only the coordinate segment teleports; the rest of a result row opens event details.
+The command uses the player's scheduler and async teleportation, targets the block center
+on X/Z, preserves yaw/pitch, and rejects unloaded worlds. World labels use their key value,
+with the complete key on hover. Velocity and console coordinates do not teleport.

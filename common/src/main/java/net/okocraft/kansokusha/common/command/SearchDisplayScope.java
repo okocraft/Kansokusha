@@ -30,6 +30,11 @@ public record SearchDisplayScope(Optional<SearchQuery.Position> position, Option
             ? Optional.of(worlds.iterator().next()) : Optional.empty());
     }
 
+    public Optional<Component> header(EventRenderer renderer) {
+        if (this.position.isPresent()) return Optional.of(renderer.location(EventLocation.of(this.position.get()), true));
+        return this.world.map(key -> renderer.location(new EventLocation(Optional.of(key), Optional.empty(), Optional.empty()), true));
+    }
+
     public Optional<Component> header() {
         if (this.position.isPresent()) {
             var point = this.position.get();

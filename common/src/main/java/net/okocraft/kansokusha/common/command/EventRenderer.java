@@ -29,6 +29,7 @@ public final class EventRenderer {
 
     public enum NameKind { BLOCK, ITEM, ENTITY, OTHER }
 
+    private final BiFunction<EventLocation, Boolean, Component> locations;
     private final boolean debug;
     private final Optional<String> returnCommand;
     private final Clock clock;
@@ -38,12 +39,14 @@ public final class EventRenderer {
 
     public EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
                          BiFunction<Key, NameKind, Component> names) {
-        this(clock, timezone, presenter, names, true, Optional.empty());
+        this(clock, timezone, presenter, names, true, Optional.empty(), EventLocation::plain);
     }
 
     private EventRenderer(Clock clock, ZoneId timezone, EventPresenter presenter,
-                          BiFunction<Key, NameKind, Component> names, boolean debug, Optional<String> returnCommand) {
+                          BiFunction<Key, NameKind, Component> names, boolean debug, Optional<String> returnCommand,
+                          BiFunction<EventLocation, Boolean, Component> locations) {
         this.debug = debug;
+        this.locations = locations;
         this.returnCommand = returnCommand;
         this.clock = clock;
         this.timezone = timezone;
@@ -52,11 +55,19 @@ public final class EventRenderer {
     }
 
     public EventRenderer withDebug(boolean debug) {
-        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, debug, this.returnCommand);
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, debug, this.returnCommand, this.locations);
     }
 
     public EventRenderer withReturnCommand(Optional<String> command) {
-        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, this.debug, command);
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, this.debug, command, this.locations);
+    }
+
+    public EventRenderer withLocations(BiFunction<EventLocation, Boolean, Component> locations) {
+        return new EventRenderer(this.clock, this.timezone, this.presenter, this.names, this.debug, this.returnCommand, locations);
+    }
+
+    public Component location(EventLocation location, boolean showWorld) {
+        return this.locations.apply(location, showWorld);
     }
 
     private Component backLink(Component navigation) {
@@ -244,12 +255,7 @@ public final class EventRenderer {
         return count <= 36 ? line : line.substring(0, line.offsetByCodePoints(0, 36)) + "…";
     }
 
-    private static Component location(SearchPage.Event event, boolean world) {
-        var value = world ? event.world().map(Key::asString).orElseGet(() -> event.server().map(Key::asString).orElse("")) : "";
-        if (event.position().isPresent()) {
-            var position = event.position().get();
-            value += " (" + position.x() + "," + position.y() + "," + position.z() + ")";
-        }
-        return value.isEmpty() ? Component.empty() : Component.text(value);
+    private Component location(SearchPage.Event event, boolean world) {
+        return this.location(EventLocation.of(event), world);
     }
 }
