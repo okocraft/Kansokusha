@@ -4,6 +4,12 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ByteArrayTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtAccounter;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
@@ -21,6 +27,24 @@ final class PaperPayloadDisplay {
 
     static Component preview(Tag tag, String field) {
         if (tag instanceof CompoundTag compound) {
+            if (compound.get("serialized") instanceof ByteArrayTag bytes) {
+                var item = itemData(bytes);
+                var type = item.getStringOr("id", "");
+                return type.isEmpty() ? Component.text(EventRenderer.preview(item.toString()))
+                    : PaperEventNames.name(Key.key(type), EventRenderer.NameKind.ITEM)
+                        .append(Component.text(" ×" + item.getIntOr("count", 1)));
+            }
+            if (compound.contains("holder_kind")) {
+                var block = compound.getStringOr("holder_block_type", "");
+                var name = block.isEmpty() ? Component.text(compound.getStringOr("type", ""))
+                    : PaperEventNames.name(Key.key(block), EventRenderer.NameKind.BLOCK);
+                var location = compound.get("location");
+                return location == null ? name : name.append(Component.text(" @ ")).append(preview(location, "location"));
+            }
+            if (compound.contains("result") && compound.contains("ingredients")) {
+                return preview(compound.get("ingredients"), "ingredients").append(Component.text(" → "))
+                    .append(preview(compound.get("result"), "result"));
+            }
             if (compound.contains("Name")) {
                 return PaperEventNames.name(Key.key(compound.getStringOr("Name", "minecraft:air")),
                     EventRenderer.NameKind.BLOCK).append(Component.text(
@@ -62,7 +86,9 @@ final class PaperPayloadDisplay {
     }
 
     private static void appendDetails(Tag tag, Component path, List<Component> lines) {
-        if (tag instanceof CompoundTag compound && !compound.isEmpty()) {
+        if (tag instanceof CompoundTag compound && compound.get("serialized") instanceof ByteArrayTag bytes) {
+            appendDetails(itemData(bytes), path, lines);
+        } else if (tag instanceof CompoundTag compound && !compound.isEmpty()) {
             // Stable ordering makes before/after records and comparisons predictable.
             for (var key : compound.keySet().stream().sorted().toList()) {
                 appendDetails(compound.get(key), path.append(Component.text(" / "))
@@ -83,6 +109,15 @@ final class PaperPayloadDisplay {
                 lines.add(EventCommandMessages.DETAIL_LINE.apply(path, Component.text(value.substring(0, end))));
                 value = value.substring(end);
             }
+        }
+    }
+
+    private static CompoundTag itemData(ByteArrayTag bytes) {
+        try {
+            // Inspect the saved NBT directly: no live inventory or item data conversion is needed.
+            return NbtIo.readCompressed(new ByteArrayInputStream(bytes.getAsByteArray()), NbtAccounter.unlimitedHeap());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

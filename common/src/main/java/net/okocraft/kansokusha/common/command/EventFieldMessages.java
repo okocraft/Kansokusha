@@ -41,7 +41,8 @@ public final class EventFieldMessages {
         label("transfer_direction", "Direction");
         label("amount_delta", "Container net delta");
         label("item", "Item");
-        label("stack", "Item");
+        label("stack", "Recorded world stack");
+        label("remaining", "Remaining in world");
         label("source_item", "Source item");
         label("result_item", "Result item");
         label("input_items", "Inputs");
