@@ -149,7 +149,7 @@ public final class EventFieldMessages {
     }
 
     public static Component field(String field, Component value) {
-        return EventCommandMessages.DETAIL_LINE.apply(label(field), value);
+        return EventPresentationMessages.FIELD.apply(label(field), value);
     }
 
     public static Map<String, String> defaultMessages() {

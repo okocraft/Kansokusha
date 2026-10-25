@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.builtin;
 
 import dev.siroshun.mcmsgdef.DefaultMessageDefiner;
 import dev.siroshun.mcmsgdef.MessageKey;
+
 import java.util.Map;
 
 public final class PaperViewMessages {

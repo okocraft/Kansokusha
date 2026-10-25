@@ -104,7 +104,7 @@ public final class SearchCommandSupport {
                     source.sendMessage().accept(SearchCommandMessages.SEARCH_FAILED.asComponent());
                     return;
                 }
-                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission(), SearchDisplayScope.of(query));
+                renderPage(source.sendMessage(), invocation.queryText(), page, eventDetailsPermitted, renderer, source.hasPermission(), SearchDisplayScope.of(query), source.player());
             });
         return true;
     }
@@ -236,14 +236,16 @@ public final class SearchCommandSupport {
         boolean eventDetailsPermitted,
         EventRenderer renderer,
         Predicate<String> hasPermission,
-        SearchDisplayScope scope
+        SearchDisplayScope scope,
+        boolean interactive
     ) {
         if (!page.events().isEmpty() && page.events().stream().noneMatch(event -> hasPermission.test(eventPermission(event.eventType())))) {
             return;
         }
         scope.header().ifPresent(header -> sendMessage.accept(EventPresentationMessages.SCOPE.apply(header)));
         if (!page.events().isEmpty()) {
-            sendMessage.accept(EventPresentationMessages.HINT.asComponent());
+            sendMessage.accept((interactive ? eventDetailsPermitted ? EventPresentationMessages.HINT : EventPresentationMessages.HOVER_HINT
+                : EventPresentationMessages.CONSOLE_HINT).asComponent());
         }
         if (page.events().isEmpty()) {
             sendMessage.accept(SearchCommandMessages.NO_RESULTS.asComponent());
@@ -252,7 +254,11 @@ public final class SearchCommandSupport {
             if (!hasPermission.test(eventPermission(event.eventType()))) {
                 continue;
             }
-            sendMessage.accept(SearchCommandMessages.RESULT.apply(renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty())));
+            var line = renderer.row(event, eventDetailsPermitted && hasPermission.test(EventCommandSupport.PERMISSION), scope.position().isEmpty(), scope.world().isEmpty());
+            if (!interactive) {
+                line = line.append(Component.text(" [" + event.eventId() + "]"));
+            }
+            sendMessage.accept(SearchCommandMessages.RESULT.apply(line));
         }
 
         var pagination = paginationComponent(query, page);

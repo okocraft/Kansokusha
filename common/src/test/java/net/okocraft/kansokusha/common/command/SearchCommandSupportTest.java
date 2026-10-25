@@ -118,12 +118,12 @@ class SearchCommandSupportTest {
         this.backend.metadata = metadata(BREAK);
         this.backend.page = new SearchPage(List.of(event()), Optional.empty(), Optional.empty());
 
-        Assertions.assertTrue(this.execute(false, null, "", BREAK));
-        Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
+        Assertions.assertTrue(this.execute(true, null, "", BREAK));
+        Assertions.assertTrue(this.execute(true, null, "", BREAK, EventCommandSupport.PERMISSION));
 
         var renderer = EventRenderer.generic(CLOCK, ZoneOffset.UTC);
         Assertions.assertEquals(List.of(
-            EventPresentationMessages.HINT.asComponent(),
+            EventPresentationMessages.HOVER_HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), false, true)),
             EventPresentationMessages.HINT.asComponent(),
             SearchCommandMessages.RESULT.apply(renderer.row(event(), true, true))
@@ -248,6 +248,28 @@ class SearchCommandSupportTest {
         this.backend.pending.complete(new SearchPage(List.of(event()), Optional.empty(), Optional.empty()));
         Assertions.assertEquals(0, calls.get());
         Assertions.assertTrue(this.messages.isEmpty());
+    }
+
+    @Test
+    void testConsoleRetainsAnAddressableIdWithoutHover(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        net.okocraft.kansokusha.common.language.LanguageProvider.load(dir, List.of(
+            SearchCommandMessages.defaultMessages(), EventPresentationMessages.defaultMessages()));
+        try {
+        this.backend.metadata = metadata(BREAK);
+        this.backend.page = new SearchPage(List.of(event()), Optional.empty(), Optional.empty());
+        Assertions.assertTrue(this.execute(false, null, "", BREAK, EventCommandSupport.PERMISSION));
+        Assertions.assertEquals(EventPresentationMessages.CONSOLE_HINT.asComponent(), this.messages.getFirst());
+        var rendered = net.kyori.adventure.translation.GlobalTranslator.render(this.messages.getLast(), java.util.Locale.ENGLISH);
+        Assertions.assertTrue(plain(rendered).contains(event().eventId().toString()));
+        } finally {
+            net.okocraft.kansokusha.common.language.LanguageProvider.unload();
+        }
+    }
+
+    private static String plain(Component value) {
+        var text = new StringBuilder(value instanceof net.kyori.adventure.text.TextComponent part ? part.content() : "");
+        value.children().forEach(child -> text.append(plain(child)));
+        return text.toString();
     }
 
     private static SearchMetadata metadata(Key... eventTypes) {

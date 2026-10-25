@@ -1,12 +1,10 @@
 package net.okocraft.kansokusha.paper.builtin;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.minecraft.nbt.CompoundTag;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresentationMessages;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
-import net.kyori.adventure.text.event.HoverEvent;
-import java.util.ArrayList;
 import net.okocraft.kansokusha.common.command.EventPresenter;
 import net.okocraft.kansokusha.common.command.EventRenderer;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -16,6 +14,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,10 +81,17 @@ public final class PaperEventPresenter implements EventPresenter {
             }
             if (view.targetKind() == EventRenderer.NameKind.BLOCK) {
                 var states = new ArrayList<Component>();
-                for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced")) {
+                for (var field : List.of("pre_state", "post_state", "before", "to", "old_state", "new_state", "replaced", "state")) {
                     var state = payload.get(field);
                     if (state instanceof CompoundTag compound && (compound.contains("id") || compound.contains("Name"))) {
                         states.add(EventFieldMessages.field(field, PaperPayloadDisplay.hoverValue(state, field)));
+                    }
+                }
+                if (event.targetType().isPresent()) {
+                    if (view.type().equals("block_break")) {
+                        states.add(properties(event.targetType().get(), payload));
+                    } else if (view.type().equals("block_place") && payload.get("placed") instanceof CompoundTag placed) {
+                        states.add(properties(event.targetType().get(), placed));
                     }
                 }
                 if (!states.isEmpty()) {
@@ -104,8 +110,11 @@ public final class PaperEventPresenter implements EventPresenter {
                     }
                 }
             }
-            var context = event.searchText().map(text -> Component.text(" “" + EventRenderer.preview(text) + "”"))
+            var context = (detailed ? Optional.<String>empty() : event.searchText()).map(text -> Component.text(" “" + EventRenderer.preview(text) + "”"))
                 .orElse(Component.empty());
+            if (event.actor().isEmpty() && payload.contains("source_name")) {
+                context = Component.space().append(Component.text(EventRenderer.preview(payload.getStringOr("source_name", "")))).append(context);
+            }
             var details = new ArrayList<Component>();
             var sections = new LinkedHashMap<String, Section>();
             sections.put("raw", new Section(EventPresentationMessages.RAW.asComponent(), () -> PaperPayloadDisplay.details(payload)));
@@ -121,21 +130,34 @@ public final class PaperEventPresenter implements EventPresenter {
                     var tag = PaperPayloadDisplay.at(payload, spec.startsWith("~") ? spec.substring(1) : spec);
                     if (tag != null && PaperPayloadDisplay.isText(tag)) {
                         var text = PaperPayloadDisplay.text(tag, spec);
+                        var body = List.of("message", "command", "death_message").contains(label(spec))
+                            || spec.startsWith("~") || tag instanceof net.minecraft.nbt.ListTag;
+                        if (!body && text.codePointCount(0, text.length()) <= 36) {
+                            continue;
+                        }
                         sections.put("text_" + label(spec), new Section(EventFieldMessages.label(label(spec))
                             .append(Component.space()).append(EventPresentationMessages.FULL.asComponent()),
-                            () -> PaperPayloadDisplay.textLines(text)));
+                            () -> EventRenderer.textLines(text)));
                     }
                 }
             }
             if (detailed && PaperRecordedItems.hasItems(payload)) {
                 sections.put("items", new Section(PaperViewMessages.ITEMS.asComponent(), () -> PaperRecordedItems.items(payload, event.eventId())));
             }
-            return Optional.of(new Content(view.sentence().summary(renderer.actor(event), target, context),
+            return Optional.of(new Content(view.sentence().summary(renderer.actor(event), EventPresentationMessages.TARGET.apply(target), context),
                 details, EventRenderer.join(hover), sections));
         } catch (IOException | IllegalArgumentException e) {
             return Optional.empty();
         }
     }
+    private static Component properties(net.kyori.adventure.key.Key type, CompoundTag properties) {
+        // These schemas deliberately store the type in common columns and only properties in the payload.
+        var state = new CompoundTag();
+        state.putString("id", type.asString());
+        state.put("properties", properties);
+        return PaperPayloadDisplay.stateHover(state);
+    }
+
     private static String label(String spec) {
         return spec.startsWith("$") || spec.startsWith("~") ? spec.substring(1) : spec;
     }

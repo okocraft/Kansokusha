@@ -44,6 +44,15 @@ public final class EventPresentationMessages {
         .define("kansokusha.display.row", "<dark_gray>[<time>]</dark_gray> <summary>")
         .with(time -> Argument.component("time", time), summary -> Argument.component("summary", summary));
 
+    public static final MessageKey.Arg1<Component> TARGET = DEFINER
+        .define("kansokusha.display.compact.target", "<aqua><target></aqua>")
+        .with(target -> Argument.component("target", target));
+    public static final MessageKey.Arg2<Component, Component> FIELD = DEFINER
+        .define("kansokusha.display.compact.field", "<gray><label>: </gray><value>")
+        .with(label -> Argument.component("label", label), value -> Argument.component("value", value));
+    public static final MessageKey HOVER_HINT = DEFINER.define("kansokusha.display.compact.hover-hint", "Hover for context");
+    public static final MessageKey CONSOLE_HINT = DEFINER.define("kansokusha.display.compact.console-hint",
+        "Open an event with /kansokusha event ID; append record or a text view to expand it.");
     public static final MessageKey EMPTY = DEFINER.define("kansokusha.display.compact.empty", "(empty)");
     public static final MessageKey EXTRA = DEFINER.define("kansokusha.display.compact.extra", "[Additional data]");
     public static final MessageKey HINT = DEFINER.define("kansokusha.display.compact.hint",

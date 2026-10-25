@@ -12,11 +12,11 @@ import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
 import net.okocraft.kansokusha.paper.builtin.PaperEventPresenter;
+import net.okocraft.kansokusha.paper.builtin.PaperViewMessages;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchMessages;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
-import org.jetbrains.annotations.NotNullByDefault;
 import org.bukkit.plugin.Plugin;
-import net.okocraft.kansokusha.paper.builtin.PaperViewMessages;
+import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Clock;
 import java.time.ZoneId;
