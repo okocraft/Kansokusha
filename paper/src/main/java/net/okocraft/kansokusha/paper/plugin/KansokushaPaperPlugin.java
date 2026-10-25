@@ -54,6 +54,8 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                 this.inspectionSessions,
                 new InspectionSearchHandler(this.getServer(), runtime, java.time.Clock.systemUTC(), config.searchTimeZone())
             );
+            this.getServer().getPluginManager().registerEvents(
+                new net.okocraft.kansokusha.paper.command.CommandNavigation(), this);
             PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
@@ -67,6 +69,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         this.inspectionSessions.clear();
+        net.okocraft.kansokusha.common.command.SearchNavigation.clear();
         LanguageProvider.unload();
 
         var runtime = this.runtime;

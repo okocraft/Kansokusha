@@ -54,7 +54,8 @@ final class SearchCommand {
             source::hasPermission,
             source::sendMessage,
             source instanceof Player,
-            null
+            null,
+            command -> CommandNavigation.remember(source, command)
         );
         return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, VelocityEventPresenter.renderer(clock, timezone))
             ? Command.SINGLE_SUCCESS
