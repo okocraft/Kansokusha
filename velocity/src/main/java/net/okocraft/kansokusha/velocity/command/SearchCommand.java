@@ -11,6 +11,7 @@ import com.velocitypowered.api.proxy.Player;
 import net.okocraft.kansokusha.common.command.SearchCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.NotNullByDefault;
+import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
 
 import java.time.Clock;
 import java.time.ZoneId;
@@ -55,7 +56,7 @@ final class SearchCommand {
             source instanceof Player,
             null
         );
-        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone)
+        return SearchCommandSupport.execute(backend, searchSource, rawInput, clock, timezone, VelocityEventPresenter.renderer(clock, timezone))
             ? Command.SINGLE_SUCCESS
             : 0;
     }

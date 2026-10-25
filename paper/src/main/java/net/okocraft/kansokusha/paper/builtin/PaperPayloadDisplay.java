@@ -79,6 +79,10 @@ final class PaperPayloadDisplay {
         return Component.text(EventRenderer.preview(tag.toString()));
     }
 
+    static Component componentPreview(Tag tag) {
+        return Component.text(EventRenderer.preview(componentText(((StringTag) tag).value())));
+    }
+
     static List<Component> details(CompoundTag payload) {
         var lines = new ArrayList<Component>();
         appendDetails(payload, Component.empty(), lines);

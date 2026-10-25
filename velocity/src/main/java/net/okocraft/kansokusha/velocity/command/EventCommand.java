@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandSupport;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.NotNullByDefault;
+import net.okocraft.kansokusha.velocity.builtin.VelocityEventPresenter;
 
 @NotNullByDefault
 final class EventCommand {
@@ -33,7 +34,7 @@ final class EventCommand {
                         StringArgumentType.getString(context, "event-id"),
                         source::hasPermission,
                         source::sendMessage,
-                        EventRenderer.generic(clock, timezone)
+                        VelocityEventPresenter.renderer(clock, timezone)
                     ) ? Command.SINGLE_SUCCESS : 0;
                 }))
             .build();

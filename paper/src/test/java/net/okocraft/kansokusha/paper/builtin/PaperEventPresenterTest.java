@@ -104,6 +104,25 @@ class PaperEventPresenterTest {
         }
     }
 
+    @Test
+    void testCommunicationPreviewAndFullOriginalText(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var payload = new CompoundTag();
+        var command = "<red>/say " + "a".repeat(200) + " END";
+        payload.putString("command", command);
+        var content = new PaperEventPresenter().present(event("paper_player_command", payload), true, this.renderer).orElseThrow();
+        Assertions.assertTrue(plain(content.summary(), Locale.ENGLISH).contains("entered a command"));
+        Assertions.assertFalse(plain(content.summary(), Locale.ENGLISH).contains(" END"));
+        Assertions.assertTrue(content.details().stream().map(line -> plain(line, Locale.ENGLISH))
+            .anyMatch(line -> line.contains(command)));
+        payload = new CompoundTag();
+        payload.putString("from_world", "minecraft:the_nether");
+        content = new PaperEventPresenter().present(event("player_world_change", payload), false, this.renderer).orElseThrow();
+        var summary = plain(content.summary(), Locale.ENGLISH);
+        Assertions.assertTrue(summary.contains("minecraft:the_nether"), summary);
+        Assertions.assertTrue(summary.contains("minecraft:overworld"), summary);
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),
