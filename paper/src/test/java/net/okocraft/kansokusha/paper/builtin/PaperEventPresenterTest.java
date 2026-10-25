@@ -202,6 +202,15 @@ class PaperEventPresenterTest {
         Assertions.assertTrue(GlobalTranslator.render(row, Locale.ENGLISH).toString().contains("axis"));
     }
 
+    @Test
+    void testPayloadEntityUuidHoverFollowsDebugPermission() {
+        var owner = new CompoundTag();
+        owner.putString("uuid", "123e4567-e89b-12d3-a456-426614174501");
+        owner.putString("type", "minecraft:player");
+        Assertions.assertNull(PaperPayloadDisplay.preview(owner, "new_owner", false).hoverEvent());
+        Assertions.assertNotNull(PaperPayloadDisplay.preview(owner, "new_owner", true).hoverEvent());
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),

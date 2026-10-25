@@ -58,7 +58,7 @@ Examples:
 ## Time zone
 
 `config.yml` contains `search-time-zone`, an IANA time-zone ID such as `UTC`,
-`Asia/Tokyo`, or `Europe/London`. The bundled default is `UTC`. It controls `today`,
+`Asia/Tokyo`, or `Europe/London`. The bundled default is empty and uses the server system time zone; explicit `UTC` settings are preserved. It controls `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit UTC offset. Datetimes with an
 offset keep that offset. Configuration changes take effect after restart.
 
