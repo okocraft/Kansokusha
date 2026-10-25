@@ -64,7 +64,9 @@ class VelocityEventPresenterTest {
             VelocityPlayerSessionPayloadCodec.encodeBackendKick(reason, false,
                 VelocityPlayerSessionPayloadCodec.ProxyAction.REDIRECT, Key.key("velocity:lobby"), reason)), true, this.renderer).orElseThrow();
         Assertions.assertTrue(plain(content.summary()).contains("Reason"));
-        Assertions.assertFalse(content.toString().contains("/danger"));
+        Assertions.assertFalse(content.summary().toString().contains("/danger"));
+        Assertions.assertTrue(content.details().stream().map(VelocityEventPresenterTest::plain)
+            .anyMatch(text -> text.contains("/danger")));
         Assertions.assertTrue(plain(content.summary()).contains("velocity:lobby"));
     }
 

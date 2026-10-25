@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.velocity.builtin;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresenter;
@@ -39,9 +40,11 @@ public final class VelocityEventPresenter implements EventPresenter {
         "backend_kick", view("backend_kick", "<actor> was kicked by <target><context>", payload -> {
             var data = VelocityPlayerSessionPayloadCodec.decodeBackendKick(payload);
             return facts("reason", data.originalReason(), "during_server_connect", data.duringServerConnect(),
-                "action", data.action(), "destination", data.redirectTarget(), "message", data.message());
+                "action", data.action(), "destination", data.redirectTarget(), "message", data.message(),
+                "reason_component", data.originalReason() == null ? null : GsonComponentSerializer.gson().serialize(data.originalReason()),
+                "message_component", data.message() == null ? null : GsonComponentSerializer.gson().serialize(data.message()));
         }, "reason", "action", "destination"),
-        "velocity_chat", view("velocity_chat", "<actor> said<context>",
+        "velocity_chat", view("velocity_chat", "<actor> chat input<context>",
             payload -> facts("message", VelocityCommunicationPayloadCodec.decodeChat(payload)), "message"),
         "velocity_command", view("velocity_command", "<actor> entered a command<context>", payload -> {
             var data = VelocityCommunicationPayloadCodec.decodeCommand(payload);

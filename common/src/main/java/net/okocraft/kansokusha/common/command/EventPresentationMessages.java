@@ -28,12 +28,16 @@ public final class EventPresentationMessages {
                 RELATIVE.put(key, DEFINER.define("kansokusha.display.time." + key,
                     future ? "in <amount> " + unit : "<amount> " + unit + " ago")
                     .with((Long amount) -> Argument.numeric("amount", amount)));
+                RELATIVE.put(key + ".one", DEFINER.define("kansokusha.display.time." + key + ".one",
+                    future ? "in <amount> " + unit.substring(0, unit.length() - 1)
+                        : "<amount> " + unit.substring(0, unit.length() - 1) + " ago")
+                    .with((Long amount) -> Argument.numeric("amount", amount)));
             }
         }
     }
 
-    public static MessageKey.Arg1<Long> relative(String unit, boolean future) {
-        return RELATIVE.get(unit + (future ? ".future" : ".past"));
+    public static MessageKey.Arg1<Long> relative(String unit, boolean future, long amount) {
+        return RELATIVE.get(unit + (future ? ".future" : ".past") + (amount == 1 ? ".one" : ""));
     }
 
     public static final MessageKey.Arg2<Component, Component> ROW = DEFINER

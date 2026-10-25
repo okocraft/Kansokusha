@@ -16,7 +16,7 @@ final class PaperPlayerViews {
         of("player_gamemode_change", "<actor> changed game mode<context>", OTHER, "old_gamemode", "new_gamemode"),
         of("player_spawn_change", "<actor> changed respawn point<context>", OTHER, "before", "after", "cause"),
         of("player_death", "<actor> died<context>", OTHER, "death_message", "last_damage_cause"),
-        of("paper_chat", "<actor> said<context>", OTHER, "message"),
+        of("paper_chat", "<actor> chat input<context>", OTHER, "message"),
         of("paper_player_command", "<actor> entered a command<context>", OTHER, "command"),
         of("paper_server_command", "Command input<context>", OTHER, "source_kind", "source_name", "command")
     );

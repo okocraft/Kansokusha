@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.minecraft.nbt.ByteArrayTag;
+import net.minecraft.nbt.ByteTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
@@ -82,6 +83,9 @@ final class PaperPayloadDisplay {
                 value = componentText(value);
             }
             return EventFieldMessages.value(field, EventRenderer.preview(value));
+        }
+        if (tag instanceof ByteTag) {
+            return Component.text(Boolean.toString(tag.asByte().orElseThrow() != 0));
         }
         return Component.text(EventRenderer.preview(tag.toString()));
     }
