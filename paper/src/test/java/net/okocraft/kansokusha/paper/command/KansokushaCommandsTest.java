@@ -1,6 +1,8 @@
 package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import io.papermc.paper.command.brigadier.PaperCommands;
+import io.papermc.paper.plugin.configuration.PluginMeta;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -35,6 +37,26 @@ class KansokushaCommandsTest {
         new InspectionSessionManager(),
         Mockito.mock(org.bukkit.plugin.Plugin.class)
     ));
+
+    @Test
+    void testCommandTreeCanBeRegisteredWithPaper() {
+        var pluginMeta = Mockito.mock(PluginMeta.class);
+        Mockito.when(pluginMeta.namespace()).thenReturn("kansokusha");
+        var command = KansokushaCommands.createCommand(
+            this.backend,
+            Clock.systemUTC(),
+            ZoneOffset.UTC,
+            new InspectionSessionManager(),
+            Mockito.mock(org.bukkit.plugin.Plugin.class)
+        );
+
+        var labels = Assertions.assertDoesNotThrow(
+            () -> PaperCommands.INSTANCE.register(pluginMeta, command, null, List.of())
+        );
+
+        Assertions.assertTrue(labels.contains("kansokusha"));
+        Assertions.assertTrue(labels.contains("kansokusha:kansokusha"));
+    }
 
     @Test
     void testVersionCommandIsWiredUnderKansokushaRoot() throws Exception {

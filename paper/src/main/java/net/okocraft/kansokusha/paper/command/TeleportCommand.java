@@ -1,10 +1,10 @@
 package net.okocraft.kansokusha.paper.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -13,20 +13,9 @@ import org.bukkit.plugin.Plugin;
 final class TeleportCommand {
     static final String PERMISSION = "kansokusha.command.teleport";
 
-    private static final com.mojang.brigadier.arguments.ArgumentType<String> WORLD_KEY = reader -> {
-        var start = reader.getCursor();
-        while (reader.canRead() && !Character.isWhitespace(reader.peek())) reader.skip();
-        var value = reader.getString().substring(start, reader.getCursor());
-        if (NamespacedKey.fromString(value) == null) {
-            throw com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherParseException()
-                .createWithContext(reader, "Invalid world key");
-        }
-        return value;
-    };
-
     static LiteralArgumentBuilder<CommandSourceStack> create(Plugin plugin) {
         return Commands.literal("teleport").requires(source -> source.getSender().hasPermission(PERMISSION))
-            .then(Commands.argument("world", WORLD_KEY)
+            .then(Commands.argument("world", ArgumentTypes.namespacedKey())
                 .then(Commands.argument("x", IntegerArgumentType.integer())
                     .then(Commands.argument("y", IntegerArgumentType.integer())
                         .then(Commands.argument("z", IntegerArgumentType.integer()).executes(context -> {
@@ -35,13 +24,13 @@ final class TeleportCommand {
                                 sender.sendMessage(TeleportMessages.PLAYER_ONLY.asComponent());
                                 return 0;
                             }
-                            var worldKey = NamespacedKey.fromString(StringArgumentType.getString(context, "world"));
+                            var worldKey = context.getArgument("world", NamespacedKey.class);
                             var x = IntegerArgumentType.getInteger(context, "x");
                             var y = IntegerArgumentType.getInteger(context, "y");
                             var z = IntegerArgumentType.getInteger(context, "z");
                             return player.getScheduler().execute(plugin, () -> {
                                 if (!player.hasPermission(PERMISSION)) return;
-                                var world = worldKey == null ? null : plugin.getServer().getWorld(worldKey);
+                                var world = plugin.getServer().getWorld(worldKey);
                                 if (world == null) {
                                     player.sendMessage(TeleportMessages.WORLD_UNAVAILABLE.asComponent());
                                     return;
