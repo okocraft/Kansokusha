@@ -292,7 +292,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         deltas.put(key, new MutableDelta(template, direction * item.getAmount()));
     }
 
-    private static ItemStack[] snapshotContents(Inventory inventory) {
+    static ItemStack[] snapshotContents(Inventory inventory) {
         var contents = inventory.getContents();
         var snapshot = new ItemStack[contents.length];
         for (var index = 0; index < contents.length; index++) {
