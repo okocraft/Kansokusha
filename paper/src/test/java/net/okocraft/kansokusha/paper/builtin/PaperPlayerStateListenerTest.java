@@ -202,7 +202,7 @@ class PaperPlayerStateListenerTest {
         var oldSpawn = new Location(world("old_spawn"), 10.5, 65, 20.5, 15, 0);
         var finalSpawn = new Location(world("final_spawn"), 50.5, 80.25, 60.125, 90, 0);
         var player = player(world("current"), 0, 64, 0);
-        Mockito.when(player.getRespawnLocation()).thenReturn(oldSpawn);
+        Mockito.when(player.getRespawnLocation(false)).thenReturn(oldSpawn);
         var setEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(setEvent.getPlayer()).thenReturn(player);
         Mockito.when(setEvent.getLocation()).thenReturn(finalSpawn);
@@ -232,7 +232,7 @@ class PaperPlayerStateListenerTest {
         Assertions.assertEquals("bed", setPayload.getString("cause").orElseThrow());
         Assertions.assertFalse(setPayload.contains("source_event"));
 
-        Mockito.when(player.getRespawnLocation()).thenReturn(finalSpawn);
+        Mockito.when(player.getRespawnLocation(false)).thenReturn(finalSpawn);
         var clearEvent = Mockito.mock(PlayerSetSpawnEvent.class);
         Mockito.when(clearEvent.getPlayer()).thenReturn(player);
         Mockito.when(clearEvent.getLocation()).thenReturn(null);
