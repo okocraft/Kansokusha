@@ -7,6 +7,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.EventTypeDefinition;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
@@ -38,6 +39,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
 /**
@@ -65,9 +67,13 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     private final ConcurrentHashMap<Key, RegisteredEventType> eventTypes = new ConcurrentHashMap<>();
     private final int batchSize;
     private final BlockingQueue<QueuedEvent> queue;
+    private final int queueCapacity;
     private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
+    private final AtomicLong writtenEvents = new AtomicLong();
+    private final AtomicLong lostEvents = new AtomicLong();
+    private final AtomicLong rejectedEvents = new AtomicLong();
     private final ScheduledExecutorService storageThread;
     // Runs the callbacks of query results so that rendering never occupies the storage thread.
     private final ExecutorService callbackExecutor = Executors.newThreadPerTaskExecutor(
@@ -90,7 +96,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         this.storage = storage;
         this.errorReporter = errorReporter;
         this.batchSize = config.batchSize();
-        this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
+        this.queueCapacity = config.queueCapacity();
+        this.queue = new ArrayBlockingQueue<>(this.queueCapacity);
         this.storageThread = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().name("kansokusha-storage").factory()
         );
@@ -215,6 +222,20 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         });
     }
 
+    @Override
+    public CompletableFuture<DatabaseHealth> health() {
+        return this.queryStorage(() -> new DatabaseHealth(
+            this.storage.health(),
+            new DatabaseHealth.Queue(
+                this.queuedEvents.get(),
+                this.queueCapacity,
+                this.writtenEvents.get(),
+                this.lostEvents.get(),
+                this.rejectedEvents.get()
+            )
+        ));
+    }
+
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
         var registered = this.eventTypes.get(submission.eventType());
         if (registered == null || !submission.payloadGeneration().equals(registered.payloadGeneration())) {
@@ -239,6 +260,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         }
         try {
             if (!this.queue.offer(queued)) {
+                this.rejectedEvents.incrementAndGet();
                 return false;
             }
             var queuedEvents = this.queuedEvents.incrementAndGet();
@@ -396,8 +418,10 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
+                this.writtenEvents.addAndGet(batch.size());
                 this.metadataCache.add(batch);
             } catch (SQLException | RuntimeException e) {
+                this.lostEvents.addAndGet(batch.size());
                 this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
             }
             batch.clear();

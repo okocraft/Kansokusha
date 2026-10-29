@@ -68,6 +68,23 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testHealthReportsQueueCounters(@TempDir Path dir) throws Exception {
+        try (var runtime = start(dir, 2, 10)) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+
+            var now = Instant.now();
+            Assertions.assertTrue(runtime.submit(event(now)));
+            Assertions.assertTrue(runtime.submit(event(now)));
+            Assertions.assertFalse(runtime.submit(event(now)), "The queue is full.");
+
+            var health = runtime.health().get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 0, 1), health.queue());
+            Assertions.assertEquals(0, health.stored().events());
+            Assertions.assertTrue(health.stored().databaseBytes() > 0);
+        }
+    }
+
+    @Test
     void testQueuedEventsArePersistedOnClose(@TempDir Path dir) throws Exception {
         var runtime = start(dir, 2, 10);
         Assertions.assertEquals(Optional.of(SERVER_KEY), runtime.localServerKey());

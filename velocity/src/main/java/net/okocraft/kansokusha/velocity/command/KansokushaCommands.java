@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresentationMessages;
+import net.okocraft.kansokusha.common.command.HealthCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
@@ -29,6 +30,7 @@ public final class KansokushaCommands {
             net.okocraft.kansokusha.common.command.SearchGuide.defaultMessages(),
             EventPresentationMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
+            HealthCommandMessages.defaultMessages(),
             SearchCommandMessages.defaultMessages(),
             SearchQueryMessages.defaultMessages(),
             EventCommandMessages.defaultMessages()
@@ -55,6 +57,7 @@ public final class KansokushaCommands {
                 .then(BrigadierCommand.literalArgumentBuilder("help")
                     .executes(context -> sendHelp(context.getSource())))
                 .then(VersionCommand.createVersionCommand())
+                .then(HealthCommand.createHealthCommand(backend))
                 .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
                 .then(EventCommand.createEventCommand(backend, clock, searchTimeZone))
         );

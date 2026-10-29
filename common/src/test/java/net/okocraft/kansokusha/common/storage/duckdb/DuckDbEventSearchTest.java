@@ -93,6 +93,30 @@ class DuckDbEventSearchTest {
     }
 
     @Test
+    void testHealthReportsStoredEvents(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            var empty = storage.health();
+            Assertions.assertEquals(0, empty.events());
+            Assertions.assertEquals(0, empty.playerNames());
+            Assertions.assertTrue(empty.oldestEvent().isEmpty());
+            Assertions.assertTrue(empty.newestEvent().isEmpty());
+
+            storage.append(List.of(
+                queued(event(AUDIT, NOW, OVERWORLD, new BlockPosition(10, 64, 20), new PlayerActor(PLAYER_ONE), STONE), null),
+                queuedLogin(PLAYER_ONE, "Alice", NOW.plusSeconds(5))
+            ));
+
+            var health = storage.health();
+            Assertions.assertEquals(2, health.events());
+            Assertions.assertEquals(1, health.playerNames());
+            Assertions.assertEquals(Optional.of(NOW), health.oldestEvent());
+            Assertions.assertEquals(Optional.of(NOW.plusSeconds(5)), health.newestEvent());
+            Assertions.assertTrue(health.databaseBytes() > 0);
+            Assertions.assertTrue(health.walBytes() >= 0);
+        }
+    }
+
+    @Test
     void testHistoricalSearchMetadataUsesPersistedDistinctValues(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(

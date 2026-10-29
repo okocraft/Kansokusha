@@ -6,6 +6,7 @@ import net.okocraft.kansokusha.api.actor.EntityActor;
 import net.okocraft.kansokusha.api.actor.EventActor;
 import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
+import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
@@ -106,12 +108,14 @@ public final class DuckDbStorageImpl implements Storage {
     // Large enough to hold every block, item and entity type key used as actor or target types.
     private static final int MAX_CACHED_KEYS = 4096;
 
+    private final Path filepath;
     private final DuckDBConnection connection;
     // Key#asString() concatenates on every call, and the appender encodes strings to UTF-8 on every call.
     private final Map<Key, byte[]> encodedKeys = new HashMap<>();
     private @Nullable DuckDBAppender appender;
 
-    private DuckDbStorageImpl(DuckDBConnection connection) {
+    private DuckDbStorageImpl(Path filepath, DuckDBConnection connection) {
+        this.filepath = filepath;
         this.connection = connection;
     }
 
@@ -133,7 +137,7 @@ public final class DuckDbStorageImpl implements Storage {
             throw e;
         }
         connection.setAutoCommit(false);
-        return new DuckDbStorageImpl(connection);
+        return new DuckDbStorageImpl(absolutePath, connection);
     }
 
     @Override
@@ -296,6 +300,52 @@ public final class DuckDbStorageImpl implements Storage {
         Key eventType
     ) {
         return values.computeIfAbsent(eventType, ignored -> new LinkedHashSet<>());
+    }
+
+    @Override
+    public DatabaseHealth.Stored health() throws SQLException {
+        long events;
+        Optional<Instant> oldest;
+        Optional<Instant> newest;
+        // The row count and the time range come from the table statistics, not from a scan.
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery(
+                 "SELECT count(*), epoch_ms(min(occurred_at)), epoch_ms(max(occurred_at)) FROM events"
+             )) {
+            rows.next();
+            events = rows.getLong(1);
+            oldest = optionalInstant(rows, 2);
+            newest = optionalInstant(rows, 3);
+        }
+
+        long playerNames;
+        try (var statement = this.connection.createStatement();
+             var rows = statement.executeQuery("SELECT count(*) FROM player_names")) {
+            rows.next();
+            playerNames = rows.getLong(1);
+        }
+
+        return new DatabaseHealth.Stored(
+            events,
+            playerNames,
+            oldest,
+            newest,
+            fileSize(this.filepath),
+            fileSize(this.filepath.resolveSibling(this.filepath.getFileName() + ".wal"))
+        );
+    }
+
+    private static Optional<Instant> optionalInstant(ResultSet rows, int column) throws SQLException {
+        var millis = rows.getLong(column);
+        return rows.wasNull() ? Optional.empty() : Optional.of(Instant.ofEpochMilli(millis));
+    }
+
+    private static long fileSize(Path file) {
+        try {
+            return Files.exists(file) ? Files.size(file) : 0;
+        } catch (IOException e) {
+            return 0;
+        }
     }
 
     @Override
