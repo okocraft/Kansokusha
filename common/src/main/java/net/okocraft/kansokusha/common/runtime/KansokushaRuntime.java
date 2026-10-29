@@ -64,6 +64,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final ScheduledExecutorService storageThread;
+    // Only accessed on the storage thread.
+    private final SearchMetadataCache metadataCache = new SearchMetadataCache();
     // The sign bit marks the runtime closed; the remaining value counts in-flight submissions.
     private final AtomicInteger submissionState = new AtomicInteger();
     private final Object closeMonitor = new Object();
@@ -196,7 +198,12 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     @Override
     public CompletableFuture<SearchMetadata> searchMetadata() {
-        return this.queryStorage(this.storage::searchMetadata);
+        return this.queryStorage(() -> {
+            if (!this.metadataCache.isLoaded()) {
+                this.metadataCache.load(this.storage.searchMetadata());
+            }
+            return this.metadataCache.snapshot();
+        });
     }
 
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
@@ -360,6 +367,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
+                this.metadataCache.add(batch);
             } catch (SQLException | RuntimeException e) {
                 this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
             }
@@ -369,7 +377,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     private void deleteExpired() {
         try {
-            this.storage.deleteExpired(Instant.now());
+            if (this.storage.deleteExpired(Instant.now()) > 0) {
+                this.metadataCache.invalidate();
+            }
         } catch (SQLException | RuntimeException e) {
             this.errorReporter.accept("Failed to delete expired events.", e);
         }
