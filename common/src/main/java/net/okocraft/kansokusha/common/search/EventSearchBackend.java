@@ -41,6 +41,11 @@ public interface EventSearchBackend {
         return CompletableFuture.failedFuture(new UnsupportedOperationException("Counting is unavailable"));
     }
 
+    /** Reads the state of the database and of the write queue. */
+    default CompletableFuture<DatabaseHealth> health() {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Health is unavailable"));
+    }
+
     CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);
 
     /**

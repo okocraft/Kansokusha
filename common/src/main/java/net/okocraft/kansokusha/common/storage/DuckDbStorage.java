@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -381,6 +382,11 @@ public final class DuckDbStorage {
         @Override
         public SearchMetadata searchMetadata() throws SQLException {
             return this.delegate.searchMetadata();
+        }
+
+        @Override
+        public DatabaseHealth.Stored health() throws SQLException {
+            return this.delegate.health();
         }
 
         @Override

@@ -38,6 +38,12 @@ public final class CommandMessages {
             "<aqua>/kansokusha event \\<event-id></aqua><dark_gray> - </dark_gray><gray>Inspect one event, its before/after data and causes. Copy the ID from a search result.</gray>"
         );
 
+    public static final MessageKey HELP_HEALTH = DEFINER
+        .define(
+            "kansokusha.command.help.health",
+            "<aqua>/kansokusha health</aqua><dark_gray> - </dark_gray><gray>Show the state of the event database and the write queue</gray>"
+        );
+
     public static @UnmodifiableView Map<String, String> defaultMessages() {
         return DEFINER.getCollectedMessages();
     }

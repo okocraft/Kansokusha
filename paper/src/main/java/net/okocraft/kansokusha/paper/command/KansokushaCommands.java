@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.common.command.CommandMessages;
 import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresentationMessages;
+import net.okocraft.kansokusha.common.command.HealthCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
@@ -39,6 +40,7 @@ public final class KansokushaCommands {
             TeleportMessages.defaultMessages(),
             InspectionSearchMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
+            HealthCommandMessages.defaultMessages(),
             PaperViewMessages.defaultMessages()
         ));
         defaults.addAll(PaperEventPresenter.defaultMessages());
@@ -70,6 +72,7 @@ public final class KansokushaCommands {
             .executes(context -> sendHelp(context.getSource()))
             .then(Commands.literal("help").executes(context -> sendHelp(context.getSource())))
             .then(VersionCommand.createVersionCommand())
+            .then(HealthCommand.createHealthCommand(backend))
             .then(TeleportCommand.create(plugin))
             .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
             .then(EventCommand.createEventCommand(backend, clock, searchTimeZone, plugin))

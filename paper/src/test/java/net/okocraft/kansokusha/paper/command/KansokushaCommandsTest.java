@@ -71,6 +71,25 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testHealthCommandIsWiredAndRequiresItsPermission() throws Exception {
+        var console = Mockito.mock(ConsoleCommandSender.class);
+        TestSources.grant(console, "kansokusha.command", "kansokusha.command.health");
+        Mockito.when(this.backend.health()).thenReturn(java.util.concurrent.CompletableFuture.failedFuture(
+            new IllegalStateException("closed")
+        ));
+
+        Assertions.assertEquals(1, this.tester.execute(TestSources.ofSenderOnly(console), "kansokusha health"));
+        Mockito.verify(console).sendMessage(net.okocraft.kansokusha.common.command.HealthCommandMessages.FAILED.asComponent());
+
+        var denied = Mockito.mock(ConsoleCommandSender.class);
+        TestSources.grant(denied, "kansokusha.command");
+        Assertions.assertThrows(
+            CommandSyntaxException.class,
+            () -> this.tester.execute(TestSources.ofSenderOnly(denied), "kansokusha health")
+        );
+    }
+
+    @Test
     void testSubcommandsAreWiredUnderKansokushaRoot() {
         var command = KansokushaCommands.createCommand(
             this.backend,
@@ -80,7 +99,7 @@ class KansokushaCommandsTest {
         Mockito.mock(org.bukkit.plugin.Plugin.class)
         );
 
-        for (var name : List.of("version", "search", "event", "inspect", "i", "teleport")) {
+        for (var name : List.of("version", "health", "search", "event", "inspect", "i", "teleport")) {
             Assertions.assertNotNull(command.getChild(name), name);
         }
     }

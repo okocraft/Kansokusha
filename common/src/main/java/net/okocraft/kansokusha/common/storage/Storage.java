@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -31,6 +32,11 @@ public interface Storage extends AutoCloseable {
     long count(SearchRequest request) throws SQLException;
 
     SearchMetadata searchMetadata() throws SQLException;
+
+    /** Reads what the database holds. */
+    default DatabaseHealth.Stored health() throws SQLException {
+        throw new UnsupportedOperationException("Health is unavailable");
+    }
 
     int deleteExpired(Instant now) throws SQLException;
 

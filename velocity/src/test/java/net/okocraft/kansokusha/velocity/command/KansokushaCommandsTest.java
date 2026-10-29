@@ -40,6 +40,25 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testHealthCommandIsWiredAndRequiresItsPermission() throws Exception {
+        ConsoleCommandSource console = TestSources.console();
+        TestSources.grant(console, "kansokusha.command", "kansokusha.command.health");
+        Mockito.when(this.backend.health()).thenReturn(java.util.concurrent.CompletableFuture.failedFuture(
+            new IllegalStateException("closed")
+        ));
+
+        Assertions.assertEquals(1, this.tester.execute(console, "kansokusha health"));
+        Mockito.verify(console).sendMessage(net.okocraft.kansokusha.common.command.HealthCommandMessages.FAILED.asComponent());
+
+        ConsoleCommandSource denied = TestSources.console();
+        TestSources.grant(denied, "kansokusha.command");
+        Assertions.assertThrows(
+            CommandSyntaxException.class,
+            () -> this.tester.execute(denied, "kansokusha health")
+        );
+    }
+
+    @Test
     void testEventCommandIsWiredUnderKansokushaRoot() {
         Assertions.assertNotNull(
             KansokushaCommands.createCommand(this.backend, Clock.systemUTC(), ZoneOffset.UTC)
