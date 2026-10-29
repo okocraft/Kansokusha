@@ -57,7 +57,8 @@ public final class PaperPlayerSpawnChangeListener implements Listener {
         Objects.requireNonNull(event, "event");
 
         var player = event.getPlayer();
-        var before = PaperPlayerStatePayloadCodec.snapshotOptionalLocation(player.getRespawnLocation());
+        // Skips validation: it reads the bed block, which can load a chunk owned by another Folia region.
+        var before = PaperPlayerStatePayloadCodec.snapshotOptionalLocation(player.getRespawnLocation(false));
         var after = PaperPlayerStatePayloadCodec.snapshotOptionalLocation(event.getLocation());
         var common = after != null ? after : before;
         this.api.submit(new EventSubmission(
