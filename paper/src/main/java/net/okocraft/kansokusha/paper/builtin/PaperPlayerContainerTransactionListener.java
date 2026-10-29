@@ -38,7 +38,9 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -213,7 +215,8 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     }
 
     private void resolve(PendingTransaction pending) {
-        var after = snapshotContents(pending.inventory());
+        // diffContents only reads the items, so the live contents do not need to be copied.
+        var after = pending.inventory().getContents();
         for (var delta : diffContents(pending.before(), after)) {
             var direction = delta.amountDelta() > 0
                 ? "added_to_container"
@@ -249,7 +252,8 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         Objects.requireNonNull(before, "before");
         Objects.requireNonNull(after, "after");
 
-        var deltas = new ArrayList<MutableDelta>();
+        // Keeps the order in which the item types first appear.
+        var deltas = new LinkedHashMap<SimilarItem, MutableDelta>();
         for (var item : before) {
             merge(deltas, item, -1);
         }
@@ -258,7 +262,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         }
 
         var result = new ArrayList<ContainerDelta>(deltas.size());
-        for (var delta : deltas) {
+        for (var delta : deltas.values()) {
             if (delta.amount == 0) {
                 continue;
             }
@@ -268,7 +272,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     }
 
     private static void merge(
-        List<MutableDelta> deltas,
+        Map<SimilarItem, MutableDelta> deltas,
         @Nullable ItemStack item,
         int direction
     ) {
@@ -276,16 +280,16 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
             return;
         }
 
-        for (var delta : deltas) {
-            if (delta.item.isSimilar(item)) {
-                delta.amount += direction * item.getAmount();
-                return;
-            }
+        var key = new SimilarItem(item);
+        var delta = deltas.get(key);
+        if (delta != null) {
+            delta.amount += direction * item.getAmount();
+            return;
         }
 
         var template = item.clone();
         template.setAmount(1);
-        deltas.add(new MutableDelta(template, direction * item.getAmount()));
+        deltas.put(key, new MutableDelta(template, direction * item.getAmount()));
     }
 
     private static ItemStack[] snapshotContents(Inventory inventory) {
@@ -473,6 +477,31 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         Instant occurredAt,
         UUID transactionId
     ) {
+    }
+
+    /**
+     * Groups items by {@link ItemStack#isSimilar(ItemStack)} so that they can be looked up in a hash map.
+     * The hash uses the type and the item meta, which {@code isSimilar} compares, but not the amount.
+     */
+    private static final class SimilarItem {
+
+        private final ItemStack item;
+        private final int hash;
+
+        private SimilarItem(ItemStack item) {
+            this.item = item;
+            this.hash = 31 * item.getType().hashCode() + (item.hasItemMeta() ? item.getItemMeta().hashCode() : 0);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof SimilarItem similar && this.item.isSimilar(similar.item);
+        }
+
+        @Override
+        public int hashCode() {
+            return this.hash;
+        }
     }
 
     private static final class MutableDelta {
