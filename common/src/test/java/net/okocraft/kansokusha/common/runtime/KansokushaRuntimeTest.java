@@ -107,6 +107,38 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testQueryCallbacksDoNotRunOnStorageThread() throws Exception {
+        var storage = new BlockingLookupStorage();
+        var runtime = KansokushaRuntime.start(
+            storage,
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+
+        try {
+            var callbackThread = new AtomicReference<Thread>();
+            var result = runtime.findEvent(UUID.fromString("0199a123-4567-789a-8bcd-ef0123456792"))
+                .thenApply(found -> {
+                    callbackThread.set(Thread.currentThread());
+                    return found;
+                });
+
+            Assertions.assertTrue(storage.lookupStarted.await(5, TimeUnit.SECONDS));
+            storage.lookupRelease.countDown();
+            result.get(5, TimeUnit.SECONDS);
+
+            Assertions.assertNotSame(storage.lookupThread.get(), callbackThread.get());
+            Assertions.assertNotEquals("kansokusha-storage", callbackThread.get().getName());
+        } finally {
+            storage.lookupRelease.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
     void testEventLookupRunsOnStorageThreadWithoutBlockingCaller() throws Exception {
         var storage = new BlockingLookupStorage();
         var runtime = KansokushaRuntime.start(

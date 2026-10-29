@@ -31,6 +31,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,7 +45,8 @@ import java.util.function.BiConsumer;
  *
  * <p>Submitting threads only enqueue events. A single background thread writes queued events to
  * storage every flush interval, or as soon as a batch is full, and deletes expired events, so storage
- * access is never concurrent.</p>
+ * access is never concurrent. Query results are delivered on separate threads, so the storage thread
+ * is not occupied by whatever callers do with them.</p>
  */
 @NotNullByDefault
 public final class KansokushaRuntime implements KansokushaApi, EventSearchBackend, AutoCloseable {
@@ -67,6 +69,10 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final ScheduledExecutorService storageThread;
+    // Runs the callbacks of query results so that rendering never occupies the storage thread.
+    private final ExecutorService callbackExecutor = Executors.newThreadPerTaskExecutor(
+        Thread.ofVirtual().name("kansokusha-callback-", 0).factory()
+    );
     // Only accessed on the storage thread.
     private final SearchMetadataCache metadataCache = new SearchMetadataCache();
     // The sign bit marks the runtime closed; the remaining value counts in-flight submissions.
@@ -271,15 +277,28 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         try {
             this.storageThread.execute(() -> {
                 try {
-                    result.complete(query.get());
+                    this.complete(result, query.get(), null);
                 } catch (SQLException | RuntimeException e) {
-                    result.completeExceptionally(e);
+                    this.complete(result, null, e);
                 }
             });
         } catch (RejectedExecutionException e) {
             result.completeExceptionally(new IllegalStateException("Kansokusha is stopped.", e));
         }
         return result;
+    }
+
+    // Dependent stages of the future run on the thread that completes it. Complete it on the callback
+    // executor so that callers' processing, such as decoding and rendering events, stays off the storage thread.
+    private <T> void complete(CompletableFuture<T> result, @Nullable T value, @Nullable Throwable failure) {
+        Runnable completion = failure != null
+            ? () -> result.completeExceptionally(failure)
+            : () -> result.complete(value);
+        try {
+            this.callbackExecutor.execute(completion);
+        } catch (RejectedExecutionException e) {
+            completion.run();
+        }
     }
 
     // DuckDB uses the minimum and maximum values as -infinity and infinity.
@@ -332,6 +351,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             }
         });
         this.storageThread.close();
+        this.callbackExecutor.close();
     }
 
     private boolean beginClose() {
