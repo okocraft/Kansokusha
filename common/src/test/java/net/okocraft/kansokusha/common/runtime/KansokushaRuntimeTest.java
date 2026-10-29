@@ -454,6 +454,102 @@ class KansokushaRuntimeTest {
         }
     }
 
+    @Test
+    void testFlushYieldsToQueriesAndCloseWritesEverything() throws Exception {
+        var storage = new OrderRecordingStorage();
+        var runtime = KansokushaRuntime.start(
+            storage,
+            config(1000, BATCH_SIZE),
+            SERVER_KEY,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        var total = BATCH_SIZE * (KansokushaRuntime.MAX_BATCHES_PER_FLUSH * 2 + 1);
+
+        try {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+
+            // Occupies the storage thread so that the flush and the search are queued in this order.
+            var blocker = runtime.findEvent(UUID.fromString("0199a123-4567-789a-8bcd-ef0123456792"));
+            Assertions.assertTrue(storage.lookupStarted.await(5, TimeUnit.SECONDS));
+            for (var i = 0; i < total; i++) {
+                Assertions.assertTrue(runtime.submit(event(Instant.now())));
+            }
+            var search = runtime.searchMetadata();
+            storage.lookupRelease.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            search.get(5, TimeUnit.SECONDS);
+
+            Assertions.assertEquals(
+                KansokushaRuntime.MAX_BATCHES_PER_FLUSH, storage.appendsBeforeMetadata.get(),
+                "The query must run after one bounded flush, not after the queue is drained."
+            );
+        } finally {
+            storage.lookupRelease.countDown();
+            runtime.close();
+        }
+
+        Assertions.assertEquals(total, storage.appendedEvents.get());
+    }
+
+    private static final class OrderRecordingStorage implements Storage {
+
+        private final CountDownLatch lookupStarted = new CountDownLatch(1);
+        private final CountDownLatch lookupRelease = new CountDownLatch(1);
+        private final AtomicInteger appends = new AtomicInteger();
+        private final AtomicInteger appendedEvents = new AtomicInteger();
+        private final AtomicInteger appendsBeforeMetadata = new AtomicInteger(-1);
+
+        @Override
+        public void append(List<QueuedEvent> events) {
+            this.appends.incrementAndGet();
+            this.appendedEvents.addAndGet(events.size());
+        }
+
+        @Override
+        public List<String> offlinePlayerNames() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<EventDetail> findEvent(UUID eventId) throws SQLException {
+            this.lookupStarted.countDown();
+            try {
+                this.lookupRelease.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("Interrupted while waiting in test storage.", e);
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        public SearchPage search(SearchRequest request) {
+            return new SearchPage(List.of(), Optional.empty(), Optional.empty());
+        }
+
+        @Override
+        public long count(SearchRequest request) {
+            return 0;
+        }
+
+        @Override
+        public SearchMetadata searchMetadata() {
+            this.appendsBeforeMetadata.set(this.appends.get());
+            return SearchMetadata.empty();
+        }
+
+        @Override
+        public int deleteExpired(Instant now) {
+            return 0;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
     private static final class BlockingLookupStorage implements Storage {
 
         private final CountDownLatch lookupStarted = new CountDownLatch(1);

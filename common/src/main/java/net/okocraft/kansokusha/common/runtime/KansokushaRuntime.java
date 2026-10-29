@@ -54,6 +54,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
 
     private static final int CLOSED_MASK = 1 << 31;
+    // Bounds how long one flush task occupies the storage thread, so that queries queued behind it
+    // are not starved while events keep arriving. The remainder is flushed by a follow-up task.
+    static final int MAX_BATCHES_PER_FLUSH = 8;
 
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
@@ -339,7 +342,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         // Keep the final flush and close on the storage thread. DuckDBAppender is thread-confined
         // to the thread that created it, even when calls are not concurrent.
         this.storageThread.execute(() -> {
-            this.flush();
+            this.flush(Integer.MAX_VALUE);
             this.deleteExpired();
             try {
                 this.storage.close();
@@ -380,10 +383,16 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     }
 
     private void flush() {
+        this.flush(MAX_BATCHES_PER_FLUSH);
+    }
+
+    private void flush(int maxBatches) {
         this.earlyFlushScheduled.set(false);
         var batch = new ArrayList<QueuedEvent>(this.batchSize);
         int drained;
-        while ((drained = this.queue.drainTo(batch, this.batchSize)) > 0) {
+        var batches = 0;
+        while (batches < maxBatches && (drained = this.queue.drainTo(batch, this.batchSize)) > 0) {
+            batches++;
             this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
@@ -392,6 +401,15 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                 this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
             }
             batch.clear();
+        }
+
+        if (batches == maxBatches && !this.queue.isEmpty()) {
+            // Goes behind the queries that arrived in the meantime.
+            try {
+                this.storageThread.execute(this::flush);
+            } catch (RejectedExecutionException ignored) {
+                // The runtime is closing, and close() flushes the rest.
+            }
         }
     }
 
