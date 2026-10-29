@@ -70,6 +70,31 @@ class PaperAuditGapListenerTest {
     }
 
     @Test
+    void testConfirmedContainerDeltaMergesManyStacksInFirstSeenOrder() {
+        var before = new ItemStack[] {
+            ItemStack.of(Material.DIAMOND, 10),
+            ItemStack.of(Material.EMERALD, 5),
+            ItemStack.of(Material.DIAMOND, 20)
+        };
+        var after = new ItemStack[] {
+            ItemStack.of(Material.EMERALD, 5),
+            ItemStack.of(Material.DIAMOND, 4),
+            ItemStack.of(Material.GOLD_INGOT, 1),
+            ItemStack.of(Material.GOLD_INGOT, 2),
+            ItemStack.empty(),
+            null
+        };
+
+        var deltas = PaperPlayerContainerTransactionListener.diffContents(before, after);
+
+        Assertions.assertEquals(2, deltas.size());
+        Assertions.assertEquals(Material.DIAMOND, deltas.get(0).item().getType());
+        Assertions.assertEquals(-26, deltas.get(0).amountDelta());
+        Assertions.assertEquals(Material.GOLD_INGOT, deltas.get(1).item().getType());
+        Assertions.assertEquals(3, deltas.get(1).amountDelta());
+    }
+
+    @Test
     void testConfirmedContainerDeltaIgnoresSlotRearrangement() {
         var before = new ItemStack[] {
             ItemStack.of(Material.DIAMOND, 64),
