@@ -366,6 +366,94 @@ class KansokushaRuntimeTest {
         Assertions.assertFalse(runtime.submit(event(now)));
     }
 
+    @Test
+    void testSearchMetadataIsCachedAndUpdatedByWrites(@TempDir Path dir) throws Exception {
+        var other = Key.key("example", "other");
+        var world = Key.key("example", "world");
+        var storage = new CountingMetadataStorage(
+            DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME))
+        );
+        try (var runtime = KansokushaRuntime.start(
+            storage,
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        )) {
+            runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
+            runtime.registerEventType(new EventTypeDefinition(other, PayloadGeneration.FIRST));
+
+            Assertions.assertTrue(runtime.searchMetadata().get(5, TimeUnit.SECONDS).events().isEmpty());
+            Assertions.assertTrue(runtime.searchMetadata().get(5, TimeUnit.SECONDS).events().isEmpty());
+            Assertions.assertEquals(1, storage.metadataCalls.get());
+
+            var now = Instant.now();
+            Assertions.assertTrue(runtime.submit(event(now)));
+            Assertions.assertTrue(runtime.submit(new EventSubmission(
+                other, PayloadGeneration.FIRST, now, SERVER_KEY, world, null, null, null,
+                EventPayload.copyOf(new byte[]{1})
+            )));
+
+            // Queries run after the early flush on the same storage thread.
+            var metadata = runtime.searchMetadata().get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(Set.of(EVENT_TYPE, other), metadata.eventTypes());
+            Assertions.assertEquals(Set.of(world), metadata.events().get(other).worlds());
+            Assertions.assertEquals(1, storage.metadataCalls.get());
+        }
+    }
+
+    private static final class CountingMetadataStorage implements Storage {
+
+        private final Storage delegate;
+        private final AtomicInteger metadataCalls = new AtomicInteger();
+
+        private CountingMetadataStorage(Storage delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void append(List<QueuedEvent> events) throws SQLException {
+            this.delegate.append(events);
+        }
+
+        @Override
+        public List<String> offlinePlayerNames() throws SQLException {
+            return this.delegate.offlinePlayerNames();
+        }
+
+        @Override
+        public Optional<EventDetail> findEvent(UUID eventId) throws SQLException {
+            return this.delegate.findEvent(eventId);
+        }
+
+        @Override
+        public SearchPage search(SearchRequest request) throws SQLException {
+            return this.delegate.search(request);
+        }
+
+        @Override
+        public long count(SearchRequest request) throws SQLException {
+            return this.delegate.count(request);
+        }
+
+        @Override
+        public SearchMetadata searchMetadata() throws SQLException {
+            this.metadataCalls.incrementAndGet();
+            return this.delegate.searchMetadata();
+        }
+
+        @Override
+        public int deleteExpired(Instant now) throws SQLException {
+            return this.delegate.deleteExpired(now);
+        }
+
+        @Override
+        public void close() throws SQLException {
+            this.delegate.close();
+        }
+    }
+
     private static final class BlockingLookupStorage implements Storage {
 
         private final CountDownLatch lookupStarted = new CountDownLatch(1);
