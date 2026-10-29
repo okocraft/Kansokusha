@@ -376,6 +376,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
+                this.metadataCache.add(batch);
             } catch (SQLException | RuntimeException e) {
                 this.errorReporter.accept("Failed to write " + batch.size() + " events; they are lost.", e);
             }
