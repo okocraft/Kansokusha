@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.common.command;
 
 import dev.siroshun.mcmsgdef.MessageKey;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
@@ -8,8 +9,10 @@ import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -36,7 +39,7 @@ public final class HealthCommandSupport {
     static List<Component> render(DatabaseHealth health) {
         var stored = health.stored();
         var queue = health.queue();
-        return List.of(
+        var lines = new ArrayList<Component>(List.of(
             HealthCommandMessages.HEADER.asComponent(),
             line(HealthCommandMessages.EVENTS, Component.text(stored.events())),
             line(HealthCommandMessages.PLAYER_NAMES, Component.text(stored.playerNames())),
@@ -48,7 +51,18 @@ public final class HealthCommandSupport {
             line(HealthCommandMessages.WRITTEN, Component.text(queue.written())),
             line(HealthCommandMessages.LOST, warning(queue.lost())),
             line(HealthCommandMessages.REJECTED, warning(queue.rejected()))
-        );
+        ));
+
+        if (!queue.writtenByType().isEmpty()) {
+            lines.add(HealthCommandMessages.BY_TYPE_HEADER.asComponent());
+            queue.writtenByType().entrySet().stream()
+                .sorted(Map.Entry.<Key, Long>comparingByValue().reversed().thenComparing(entry -> entry.getKey().asString()))
+                .forEach(entry -> lines.add(HealthCommandMessages.LINE.apply(
+                    Component.text(entry.getKey().asString()),
+                    Component.text(entry.getValue())
+                )));
+        }
+        return lines;
     }
 
     private static Component line(MessageKey label, Component value) {

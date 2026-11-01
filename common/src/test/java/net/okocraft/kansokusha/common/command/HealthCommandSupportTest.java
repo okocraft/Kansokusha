@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.common.command;
 
 import dev.siroshun.mcmsgdef.MessageKey;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.okocraft.kansokusha.api.event.EventSubmission;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -29,7 +31,7 @@ class HealthCommandSupportTest {
     void testHealthIsRendered() {
         var health = new DatabaseHealth(
             new DatabaseHealth.Stored(1234, 56, Optional.of(OLDEST), Optional.of(NEWEST), 5 * 1024 * 1024, 0),
-            new DatabaseHealth.Queue(3, 10000, 1200, 0, 7)
+            new DatabaseHealth.Queue(3, 10000, 1200, 0, 7, Map.of(Key.key("kansokusha", "block_break"), 900L, Key.key("kansokusha", "chat"), 300L))
         );
         var sent = new ArrayList<Component>();
 
@@ -46,7 +48,10 @@ class HealthCommandSupportTest {
             line(HealthCommandMessages.QUEUE, Component.text("3 / 10000")),
             line(HealthCommandMessages.WRITTEN, Component.text(1200L)),
             line(HealthCommandMessages.LOST, Component.text(0L, NamedTextColor.AQUA)),
-            line(HealthCommandMessages.REJECTED, Component.text(7L, NamedTextColor.RED))
+            line(HealthCommandMessages.REJECTED, Component.text(7L, NamedTextColor.RED)),
+            HealthCommandMessages.BY_TYPE_HEADER.asComponent(),
+            HealthCommandMessages.LINE.apply(Component.text("kansokusha:block_break"), Component.text(900L)),
+            HealthCommandMessages.LINE.apply(Component.text("kansokusha:chat"), Component.text(300L))
         ), sent);
     }
 
@@ -54,7 +59,7 @@ class HealthCommandSupportTest {
     void testEmptyDatabaseShowsPlaceholderForTimes() {
         var health = new DatabaseHealth(
             new DatabaseHealth.Stored(0, 0, Optional.empty(), Optional.empty(), 0, 0),
-            new DatabaseHealth.Queue(0, 10, 0, 0, 0)
+            new DatabaseHealth.Queue(0, 10, 0, 0, 0, Map.of())
         );
         var sent = new ArrayList<Component>();
 

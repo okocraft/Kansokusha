@@ -1,9 +1,11 @@
 package net.okocraft.kansokusha.common.search;
 
+import net.kyori.adventure.key.Key;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -52,7 +54,19 @@ public record DatabaseHealth(Stored stored, Queue queue) {
      * @param written  the number of events written to the database
      * @param lost     the number of events dropped because writing them failed
      * @param rejected the number of events refused because the queue was full
+     * @param writtenByType the number of events written to the database for each event type
      */
-    public record Queue(int queued, int capacity, long written, long lost, long rejected) {
+    public record Queue(
+        int queued,
+        int capacity,
+        long written,
+        long lost,
+        long rejected,
+        Map<Key, Long> writtenByType
+    ) {
+
+        public Queue {
+            writtenByType = Map.copyOf(writtenByType);
+        }
     }
 }
