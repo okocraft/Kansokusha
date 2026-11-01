@@ -113,7 +113,8 @@ Running `/kansokusha event` without an ID shows its usage.
 database: stored event and player name counts, the time range of stored events, the sizes of the
 database file and its write-ahead log, and the write queue. The queue lines count events written,
 lost to write failures, and rejected by a full queue since startup; the last two are highlighted
-when they are not zero.
+when they are not zero. The events written since startup are also listed per event type, most
+frequent first.
 
 English and Japanese messages are provided by default, with English as the fallback.
 Administrators can customize `languages/*.properties` in the plugin data directory.

@@ -60,6 +60,9 @@ public final class HealthCommandMessages {
     public static final MessageKey REJECTED = DEFINER
         .define("kansokusha.command.health.label.rejected", "Events rejected by a full queue");
 
+    public static final MessageKey BY_TYPE_HEADER = DEFINER
+        .define("kansokusha.command.health.by-type-header", "<gold>Events written since start, by type</gold>");
+
     public static @UnmodifiableView Map<String, String> defaultMessages() {
         return DEFINER.getCollectedMessages();
     }

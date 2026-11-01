@@ -24,7 +24,9 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -73,6 +75,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final AtomicLong writtenEvents = new AtomicLong();
     private final AtomicLong lostEvents = new AtomicLong();
+    // Confined to the storage thread, like the flush and the health query that read it.
+    private final Map<Key, Long> writtenByType = new HashMap<>();
     private final AtomicLong rejectedEvents = new AtomicLong();
     private final ScheduledExecutorService storageThread;
     // Runs the callbacks of query results so that rendering never occupies the storage thread.
@@ -231,7 +235,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                 this.queueCapacity,
                 this.writtenEvents.get(),
                 this.lostEvents.get(),
-                this.rejectedEvents.get()
+                this.rejectedEvents.get(),
+                this.writtenByType
             )
         ));
     }
@@ -419,6 +424,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             try {
                 this.storage.append(batch);
                 this.writtenEvents.addAndGet(batch.size());
+                for (var queued : batch) {
+                    this.writtenByType.merge(queued.submission().eventType(), 1L, Long::sum);
+                }
                 this.metadataCache.add(batch);
             } catch (SQLException | RuntimeException e) {
                 this.lostEvents.addAndGet(batch.size());

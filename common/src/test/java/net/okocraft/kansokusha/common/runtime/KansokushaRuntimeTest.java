@@ -78,7 +78,7 @@ class KansokushaRuntimeTest {
             Assertions.assertFalse(runtime.submit(event(now)), "The queue is full.");
 
             var health = runtime.health().get(5, TimeUnit.SECONDS);
-            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 0, 1), health.queue());
+            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 0, 1, java.util.Map.of()), health.queue());
             Assertions.assertEquals(0, health.stored().events());
             Assertions.assertTrue(health.stored().databaseBytes() > 0);
         }
