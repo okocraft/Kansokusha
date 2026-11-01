@@ -52,6 +52,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
 
         PaperListenerTestSupport.fire(listener, event);
+        listener.flushAll();
 
         Assertions.assertEquals(2, api.submissions.size());
         var byX = submissionsByX(api);
@@ -101,6 +102,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
 
         PaperListenerTestSupport.fire(listener, event);
+        listener.flushAll();
 
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
@@ -138,6 +140,7 @@ class PaperPistonMoveListenerTest {
         Mockito.when(event.getDirection()).thenReturn(BlockFace.WEST);
 
         PaperListenerTestSupport.fire(listener, event);
+        listener.flushAll();
 
         var submission = api.submissions.remove();
         assertMove(
@@ -148,6 +151,58 @@ class PaperPistonMoveListenerTest {
             "west",
             "retract"
         );
+    }
+
+    @Test
+    void testRepeatedMovesAreAggregatedPerWindow() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var instant = new java.util.concurrent.atomic.AtomicReference<>(OCCURRED_AT);
+        var clock = new Clock() {
+            @Override
+            public java.time.ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return instant.get();
+            }
+        };
+        var listener = PaperPistonMoveListener.register(api, PaperBlockEventTestSupport.SERVER_KEY, clock);
+        var world = PaperBlockEventTestSupport.world();
+        var piston = PaperBlockEventTestSupport.block(
+            world, 5, 64, 5, Blocks.PISTON.defaultBlockState(), Material.PISTON
+        );
+        var moved = PaperBlockEventTestSupport.block(
+            world, 6, 64, 5, Blocks.STONE.defaultBlockState(), Material.STONE
+        );
+        var event = Mockito.mock(BlockPistonExtendEvent.class);
+        Mockito.when(event.getBlock()).thenReturn(piston);
+        Mockito.when(event.getBlocks()).thenReturn(List.of(moved));
+        Mockito.when(event.getDirection()).thenReturn(BlockFace.EAST);
+
+        for (var i = 0; i < 4; i++) {
+            PaperListenerTestSupport.fire(listener, event);
+        }
+        listener.flushDue();
+        Assertions.assertTrue(api.submissions.isEmpty(), "The window has not ended yet.");
+
+        instant.set(OCCURRED_AT.plus(PaperPistonMoveListener.AGGREGATION_WINDOW));
+        listener.flushDue();
+
+        Assertions.assertEquals(1, api.submissions.size());
+        var submission = api.submissions.remove();
+        Assertions.assertEquals(OCCURRED_AT, submission.occurredAt(), "The event is stamped with the window start.");
+        var payload = PaperPayloadNbtCodec.decode(submission.payload());
+        Assertions.assertEquals(4, payload.getIntOr("attempt_count", 0));
+
+        listener.flushAll();
+        Assertions.assertTrue(api.submissions.isEmpty(), "Flushed moves are not submitted twice.");
     }
 
     private static void assertMove(
