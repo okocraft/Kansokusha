@@ -6,10 +6,12 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,16 +38,38 @@ public final class HealthCommandSupport {
         });
     }
 
-    public static void executeStoredCounts(EventSearchBackend backend, Consumer<Component> sendMessage) {
-        backend.storedEventCounts().whenComplete((counts, failure) -> {
+    public static void executeStored(EventSearchBackend backend, Consumer<Component> sendMessage) {
+        backend.storedEventStatistics().whenComplete((statistics, failure) -> {
             if (failure != null) {
                 sendMessage.accept(HealthCommandMessages.FAILED.asComponent());
                 return;
             }
-            renderCounts(HealthCommandMessages.STORED_BY_TYPE_HEADER, counts).forEach(sendMessage);
+            renderStored(statistics).forEach(sendMessage);
         });
     }
 
+    static List<Component> renderStored(Map<Key, EventTypeStatistics> statistics) {
+        var total = statistics.values().stream().mapToLong(EventTypeStatistics::count).sum();
+        var lines = new ArrayList<Component>();
+        lines.add(HealthCommandMessages.STORED_HEADER.asComponent());
+        statistics.entrySet().stream()
+            .sorted(Map.Entry.<Key, EventTypeStatistics>comparingByValue(
+                Comparator.comparingLong(EventTypeStatistics::count).reversed()
+            ).thenComparing(entry -> entry.getKey().asString()))
+            .forEach(entry -> {
+                var value = entry.getValue();
+                lines.add(HealthCommandMessages.STORED_LINE.apply(
+                    Component.text(entry.getKey().asString()),
+                    Component.text(String.format(Locale.ROOT, "%,d", value.count())),
+                    Component.text(formatShare(value.count(), total)),
+                    Component.text(String.format(Locale.ROOT, "%,d", value.recent())),
+                    Component.text(formatInstant(value.latest()))
+                ));
+            });
+        return lines;
+    }
+
+    // Written events are shown per type too, so the list is built the same way.
     static List<Component> renderCounts(MessageKey header, Map<Key, Long> counts) {
         var lines = new ArrayList<Component>();
         lines.add(header.asComponent());
@@ -56,6 +80,10 @@ public final class HealthCommandSupport {
                 Component.text(entry.getValue())
             )));
         return lines;
+    }
+
+    static String formatShare(long count, long total) {
+        return total <= 0 ? "-" : String.format(Locale.ROOT, "%.1f%%", count * 100.0 / total);
     }
 
     static List<Component> render(DatabaseHealth health) {

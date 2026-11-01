@@ -20,7 +20,7 @@ final class HealthCommand {
             })
             .then(Commands.literal("stored")
                 .executes(context -> {
-                    HealthCommandSupport.executeStoredCounts(backend, context.getSource().getSender()::sendMessage);
+                    HealthCommandSupport.executeStored(backend, context.getSource().getSender()::sendMessage);
                     return Command.SINGLE_SUCCESS;
                 }))
             .build();

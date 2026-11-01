@@ -20,7 +20,7 @@ final class HealthCommand {
             })
             .then(BrigadierCommand.literalArgumentBuilder("stored")
                 .executes(context -> {
-                    HealthCommandSupport.executeStoredCounts(backend, context.getSource()::sendMessage);
+                    HealthCommandSupport.executeStored(backend, context.getSource()::sendMessage);
                     return Command.SINGLE_SUCCESS;
                 }))
             .build();

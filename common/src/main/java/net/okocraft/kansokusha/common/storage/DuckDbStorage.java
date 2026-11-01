@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.common.storage;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -392,8 +393,8 @@ public final class DuckDbStorage {
         }
 
         @Override
-        public Map<Key, Long> countEventsByType() throws SQLException {
-            return this.delegate.countEventsByType();
+        public Map<Key, EventTypeStatistics> eventStatisticsByType(Instant recentSince) throws SQLException {
+            return this.delegate.eventStatisticsByType(recentSince);
         }
 
         @Override

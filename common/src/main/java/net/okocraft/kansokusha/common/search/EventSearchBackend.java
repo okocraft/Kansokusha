@@ -48,9 +48,12 @@ public interface EventSearchBackend {
         return CompletableFuture.failedFuture(new UnsupportedOperationException("Health is unavailable"));
     }
 
-    /** Counts the persisted events by event type without blocking writes. */
-    default CompletableFuture<Map<Key, Long>> storedEventCounts() {
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("Event counts are unavailable"));
+    /**
+     * Summarizes the persisted events by event type without blocking writes. This scans every event,
+     * so it can take a long time on a large database.
+     */
+    default CompletableFuture<Map<Key, EventTypeStatistics>> storedEventStatistics() {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Event statistics are unavailable"));
     }
 
     CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);

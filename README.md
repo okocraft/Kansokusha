@@ -114,7 +114,8 @@ database: stored event and player name counts, the time range of stored events, 
 database file and its write-ahead log, and the write queue. The queue lines count events written,
 lost to write failures, and rejected by a full queue since startup; the last two are highlighted
 when they are not zero. The events written since startup are also listed per event type, most
-frequent first. `/kansokusha health stored` lists the stored events per event type; it scans the
+frequent first. `/kansokusha health stored` lists, for each event type, the stored event count and its share,
+the count of the last 24 hours and the time of the latest event; it scans the
 whole events table on a separate connection, so it does not block writes but can take a while on
 a large database.
 

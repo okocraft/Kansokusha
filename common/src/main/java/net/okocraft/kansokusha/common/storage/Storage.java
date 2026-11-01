@@ -3,6 +3,7 @@ package net.okocraft.kansokusha.common.storage;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -41,11 +42,13 @@ public interface Storage extends AutoCloseable {
     }
 
     /**
-     * Counts the persisted events by event type. This scans the events table, so it is meant to be
+     * Summarizes the persisted events by event type. This scans the events table, so it is meant to be
      * called off the storage thread: it reads through its own connection and does not block writes.
+     *
+     * @param recentSince events that occurred at or after this instant are counted as recent
      */
-    default Map<Key, Long> countEventsByType() throws SQLException {
-        throw new UnsupportedOperationException("Event counts are unavailable");
+    default Map<Key, EventTypeStatistics> eventStatisticsByType(Instant recentSince) throws SQLException {
+        throw new UnsupportedOperationException("Event statistics are unavailable");
     }
 
     int deleteExpired(Instant now) throws SQLException;
