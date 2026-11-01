@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -249,9 +252,77 @@ class DuckDbStorageTest {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
 
-            Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(1)).minusMillis(1)));
-            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1))));
-            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
+            Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(1)).minusMillis(1), Set.of()));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(1)), Set.of()));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of()));
+        }
+    }
+
+    @Test
+    void testDeleteExpiredKeepsArchivedEventTypes(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(queued(event(SHORT)), queued(event(LONG))));
+
+            Assertions.assertEquals(0, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of(SHORT, LONG)));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of(LONG)));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of()));
+        }
+    }
+
+    @Test
+    void testArchiveExpiredMovesEventsToParquet(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var archive = dir.resolve("archive").resolve("2026").resolve("10").resolve("events-1.parquet");
+        var withPayload = new EventSubmission(
+            SHORT, PayloadGeneration.FIRST, NOW, Key.key("example", "server"), Key.key("minecraft", "overworld"),
+            new BlockPosition(1, 2, 3), null, null, EventPayload.copyOf(new byte[]{4, 5})
+        );
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(List.of(queued(withPayload, "text"), queued(event(SHORT)), queued(event(LONG))));
+
+            Assertions.assertEquals(0, storage.archiveExpired(NOW.minusMillis(1), Set.of(SHORT), archive));
+            Assertions.assertFalse(Files.exists(archive), "no file is written when nothing expired");
+
+            Assertions.assertEquals(2, storage.archiveExpired(NOW.plus(Duration.ofDays(10)), Set.of(SHORT), archive));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of(SHORT)));
+        }
+
+        Assertions.assertFalse(Files.exists(archive.resolveSibling("events-1.parquet.tmp")));
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:", new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT event_type, world, x, payload, search_text, epoch_ms(occurred_at) FROM read_parquet('"
+                     + archive + "') ORDER BY search_text NULLS LAST"
+             )) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals("example:short", rows.getString(1));
+            Assertions.assertEquals("minecraft:overworld", rows.getString(2));
+            Assertions.assertEquals(1, rows.getInt(3));
+            Assertions.assertArrayEquals(new byte[]{4, 5}, rows.getBytes(4));
+            Assertions.assertEquals("text", rows.getString(5));
+            Assertions.assertEquals(NOW.toEpochMilli(), rows.getLong(6));
+            Assertions.assertTrue(rows.next());
+            Assertions.assertFalse(rows.next());
+        }
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery("SELECT count(*) FROM events")) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(0, rows.getLong(1));
+        }
+    }
+
+    @Test
+    void testArchiveExpiredKeepsEventsWhenTheFileExists(@TempDir Path dir) throws Exception {
+        var archive = dir.resolve("events.parquet");
+        Files.writeString(archive, "existing");
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            storage.append(List.of(queued(event(SHORT))));
+
+            Assertions.assertThrows(
+                FileAlreadyExistsException.class,
+                () -> storage.archiveExpired(NOW.plus(Duration.ofDays(10)), Set.of(SHORT), archive)
+            );
+            Assertions.assertEquals("existing", Files.readString(archive));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of()));
         }
     }
 
@@ -260,7 +331,7 @@ class DuckDbStorageTest {
         var file = dir.resolve("kansokusha.duckdb");
         try (var storage = DuckDbStorageImpl.open(file)) {
             storage.append(List.of(queued(event(SHORT))));
-            Assertions.assertEquals(0, storage.deleteExpired(NOW.minusMillis(1)));
+            Assertions.assertEquals(0, storage.deleteExpired(NOW.minusMillis(1), Set.of()));
             storage.append(List.of(queued(event(LONG))));
         }
 
@@ -302,7 +373,7 @@ class DuckDbStorageTest {
             storage.append(List.of(queued(event(LONG))));
         }
         try (var storage = DuckDbStorageImpl.open(file)) {
-            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10))));
+            Assertions.assertEquals(1, storage.deleteExpired(NOW.plus(Duration.ofDays(10)), Set.of()));
         }
     }
 

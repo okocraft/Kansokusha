@@ -15,6 +15,11 @@ flush-interval: PT1S
 # Interval (ISO-8601 duration) at which expired events are deleted.
 cleanup-interval: PT1H
 
+# Interval (ISO-8601 duration) at which expired events of policies with "archive: true" are moved
+# from the database to a new zstd-compressed Parquet file under archive/YYYY/MM/ in the data directory.
+# Such events stay in the database until the next archive run. Archive files are never deleted by Kansokusha.
+archive-interval: P1D
+
 # Time zone used by search date/time expressions such as today, yesterday, and offset-less datetimes.
 # Empty uses the server system time zone. Set an IANA zone ID to override it.
 # Existing configurations with UTC keep UTC; change them explicitly if needed.
@@ -23,9 +28,11 @@ search-time-zone: ''
 retention:
   # Retention period for event types that are not listed in any policy below.
   default: P30D
+  # A policy with "archive: true" archives its expired events instead of deleting them.
   policies:
     audit:
       duration: P180D
+      archive: true
       event-types:
         - kansokusha:block_break
         - kansokusha:block_place

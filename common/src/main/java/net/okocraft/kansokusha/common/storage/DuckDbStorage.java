@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * Resolves the platform-specific DuckDB JDBC artifact and loads the storage implementation
@@ -398,8 +399,14 @@ public final class DuckDbStorage {
         }
 
         @Override
-        public int deleteExpired(Instant now) throws SQLException {
-            return this.delegate.deleteExpired(now);
+        public int deleteExpired(Instant now, Set<Key> archivedEventTypes) throws SQLException {
+            return this.delegate.deleteExpired(now, archivedEventTypes);
+        }
+
+        @Override
+        public long archiveExpired(Instant now, Set<Key> eventTypes, Path archiveFile)
+            throws SQLException, IOException {
+            return this.delegate.archiveExpired(now, eventTypes, archiveFile);
         }
 
         @Override

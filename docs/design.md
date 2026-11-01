@@ -8,7 +8,7 @@
 | モジュール | 役割 |
 | --- | --- |
 | `api` | 外部プラグイン向けの公開 API。platform / storage の型に依存しない |
-| `common` | 設定読み込み、キュー、DuckDB への書き込み、内部検索 projection / query、保持期限切れイベントの削除 |
+| `common` | 設定読み込み、キュー、DuckDB への書き込み、内部検索 projection / query、保持期限切れイベントの削除とアーカイブ |
 | `paper` | Paper / Folia プラグインと組み込みイベント |
 | `velocity` | Velocity プラグインと組み込みイベント |
 | `*-test-plugin` | 実サーバー上で公開 API と永続化を確認する結合テスト用プラグイン |
@@ -43,7 +43,7 @@ submit() ──offer──▶ ArrayBlockingQueue ──flush-interval ごと / b
 - `kansokusha-storage` スレッドが `flush-interval` ごとにキューのイベントを書き込む。キューが `batch-size` 件に達した場合は間隔を待たずに書き込む。1 トランザクションは最大 `batch-size` 件で、それを超える分は続けて別のトランザクションで書き込む。
 - 保持期限（`expires_at = occurred_at + 保持期間`）は submit 時に計算してキューへ入れる。Paper join / Velocity post-login は username を internal metadata として同じ queue item に付加し、storage thread が login event の保存と同一 transaction で `player_names` を更新する。chat / command は検索対象本文を同じ queue item に付加し、event row の `search_text` 列に保存する。保持期限切れイベントの削除も同じスレッドで行うため、DuckDB 接続は並行に使われない。
 - 書き込みに失敗したバッチはサーバーログへ出力して破棄し、次のバッチの書き込みは続ける（要件 §13）。
-- 停止時は新しいイベントの受け付けを止め、キューに残ったイベントを書き込む。続いて保持期限切れイベントを最終削除して接続を閉じる。受け付けの停止とキューの排出は順序付けており、停止後にキューへ入るイベントはない。
+- 停止時は新しいイベントの受け付けを止め、キューに残ったイベントを書き込む。続いて保持期限切れイベントを最終削除して接続を閉じる。アーカイブ対象の期限切れイベントは停止時には書き出さず、DB に残したまま次回起動時のアーカイブに回す。受け付けの停止とキューの排出は順序付けており、停止後にキューへ入るイベントはない。
 
 ## ストレージ
 
@@ -178,8 +178,18 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 
 - 保持期間は `config.yml` の `retention` で event type ごとに設定する。一覧にない event type は `retention.default` を使う。
 - submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
-- `cleanup-interval` ごと（および起動直後と停止時）に `expires_at <= 現在時刻` の event を削除する。
+- `cleanup-interval` ごと（および起動直後と停止時）に `expires_at <= 現在時刻` の event を削除する。ただしアーカイブ対象の event type は削除しない。
 - 設定の変更は再起動で反映する。
+
+## アーカイブ
+
+`archive: true` を持つ retention policy の event type は、保持期限切れ後に削除せず、データディレクトリの `archive/` に zstd 圧縮の Parquet として書き出してから DB から削除する。
+
+- `archive-interval`（既定 `P1D`）ごとと起動直後に、`expires_at <= 現在時刻` かつアーカイブ対象 event type の行を `archive/YYYY/MM/events-<UTC 時刻>.parquet` の新しいファイル 1 つに書き出す。`YYYY/MM` は書き出した時点の UTC 年月で、ファイル内は `(occurred_at, event_id)` 順。対象が 0 件ならファイルを作らない。cleanup ごとに書き出すとファイルが細かく分かれ圧縮効率も落ちるため、間隔を分けている。期限切れの行は次のアーカイブまで最大 `archive-interval` だけ DB に残り、検索にも出る。
+- 既存のファイルは書き換えず、新しいファイルを追加する append-only の形をとる。Kansokusha はアーカイブを削除も検索もしない。移動・圧縮・外部ストレージへの退避・削除は運用側で行う。
+- 列は `events` テーブルと同じで、payload BLOB と `expires_at` を含めてそのまま残す。読むときは `read_parquet('archive/**/*.parquet')` などを使う。
+- 書き出しは storage thread 上で、1 トランザクション内で「件数確認 → 同じディレクトリの `.tmp` へ `COPY` → fsync → 最終名へ rename（既存ファイルは置き換えない）→ 同じ条件で `DELETE` → commit」の順に行う。ファイルが揃う前に失敗したら rollback して `.tmp` を消し、行は DB に残る。rename の後に `DELETE` / commit が失敗した場合も行は DB に残り、次回に再び書き出されるため、同じ event が複数のファイルに入ることがある。失われることはないので、読む側は `event_id` で重複を除く。
+- アーカイブ対象は cleanup / アーカイブ実行時の設定で決める（行には保存しない）。policy から `archive: true` を外すと、それ以降は期限切れの行が通常どおり削除される。`retention.default` はアーカイブの対象にできない。
 
 ## 設定
 
@@ -192,9 +202,10 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 | `batch-size` | 1 トランザクションで書き込む最大件数。この件数がキューにたまると間隔を待たずに書き込む |
 | `flush-interval` | キューを DuckDB へ書き込む間隔 |
 | `cleanup-interval` | 保持期限切れイベントを削除する間隔 |
+| `archive-interval` | アーカイブ対象の保持期限切れイベントを Parquet に書き出す間隔。省略時は `P1D` |
 | `search-time-zone` | `today` / `yesterday`、date-only bound、offset なし datetime の解釈に使う IANA timezone。bundled default は `UTC` |
 | `retention.default` | 一覧にない event type の保持期間 |
-| `retention.policies.<name>` | `duration` と、それを適用する `event-types` の一覧 |
+| `retention.policies.<name>` | `duration` と、それを適用する `event-types` の一覧。`archive: true` なら期限切れ後に削除せずアーカイブする（省略時は `false`） |
 
 ## Paper 組み込みイベント
 

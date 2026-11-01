@@ -25,9 +25,12 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -58,6 +61,9 @@ import java.util.function.BiConsumer;
 public final class KansokushaRuntime implements KansokushaApi, EventSearchBackend, AutoCloseable {
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
+    public static final String ARCHIVE_DIRECTORY = "archive";
+    private static final DateTimeFormatter ARCHIVE_TIMESTAMP =
+        DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssSSS'Z'", Locale.ROOT);
 
     private static final int CLOSED_MASK = 1 << 31;
     // Bounds how long one flush task occupies the storage thread, so that queries queued behind it
@@ -69,6 +75,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     private final Optional<Key> localServerKey;
     private final KansokushaConfig.Retention retention;
+    private final Path archiveDirectory;
     private final Storage storage;
     private final BiConsumer<String, Throwable> errorReporter;
     private final ConcurrentHashMap<Key, RegisteredEventType> eventTypes = new ConcurrentHashMap<>();
@@ -98,11 +105,13 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         @Nullable Key localServerKey,
         KansokushaConfig config,
         Storage storage,
+        Path archiveDirectory,
         BiConsumer<String, Throwable> errorReporter
     ) {
         this.localServerKey = Optional.ofNullable(localServerKey);
         this.retention = config.retention();
         this.storage = storage;
+        this.archiveDirectory = archiveDirectory;
         this.errorReporter = errorReporter;
         this.batchSize = config.batchSize();
         this.queueCapacity = config.queueCapacity();
@@ -128,16 +137,17 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             dataDirectory,
             dataDirectory.resolve(DATABASE_FILENAME)
         );
-        return start(storage, config, localServerKey, errorReporter);
+        return start(storage, dataDirectory.resolve(ARCHIVE_DIRECTORY), config, localServerKey, errorReporter);
     }
 
     static KansokushaRuntime start(
         Storage storage,
+        Path archiveDirectory,
         KansokushaConfig config,
         @Nullable Key localServerKey,
         BiConsumer<String, Throwable> errorReporter
     ) {
-        var runtime = new KansokushaRuntime(localServerKey, config, storage, errorReporter);
+        var runtime = new KansokushaRuntime(localServerKey, config, storage, archiveDirectory, errorReporter);
 
         var flushMillis = config.flushInterval().toMillis();
         runtime.storageThread.scheduleWithFixedDelay(
@@ -152,6 +162,15 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             config.cleanupInterval().toMillis(),
             TimeUnit.MILLISECONDS
         );
+        if (!runtime.retention.archivedEventTypes().isEmpty()) {
+            // Also runs at startup, so that servers restarting more often than the interval still archive.
+            runtime.storageThread.scheduleWithFixedDelay(
+                runtime::archiveExpired,
+                0,
+                config.archiveInterval().toMillis(),
+                TimeUnit.MILLISECONDS
+            );
+        }
         return runtime;
     }
 
@@ -470,12 +489,32 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     private void deleteExpired() {
         try {
-            if (this.storage.deleteExpired(Instant.now()) > 0) {
+            if (this.storage.deleteExpired(Instant.now(), this.retention.archivedEventTypes()) > 0) {
                 this.metadataCache.invalidate();
             }
         } catch (SQLException | RuntimeException e) {
             this.errorReporter.accept("Failed to delete expired events.", e);
         }
+    }
+
+    private void archiveExpired() {
+        var now = Instant.now();
+        var file = archiveFile(this.archiveDirectory, now);
+        try {
+            if (this.storage.archiveExpired(now, this.retention.archivedEventTypes(), file) > 0) {
+                this.metadataCache.invalidate();
+            }
+        } catch (SQLException | IOException | RuntimeException e) {
+            this.errorReporter.accept("Failed to archive expired events to " + file + ".", e);
+        }
+    }
+
+    static Path archiveFile(Path archiveDirectory, Instant now) {
+        var utc = now.atOffset(ZoneOffset.UTC);
+        return archiveDirectory
+            .resolve(String.format(Locale.ROOT, "%04d", utc.getYear()))
+            .resolve(String.format(Locale.ROOT, "%02d", utc.getMonthValue()))
+            .resolve("events-" + ARCHIVE_TIMESTAMP.format(utc) + ".parquet");
     }
 
     // Resolves the retention period at registration instead of on every submission.

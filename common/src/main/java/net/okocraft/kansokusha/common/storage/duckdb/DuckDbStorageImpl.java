@@ -21,9 +21,14 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -38,6 +43,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 /**
@@ -376,17 +382,101 @@ public final class DuckDbStorageImpl implements Storage {
     }
 
     @Override
-    public int deleteExpired(Instant now) throws SQLException {
-        try (var statement = this.connection.prepareStatement(
-            "DELETE FROM events WHERE expires_at <= epoch_ms(?)"
-        )) {
-            statement.setLong(1, now.toEpochMilli());
-            var deleted = statement.executeUpdate();
+    public int deleteExpired(Instant now, Set<Key> archivedEventTypes) throws SQLException {
+        var condition = expiredCondition(now);
+        if (!archivedEventTypes.isEmpty()) {
+            condition += " AND event_type NOT IN " + inList(archivedEventTypes);
+        }
+        try (var statement = this.connection.createStatement()) {
+            var deleted = statement.executeUpdate("DELETE FROM events WHERE " + condition);
             this.connection.commit();
             return deleted;
         } catch (SQLException | RuntimeException e) {
             this.rollback(e);
             throw e;
+        }
+    }
+
+    @Override
+    public long archiveExpired(Instant now, Set<Key> eventTypes, Path archiveFile) throws SQLException, IOException {
+        if (eventTypes.isEmpty()) {
+            return 0;
+        }
+
+        var condition = expiredCondition(now) + " AND event_type IN " + inList(eventTypes);
+        var target = archiveFile.toAbsolutePath();
+        Path temporary = null;
+        try (var statement = this.connection.createStatement()) {
+            long expired;
+            try (var rows = statement.executeQuery("SELECT count(*) FROM events WHERE " + condition)) {
+                rows.next();
+                expired = rows.getLong(1);
+            }
+            if (expired == 0) {
+                this.connection.commit();
+                return 0;
+            }
+            if (Files.exists(target)) {
+                throw new FileAlreadyExistsException(target.toString());
+            }
+
+            Files.createDirectories(target.getParent());
+            temporary = target.resolveSibling(target.getFileName() + ".tmp");
+            Files.deleteIfExists(temporary);
+            statement.execute(
+                "COPY (SELECT * FROM events WHERE " + condition + " ORDER BY occurred_at, event_id) TO "
+                    + literal(temporary.toString()) + " (FORMAT parquet, COMPRESSION zstd)"
+            );
+            try (var channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+            moveWithoutReplacing(temporary, target);
+            temporary = null;
+
+            // The file is in place, so the events can no longer be lost. If this fails, the events stay
+            // in the database and the next archive run writes them again.
+            var deleted = statement.executeUpdate("DELETE FROM events WHERE " + condition);
+            this.connection.commit();
+            return deleted;
+        } catch (SQLException | IOException | RuntimeException e) {
+            this.rollback(e);
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException suppressed) {
+                    e.addSuppressed(suppressed);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private static String expiredCondition(Instant now) {
+        return "expires_at <= epoch_ms(" + now.toEpochMilli() + "::BIGINT)";
+    }
+
+    // Event types are namespaced keys, so they cannot break out of the literal, but quote them anyway.
+    private static String inList(Set<Key> eventTypes) {
+        var joiner = new StringJoiner(", ", "(", ")");
+        for (var eventType : eventTypes) {
+            joiner.add(literal(eventType.asString()));
+        }
+        return joiner.toString();
+    }
+
+    private static String literal(String value) {
+        return "'" + value.replace("'", "''") + "'";
+    }
+
+    private static void moveWithoutReplacing(Path source, Path target) throws IOException {
+        if (Files.exists(target)) {
+            throw new FileAlreadyExistsException(target.toString());
+        }
+        try {
+            // Same directory, so readers never see a partially written file.
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target);
         }
     }
 

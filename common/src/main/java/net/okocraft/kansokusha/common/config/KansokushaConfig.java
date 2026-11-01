@@ -15,10 +15,12 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Validated contents of {@code config.yml}.
@@ -30,6 +32,7 @@ public record KansokushaConfig(
     int batchSize,
     Duration flushInterval,
     Duration cleanupInterval,
+    Duration archiveInterval,
     ZoneId searchTimeZone,
     Retention retention
 ) {
@@ -59,12 +62,19 @@ public record KansokushaConfig(
 
     /**
      * Retention periods resolved per event type.
+     *
+     * @param archivedEventTypes event types whose expired events are archived instead of deleted
      */
-    public record Retention(Map<Key, Duration> durations, Duration defaultDuration) {
+    public record Retention(Map<Key, Duration> durations, Duration defaultDuration, Set<Key> archivedEventTypes) {
 
         public Retention {
             durations = Map.copyOf(durations);
             Objects.requireNonNull(defaultDuration, "defaultDuration");
+            archivedEventTypes = Set.copyOf(archivedEventTypes);
+        }
+
+        public Retention(Map<Key, Duration> durations, Duration defaultDuration) {
+            this(durations, defaultDuration, Set.of());
         }
 
         public Duration durationOf(Key eventType) {
@@ -80,6 +90,8 @@ public record KansokushaConfig(
         int batchSize = 0;
         String flushInterval = "";
         String cleanupInterval = "";
+        // Configurations written before archiving existed do not have this key.
+        String archiveInterval = "P1D";
         @Setting("search-time-zone")
         String searchTimeZone = "";
         RawRetention retention = new RawRetention();
@@ -99,6 +111,7 @@ public record KansokushaConfig(
                 this.batchSize,
                 parseDuration(this.flushInterval, "flush-interval"),
                 parseDuration(this.cleanupInterval, "cleanup-interval"),
+                parseDuration(this.archiveInterval, "archive-interval"),
                 parseZoneId(this.searchTimeZone, "search-time-zone"),
                 Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate()
             );
@@ -114,17 +127,22 @@ public record KansokushaConfig(
 
         Retention validate() throws IOException {
             var durations = new HashMap<Key, Duration>();
+            var archived = new HashSet<Key>();
             for (var entry : Objects.requireNonNullElse(this.policies, Map.<String, RawPolicy>of()).entrySet()) {
                 var path = "retention.policies." + entry.getKey();
                 var policy = Objects.requireNonNullElseGet(entry.getValue(), RawPolicy::new);
                 var duration = parseDuration(policy.duration, path + ".duration");
                 for (var eventType : Objects.requireNonNullElse(policy.eventTypes, List.<String>of())) {
-                    if (durations.put(parseKey(eventType, path + ".event-types"), duration) != null) {
+                    var key = parseKey(eventType, path + ".event-types");
+                    if (durations.put(key, duration) != null) {
                         throw invalid(eventType + " is listed in more than one retention policy");
+                    }
+                    if (policy.archive) {
+                        archived.add(key);
                     }
                 }
             }
-            return new Retention(durations, parseDuration(this.defaultDuration, "retention.default"));
+            return new Retention(durations, parseDuration(this.defaultDuration, "retention.default"), archived);
         }
     }
 
@@ -132,6 +150,7 @@ public record KansokushaConfig(
     static final class RawPolicy {
 
         String duration = "";
+        boolean archive = false;
         List<String> eventTypes = List.of();
     }
 

@@ -9,11 +9,14 @@ import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import org.jetbrains.annotations.NotNullByDefault;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -51,7 +54,26 @@ public interface Storage extends AutoCloseable {
         throw new UnsupportedOperationException("Event statistics are unavailable");
     }
 
-    int deleteExpired(Instant now) throws SQLException;
+    /**
+     * Deletes the events that expired at or before {@code now}.
+     *
+     * @param archivedEventTypes event types that are left for {@link #archiveExpired} instead of being deleted
+     */
+    int deleteExpired(Instant now, Set<Key> archivedEventTypes) throws SQLException;
+
+    /**
+     * Writes the events of the given types that expired at or before {@code now} to a new zstd-compressed
+     * Parquet file, then deletes them from the database.
+     *
+     * <p>The file is complete once it appears at {@code archiveFile}; an existing file is never replaced.
+     * When the deletion fails after the file is written, the events stay in the database and are written
+     * again by the next call, so readers should deduplicate archived events by {@code event_id}.</p>
+     *
+     * @return the number of archived events; no file is written when this is 0
+     */
+    default long archiveExpired(Instant now, Set<Key> eventTypes, Path archiveFile) throws SQLException, IOException {
+        throw new UnsupportedOperationException("Archiving is unavailable");
+    }
 
     @Override
     void close() throws SQLException;
