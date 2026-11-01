@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PaperContainerTransferListener implements Listener, PaperBufferedListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "container_transfer");
-    static final Duration CHAIN_WINDOW = Duration.ofMinutes(10);
+    static final Duration CHAIN_WINDOW = Duration.ofMinutes(5);
     static final Duration CONTAINER_WINDOW = Duration.ofSeconds(15);
 
     // Bounds the memory used by the aggregation; transfers beyond it are submitted one by one.
