@@ -65,6 +65,10 @@ keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
 The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
 
+The `duckdb.memory-limit` and `duckdb.threads` settings in `config.yml` cap the memory and the CPU
+threads DuckDB may use. By default DuckDB may use up to 80% of the system memory, which is easy to
+reach while searching a large database on a machine that also runs the server.
+
 Expired events of retention policies with `archive: true` (the bundled `audit` policy) are not
 deleted. Every `archive-interval` (default `P1D`) and at startup, they are moved to a new
 zstd-compressed Parquet file under `archive/YYYY/MM/` in the data directory. Kansokusha never

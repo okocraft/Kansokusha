@@ -127,13 +127,21 @@ public final class DuckDbStorageImpl implements Storage {
     }
 
     public static DuckDbStorageImpl open(Path filepath) throws IOException, SQLException {
+        return open(filepath, "", 0);
+    }
+
+    public static DuckDbStorageImpl open(Path filepath, String memoryLimit, int threads) throws IOException, SQLException {
         var absolutePath = filepath.toAbsolutePath();
         Files.createDirectories(absolutePath.getParent());
 
-        var connection = (DuckDBConnection) new DuckDBDriver().connect(
-            "jdbc:duckdb:" + absolutePath,
-            new Properties()
-        );
+        var properties = new Properties();
+        if (!memoryLimit.isEmpty()) {
+            properties.setProperty("memory_limit", memoryLimit);
+        }
+        if (threads > 0) {
+            properties.setProperty("threads", Integer.toString(threads));
+        }
+        var connection = (DuckDBConnection) new DuckDBDriver().connect("jdbc:duckdb:" + absolutePath, properties);
         try (var statement = connection.createStatement()) {
             statement.execute(CREATE_EVENTS_TABLE);
             verifyColumns(statement, "events", EVENTS_COLUMNS);

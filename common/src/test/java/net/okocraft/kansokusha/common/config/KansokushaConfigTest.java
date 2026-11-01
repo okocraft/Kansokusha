@@ -29,12 +29,39 @@ class KansokushaConfigTest {
         Assertions.assertTrue(config.retention().archivedEventTypes().contains(Key.key("kansokusha", "block_break")));
         Assertions.assertFalse(config.retention().archivedEventTypes().contains(Key.key("kansokusha", "fluid_change")));
         Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
+        Assertions.assertEquals(KansokushaConfig.DuckDb.DEFAULT, config.duckDb());
 
         var retention = config.retention();
         Assertions.assertEquals(Duration.ofDays(180), retention.durationOf(Key.key("kansokusha", "block_break")));
         Assertions.assertEquals(Duration.ofDays(7), retention.durationOf(Key.key("kansokusha", "fluid_change")));
         Assertions.assertEquals(Duration.ofDays(30), retention.durationOf(Key.key("kansokusha", "paper_chat")));
         Assertions.assertEquals(Duration.ofDays(30), retention.durationOf(Key.key("example", "unknown")));
+    }
+
+    @Test
+    void testDuckDbLimitsAreLoadedAndValidated(@TempDir Path dir) throws IOException {
+        var base = """
+            queue-capacity: 4
+            batch-size: 2
+            flush-interval: PT1S
+            cleanup-interval: PT5M
+            retention:
+              default: P1D
+            """;
+        Files.writeString(dir.resolve("config.yml"), base + "duckdb:\n  memory-limit: 8GB\n  threads: 4\n");
+        Assertions.assertEquals(
+            new KansokushaConfig.DuckDb(Optional.of("8GB"), 4),
+            KansokushaConfig.load(dir).duckDb()
+        );
+
+        Files.writeString(dir.resolve("config.yml"), base);
+        Assertions.assertEquals(KansokushaConfig.DuckDb.DEFAULT, KansokushaConfig.load(dir).duckDb());
+
+        Files.writeString(dir.resolve("config.yml"), base + "duckdb:\n  memory-limit: lots\n");
+        Assertions.assertThrows(IOException.class, () -> KansokushaConfig.load(dir));
+
+        Files.writeString(dir.resolve("config.yml"), base + "duckdb:\n  threads: -1\n");
+        Assertions.assertThrows(IOException.class, () -> KansokushaConfig.load(dir));
     }
 
     @Test

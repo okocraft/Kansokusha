@@ -38,6 +38,17 @@ class DuckDbStorageTest {
     private static final Instant NOW = Instant.parse("2026-09-26T00:00:00.123Z");
 
     @Test
+    void testResourceLimitsAreAcceptedByDuckDb(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"), "512MiB", 2)) {
+            Assertions.assertEquals(0, storage.health().events());
+        }
+        Assertions.assertThrows(
+            java.sql.SQLException.class,
+            () -> DuckDbStorageImpl.open(dir.resolve("invalid.duckdb"), "not a size", 0)
+        );
+    }
+
+    @Test
     void testAppendPersistsAllColumns(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         var player = UUID.randomUUID();

@@ -86,6 +86,19 @@ public final class DuckDbStorage {
     }
 
     public static Storage open(Path dataDirectory, Path filepath) throws IOException, SQLException {
+        return open(dataDirectory, filepath, "", 0);
+    }
+
+    /**
+     * @param memoryLimit the DuckDB {@code memory_limit}, or empty for the DuckDB default
+     * @param threads     the DuckDB {@code threads}, or 0 for the DuckDB default
+     */
+    public static Storage open(
+        Path dataDirectory,
+        Path filepath,
+        String memoryLimit,
+        int threads
+    ) throws IOException, SQLException {
         var dependency = prepareDependency(dataDirectory.resolve("libs"));
         var codeSource = DuckDbStorage.class.getProtectionDomain().getCodeSource();
         if (codeSource == null) {
@@ -98,8 +111,8 @@ public final class DuckDbStorage {
         );
         try {
             var implementation = Class.forName(IMPLEMENTATION_CLASS, true, loader);
-            var open = implementation.getMethod("open", Path.class);
-            var storage = (Storage) open.invoke(null, filepath);
+            var open = implementation.getMethod("open", Path.class, String.class, int.class);
+            var storage = (Storage) open.invoke(null, filepath, memoryLimit, threads);
             return new LoadedStorage(storage, loader);
         } catch (InvocationTargetException e) {
             closeAfterFailure(loader, e);
