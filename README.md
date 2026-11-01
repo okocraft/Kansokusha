@@ -65,6 +65,13 @@ keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
 The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
 
+Expired events of retention policies with `archive: true` (the bundled `audit` policy) are not
+deleted. Every `archive-interval` (default `P1D`) and at startup, they are moved to a new
+zstd-compressed Parquet file under `archive/YYYY/MM/` in the data directory. Kansokusha never
+deletes or searches archive files. Read them with DuckDB, for example
+`SELECT * FROM read_parquet('archive/**/*.parquet')`, and deduplicate by `event_id`, because an
+interrupted run can write the same event again.
+
 ## Inspection mode
 
 Paper/Folia provides session-scoped inspection mode commands:

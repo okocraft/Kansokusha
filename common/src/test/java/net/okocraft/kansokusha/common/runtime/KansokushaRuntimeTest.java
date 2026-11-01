@@ -124,10 +124,82 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testArchiveFileIsPartitionedByUtcMonth() {
+        Assertions.assertEquals(
+            Path.of("archive", "2026", "01", "events-20260131T235959007Z.parquet"),
+            KansokushaRuntime.archiveFile(Path.of("archive"), Instant.parse("2026-01-31T23:59:59.007Z"))
+        );
+    }
+
+    @Test
+    void testExpiredArchivedEventsAreArchivedAtStartupAndOthersAreDeleted(@TempDir Path dir) throws Exception {
+        var archived = Key.key("example", "archived");
+        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
+        var occurredAt = Instant.now().minus(Duration.ofDays(2));
+        storage.append(List.of(
+            expired(new EventSubmission(
+                archived, PayloadGeneration.FIRST, occurredAt, null, null, null, null, null, EventPayload.copyOf(new byte[]{7})
+            )),
+            expired(event(occurredAt))
+        ));
+        var config = config(10, BATCH_SIZE);
+        config = new KansokushaConfig(
+            config.serverKey(), config.queueCapacity(), config.batchSize(), config.flushInterval(),
+            config.cleanupInterval(), config.archiveInterval(), config.searchTimeZone(),
+            new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1), Set.of(archived))
+        );
+
+        var runtime = KansokushaRuntime.start(storage, dir.resolve("archive"), config, SERVER_KEY, (message, failure) -> {
+            throw new AssertionError(message, failure);
+        });
+        List<Path> files = List.of();
+        try {
+            var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (files.isEmpty() && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+                files = parquetFiles(dir.resolve("archive"));
+            }
+        } finally {
+            runtime.close();
+        }
+        Assertions.assertEquals(1, files.size());
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:", new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT event_type, payload FROM read_parquet('" + files.getFirst() + "')"
+             )) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals("example:archived", rows.getString(1));
+            Assertions.assertArrayEquals(new byte[]{7}, rows.getBytes(2));
+            Assertions.assertFalse(rows.next());
+        }
+        try (var connection = new DuckDBDriver().connect(
+                 "jdbc:duckdb:" + dir.resolve(KansokushaRuntime.DATABASE_FILENAME), new Properties());
+             var rows = connection.createStatement().executeQuery("SELECT count(*) FROM events")) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(0, rows.getLong(1));
+        }
+    }
+
+    private static List<Path> parquetFiles(Path directory) throws java.io.IOException {
+        if (java.nio.file.Files.notExists(directory)) {
+            return List.of();
+        }
+        try (var walk = java.nio.file.Files.walk(directory)) {
+            return walk.filter(path -> path.toString().endsWith(".parquet")).toList();
+        }
+    }
+
+    private static QueuedEvent expired(EventSubmission event) {
+        var millis = event.occurredAt().toEpochMilli();
+        return new QueuedEvent(event, millis, millis + 1, null, null);
+    }
+
+    @Test
     void testQueryCallbacksDoNotRunOnStorageThread() throws Exception {
         var storage = new BlockingLookupStorage();
         var runtime = KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(10, BATCH_SIZE),
             SERVER_KEY,
             (message, failure) -> {
@@ -160,6 +232,7 @@ class KansokushaRuntimeTest {
         var storage = new BlockingLookupStorage();
         var runtime = KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(10, BATCH_SIZE),
             SERVER_KEY,
             (message, failure) -> {
@@ -191,6 +264,7 @@ class KansokushaRuntimeTest {
         var storage = new BlockingLookupStorage();
         var runtime = KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(10, BATCH_SIZE),
             SERVER_KEY,
             (message, failure) -> {
@@ -392,6 +466,7 @@ class KansokushaRuntimeTest {
         );
         try (var runtime = KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(10, BATCH_SIZE),
             SERVER_KEY,
             (message, failure) -> {
@@ -461,8 +536,8 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public int deleteExpired(Instant now) throws SQLException {
-            return this.delegate.deleteExpired(now);
+        public int deleteExpired(Instant now, Set<Key> archivedEventTypes) throws SQLException {
+            return this.delegate.deleteExpired(now, archivedEventTypes);
         }
 
         @Override
@@ -476,6 +551,7 @@ class KansokushaRuntimeTest {
         var storage = new OrderRecordingStorage();
         var runtime = KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(1000, BATCH_SIZE),
             SERVER_KEY,
             (message, failure) -> {
@@ -558,7 +634,7 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public int deleteExpired(Instant now) {
+        public int deleteExpired(Instant now, Set<Key> archivedEventTypes) {
             return 0;
         }
 
@@ -616,7 +692,7 @@ class KansokushaRuntimeTest {
         }
 
         @Override
-        public int deleteExpired(Instant now) {
+        public int deleteExpired(Instant now, Set<Key> archivedEventTypes) {
             return 0;
         }
 
@@ -641,6 +717,7 @@ class KansokushaRuntimeTest {
         var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
         return KansokushaRuntime.start(
             storage,
+            Path.of("unused-archive"),
             config(queueCapacity, batchSize),
             SERVER_KEY,
             (message, failure) -> {
@@ -656,6 +733,7 @@ class KansokushaRuntimeTest {
             batchSize,
             Duration.ofHours(1),
             Duration.ofHours(1),
+            Duration.ofDays(1),
             java.time.ZoneOffset.UTC,
             new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1))
         );

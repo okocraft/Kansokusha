@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.Set;
 
 class KansokushaConfigTest {
 
@@ -24,6 +25,9 @@ class KansokushaConfigTest {
         Assertions.assertEquals(1_000, config.batchSize());
         Assertions.assertEquals(Duration.ofSeconds(1), config.flushInterval());
         Assertions.assertEquals(Duration.ofHours(1), config.cleanupInterval());
+        Assertions.assertEquals(Duration.ofDays(1), config.archiveInterval());
+        Assertions.assertTrue(config.retention().archivedEventTypes().contains(Key.key("kansokusha", "block_break")));
+        Assertions.assertFalse(config.retention().archivedEventTypes().contains(Key.key("kansokusha", "fluid_change")));
         Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
 
         var retention = config.retention();
@@ -46,8 +50,13 @@ class KansokushaConfigTest {
               policies:
                 long:
                   duration: P365D
+                  archive: true
                   event-types:
                     - example:important
+                short:
+                  duration: P7D
+                  event-types:
+                    - example:noise
             """);
 
         var config = KansokushaConfig.load(dir);
@@ -60,6 +69,8 @@ class KansokushaConfigTest {
         Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
         Assertions.assertEquals(Duration.ofDays(365), config.retention().durationOf(Key.key("example", "important")));
         Assertions.assertEquals(Duration.ofDays(1), config.retention().durationOf(Key.key("example", "other")));
+        Assertions.assertEquals(Duration.ofDays(1), config.archiveInterval(), "a missing archive-interval uses P1D");
+        Assertions.assertEquals(Set.of(Key.key("example", "important")), config.retention().archivedEventTypes());
     }
 
     @Test
