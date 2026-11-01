@@ -7,7 +7,10 @@ import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
 @ApiStatus.Internal
@@ -62,15 +65,33 @@ public final class PaperBuiltInListeners {
         PaperWhitelistChangeListener::register
     );
 
+    private static final Duration FLUSH_INTERVAL = Duration.ofSeconds(5);
+
     private PaperBuiltInListeners() {
     }
 
     /**
      * Registers every built-in event type and listener. Bukkit unregisters the listeners when the plugin is disabled.
+     *
+     * @return an action that submits the events still buffered by aggregating listeners; run it before closing the API
      */
-    public static void registerAll(Plugin plugin, KansokushaApi api, Key serverKey) {
+    public static Runnable registerAll(Plugin plugin, KansokushaApi api, Key serverKey) {
+        var buffered = new ArrayList<PaperBufferedListener>();
         for (var factory : FACTORIES) {
-            plugin.getServer().getPluginManager().registerEvents(factory.apply(api, serverKey), plugin);
+            var listener = factory.apply(api, serverKey);
+            plugin.getServer().getPluginManager().registerEvents(listener, plugin);
+            if (listener instanceof PaperBufferedListener bufferedListener) {
+                buffered.add(bufferedListener);
+            }
         }
+
+        plugin.getServer().getAsyncScheduler().runAtFixedRate(
+            plugin,
+            task -> buffered.forEach(PaperBufferedListener::flushDue),
+            FLUSH_INTERVAL.toSeconds(),
+            FLUSH_INTERVAL.toSeconds(),
+            TimeUnit.SECONDS
+        );
+        return () -> buffered.forEach(PaperBufferedListener::flushAll);
     }
 }

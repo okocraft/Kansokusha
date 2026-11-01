@@ -36,7 +36,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
 | `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason`, while actor identity stays in the common actor columns |
-| `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal |
+| `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal; attempts with the same source, destination, initiator and item are summed into one event stamped with the window start (5 minutes when both inventories are hoppers, 15 seconds otherwise), carrying `attempt_count` and `item_amount` (events recorded before this have neither and describe one attempt) |
 | `kansokusha:container_pickup` | `InventoryPickupItemEvent` | `short` | world item → container pickup operation |
 | `kansokusha:container_process` | `FurnaceSmeltEvent`, `BrewEvent`, `BlockCookEvent`, `CrafterCraftEvent` | `short` | furnace/brewing/campfire/crafter transformation boundary |
 | `kansokusha:container_transaction` | `InventoryClickEvent` / `InventoryDragEvent` + NMS `AbstractContainerMenu` slot notification | `audit` | confirmed net item delta in a located non-player container after the accepted click/drag is applied |

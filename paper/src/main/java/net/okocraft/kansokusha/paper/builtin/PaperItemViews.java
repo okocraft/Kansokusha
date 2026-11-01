@@ -8,7 +8,7 @@ import static net.okocraft.kansokusha.paper.builtin.PaperEventView.of;
 final class PaperItemViews {
 
     static final List<PaperEventView> VIEWS = List.of(
-        of("container_transfer", "<actor>transfer <target><context>", ITEM, "item", "source_inventory destination_inventory item", "item source_inventory destination_inventory"),
+        of("container_transfer", "<actor>transfer <target><context>", ITEM, "item", "source_inventory destination_inventory item", "item source_inventory destination_inventory attempt_count item_amount"),
         of("container_pickup", "<actor>container pickup <target><context>", ITEM, "source_item", "source_item inventory", "source_item"),
         of("container_process", "<actor>processing <target><context>", ITEM, "", "input_items event_result_items", "process_kind input_items event_result_items"),
         of("container_transaction", "<actor><target><context>", ITEM, "amount_delta", "transfer_direction amount_delta container", "transfer_direction amount_delta"),

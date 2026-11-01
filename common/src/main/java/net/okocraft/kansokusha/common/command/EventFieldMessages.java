@@ -42,6 +42,8 @@ public final class EventFieldMessages {
         label("destination_inventory", "Destination inventory");
         label("transfer_direction", "Direction");
         label("amount_delta", "Container net delta");
+        label("attempt_count", "Transfer attempts");
+        label("item_amount", "Total item amount");
         label("item", "Item");
         label("stack", "Recorded world stack");
         label("remaining", "Remaining in world");
