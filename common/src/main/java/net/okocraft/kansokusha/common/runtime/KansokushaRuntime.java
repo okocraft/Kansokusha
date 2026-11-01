@@ -135,7 +135,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     ) throws IOException, SQLException {
         var storage = DuckDbStorage.open(
             dataDirectory,
-            dataDirectory.resolve(DATABASE_FILENAME)
+            dataDirectory.resolve(DATABASE_FILENAME),
+            config.duckDb().memoryLimit().orElse(""),
+            config.duckDb().threads()
         );
         return start(storage, dataDirectory.resolve(ARCHIVE_DIRECTORY), config, localServerKey, errorReporter);
     }

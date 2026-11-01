@@ -25,6 +25,14 @@ archive-interval: P1D
 # Existing configurations with UTC keep UTC; change them explicitly if needed.
 search-time-zone: ''
 
+# Resource limits of the DuckDB database. DuckDB runs inside the server process, and by default it may use up to
+# 80% of the system memory and all CPU cores, so limit it when the machine also runs the server.
+duckdb:
+  # Maximum memory DuckDB may use, such as 8GB or 512MiB. Empty uses the DuckDB default.
+  memory-limit: ''
+  # Number of threads DuckDB may use. 0 uses the DuckDB default.
+  threads: 0
+
 retention:
   # Retention period for event types that are not listed in any policy below.
   default: P30D

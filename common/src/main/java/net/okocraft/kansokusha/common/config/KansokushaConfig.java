@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Validated contents of {@code config.yml}.
@@ -34,10 +35,26 @@ public record KansokushaConfig(
     Duration cleanupInterval,
     Duration archiveInterval,
     ZoneId searchTimeZone,
-    Retention retention
+    Retention retention,
+    DuckDb duckDb
 ) {
 
+    public KansokushaConfig(
+        Optional<Key> serverKey,
+        int queueCapacity,
+        int batchSize,
+        Duration flushInterval,
+        Duration cleanupInterval,
+        Duration archiveInterval,
+        ZoneId searchTimeZone,
+        Retention retention
+    ) {
+        this(serverKey, queueCapacity, batchSize, flushInterval, cleanupInterval, archiveInterval,
+            searchTimeZone, retention, DuckDb.DEFAULT);
+    }
+
     private static final String FILENAME = "config.yml";
+    private static final Pattern MEMORY_LIMIT = Pattern.compile("[0-9]+(\\.[0-9]+)? ?(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)");
 
     /**
      * Loads {@code config.yml} from the data directory, writing the bundled default first when it does not exist.
@@ -58,6 +75,21 @@ public record KansokushaConfig(
             throw invalid("the root node must be a map");
         }
         return raw.validate();
+    }
+
+    /**
+     * Resource limits of the DuckDB database.
+     *
+     * @param memoryLimit the maximum memory DuckDB may use, such as {@code 8GB}; empty uses the DuckDB default
+     * @param threads     the number of threads DuckDB may use; 0 uses the DuckDB default
+     */
+    public record DuckDb(Optional<String> memoryLimit, int threads) {
+
+        public static final DuckDb DEFAULT = new DuckDb(Optional.empty(), 0);
+
+        public DuckDb {
+            Objects.requireNonNull(memoryLimit, "memoryLimit");
+        }
     }
 
     /**
@@ -95,6 +127,8 @@ public record KansokushaConfig(
         @Setting("search-time-zone")
         String searchTimeZone = "";
         RawRetention retention = new RawRetention();
+        // Configurations written before these limits existed do not have this key.
+        RawDuckDb duckdb = new RawDuckDb();
 
         KansokushaConfig validate() throws IOException {
             if (this.queueCapacity <= 0) {
@@ -113,8 +147,28 @@ public record KansokushaConfig(
                 parseDuration(this.cleanupInterval, "cleanup-interval"),
                 parseDuration(this.archiveInterval, "archive-interval"),
                 parseZoneId(this.searchTimeZone, "search-time-zone"),
-                Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate()
+                Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate(),
+                Objects.requireNonNullElseGet(this.duckdb, RawDuckDb::new).validate()
             );
+        }
+    }
+
+    @ConfigSerializable
+    static final class RawDuckDb {
+
+        @Setting("memory-limit")
+        String memoryLimit = "";
+        int threads = 0;
+
+        DuckDb validate() throws IOException {
+            var limit = this.memoryLimit == null ? "" : this.memoryLimit.strip();
+            if (!limit.isEmpty() && !MEMORY_LIMIT.matcher(limit).matches()) {
+                throw invalid("duckdb.memory-limit must be a size such as 8GB or 512MiB: " + this.memoryLimit);
+            }
+            if (this.threads < 0) {
+                throw invalid("duckdb.threads must not be negative");
+            }
+            return new DuckDb(limit.isEmpty() ? Optional.empty() : Optional.of(limit), this.threads);
         }
     }
 

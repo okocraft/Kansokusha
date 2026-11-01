@@ -204,6 +204,7 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 | `cleanup-interval` | 保持期限切れイベントを削除する間隔 |
 | `archive-interval` | アーカイブ対象の保持期限切れイベントを Parquet に書き出す間隔。省略時は `P1D` |
 | `search-time-zone` | `today` / `yesterday`、date-only bound、offset なし datetime の解釈に使う IANA timezone。bundled default は `UTC` |
+| `duckdb.memory-limit` / `duckdb.threads` | DuckDB が使えるメモリの上限（例 `8GB`）とスレッド数。空 / 0 なら DuckDB の既定（システムメモリの 80%、全コア） |
 | `retention.default` | 一覧にない event type の保持期間 |
 | `retention.policies.<name>` | `duration` と、それを適用する `event-types` の一覧。`archive: true` なら期限切れ後に削除せずアーカイブする（省略時は `false`） |
 
