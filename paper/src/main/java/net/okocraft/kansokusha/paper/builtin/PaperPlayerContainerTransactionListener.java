@@ -479,31 +479,6 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     ) {
     }
 
-    /**
-     * Groups items by {@link ItemStack#isSimilar(ItemStack)} so that they can be looked up in a hash map.
-     * The hash uses the type and the item meta, which {@code isSimilar} compares, but not the amount.
-     */
-    private static final class SimilarItem {
-
-        private final ItemStack item;
-        private final int hash;
-
-        private SimilarItem(ItemStack item) {
-            this.item = item;
-            this.hash = 31 * item.getType().hashCode() + (item.hasItemMeta() ? item.getItemMeta().hashCode() : 0);
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return this == other || other instanceof SimilarItem similar && this.item.isSimilar(similar.item);
-        }
-
-        @Override
-        public int hashCode() {
-            return this.hash;
-        }
-    }
-
     private static final class MutableDelta {
 
         private final ItemStack item;

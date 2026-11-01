@@ -139,7 +139,9 @@ final class PaperContainerPayloadCodec {
         InventorySnapshot destination,
         InventorySnapshot initiator,
         String initiatorRole,
-        CompoundTag item
+        CompoundTag item,
+        int attempts,
+        long amount
     ) {
         var payload = new CompoundTag();
         payload.put("source_inventory", source.payload());
@@ -149,6 +151,9 @@ final class PaperContainerPayloadCodec {
         }
         payload.putString("initiator_role", initiatorRole);
         payload.put("item", item);
+        // Added after the first events were recorded; events without them describe a single attempt.
+        payload.putInt("attempt_count", attempts);
+        payload.putLong("item_amount", amount);
         return PaperPayloadNbtCodec.encode(payload);
     }
 

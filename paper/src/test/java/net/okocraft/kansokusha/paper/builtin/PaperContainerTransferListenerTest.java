@@ -47,6 +47,9 @@ class PaperContainerTransferListenerTest {
 
         PaperListenerTestSupport.fire(listener, event);
 
+        Assertions.assertTrue(api.submissions.isEmpty(), "The transfer is buffered until its window ends.");
+        listener.flushAll();
+
         Assertions.assertEquals(1, api.submissions.size());
         var submission = api.submissions.remove();
         Assertions.assertEquals(PaperContainerTransferListener.EVENT_TYPE, submission.eventType());
@@ -68,9 +71,11 @@ class PaperContainerTransferListenerTest {
         );
         Assertions.assertFalse(payload.contains("initial_item"));
         Assertions.assertEquals(
-            2,
+            1,
             PaperItemStackPayloadCodec.decode(payload.getCompoundOrEmpty("item")).getAmount()
         );
+        Assertions.assertEquals(1, payload.getIntOr("attempt_count", 0));
+        Assertions.assertEquals(2L, payload.getLongOr("item_amount", 0L));
 
         Mockito.verify(destination, Mockito.never()).getContents();
     }
@@ -91,6 +96,89 @@ class PaperContainerTransferListenerTest {
         PaperListenerTestSupport.fire(listener, event);
 
         Assertions.assertTrue(api.submissions.isEmpty());
+    }
+
+    @Test
+    void testRepeatedTransfersAreAggregatedPerWindow() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var clock = new MutableClock(OCCURRED_AT);
+        var listener = PaperContainerTransferListener.register(api, PaperBlockEventTestSupport.SERVER_KEY, clock);
+        var world = PaperBlockEventTestSupport.world();
+        var source = inventory(InventoryType.HOPPER, 5, new Location(world, 1.25, 64, -3.25));
+        var destination = inventory(InventoryType.CHEST, 27, null);
+
+        for (var i = 0; i < 3; i++) {
+            PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.DIAMOND, 1)));
+        }
+        PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.EMERALD, 2)));
+        PaperListenerTestSupport.fire(listener, transfer(destination, source, ItemStack.of(Material.DIAMOND, 1)));
+
+        listener.flushDue();
+        Assertions.assertTrue(api.submissions.isEmpty(), "The window has not ended yet.");
+
+        clock.instant = OCCURRED_AT.plus(PaperContainerTransferListener.AGGREGATION_WINDOW);
+        listener.flushDue();
+
+        Assertions.assertEquals(3, api.submissions.size(), "Different items and directions stay separate.");
+        var diamond = api.submissions.stream()
+            .filter(submission -> submission.targetType().equals(Key.key("minecraft", "diamond")))
+            .filter(submission -> {
+                try {
+                    return string(PaperPayloadNbtCodec.decode(submission.payload()).getCompoundOrEmpty("source_inventory"), "type").equals("hopper");
+                } catch (java.io.IOException e) {
+                    throw new AssertionError(e);
+                }
+            })
+            .findFirst().orElseThrow();
+        Assertions.assertEquals(OCCURRED_AT, diamond.occurredAt(), "The event is stamped with the window start.");
+        var payload = PaperPayloadNbtCodec.decode(diamond.payload());
+        Assertions.assertEquals(3, payload.getIntOr("attempt_count", 0));
+        Assertions.assertEquals(3L, payload.getLongOr("item_amount", 0L));
+
+        api.submissions.clear();
+        listener.flushAll();
+        Assertions.assertTrue(api.submissions.isEmpty(), "Flushed transfers are not submitted twice.");
+
+        PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.DIAMOND, 1)));
+        clock.instant = clock.instant.plus(PaperContainerTransferListener.AGGREGATION_WINDOW);
+        PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.DIAMOND, 1)));
+        Assertions.assertEquals(1, api.submissions.size(), "A transfer after the window closes the previous one.");
+        listener.flushAll();
+        Assertions.assertEquals(2, api.submissions.size());
+    }
+
+    private static InventoryMoveItemEvent transfer(Inventory source, Inventory destination, ItemStack item) {
+        var event = Mockito.mock(InventoryMoveItemEvent.class);
+        Mockito.when(event.getSource()).thenReturn(source);
+        Mockito.when(event.getDestination()).thenReturn(destination);
+        Mockito.when(event.getInitiator()).thenReturn(source);
+        Mockito.when(event.getItem()).thenReturn(item);
+        Mockito.when(event.isCancelled()).thenReturn(false);
+        return event;
+    }
+
+    private static final class MutableClock extends Clock {
+
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return this.instant;
+        }
     }
 
     private static PaperContainerTransferListener listener(
