@@ -335,6 +335,20 @@ public final class DuckDbStorageImpl implements Storage {
         );
     }
 
+    @Override
+    public Map<Key, Long> countEventsByType() throws SQLException {
+        // A duplicated connection reads a committed snapshot concurrently with the writer.
+        var counts = new LinkedHashMap<Key, Long>();
+        try (var reader = this.connection.duplicate();
+             var statement = reader.createStatement();
+             var rows = statement.executeQuery("SELECT event_type, count(*) FROM events GROUP BY event_type")) {
+            while (rows.next()) {
+                counts.put(Key.key(rows.getString(1)), rows.getLong(2));
+            }
+        }
+        return counts;
+    }
+
     private static Optional<Instant> optionalInstant(ResultSet rows, int column) throws SQLException {
         var millis = rows.getLong(column);
         return rows.wasNull() ? Optional.empty() : Optional.of(Instant.ofEpochMilli(millis));

@@ -117,6 +117,20 @@ class DuckDbEventSearchTest {
     }
 
     @Test
+    void testCountEventsByTypeReadsCommittedEvents(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            Assertions.assertTrue(storage.countEventsByType().isEmpty());
+
+            storage.append(List.of(
+                queued(event(AUDIT, NOW, OVERWORLD, new BlockPosition(10, 64, 20), new PlayerActor(PLAYER_ONE), STONE), null),
+                queued(event(AUDIT, NOW, OVERWORLD, new BlockPosition(11, 64, 20), new PlayerActor(PLAYER_ONE), STONE), null)
+            ));
+
+            Assertions.assertEquals(java.util.Map.of(AUDIT, 2L), storage.countEventsByType());
+        }
+    }
+
+    @Test
     void testHistoricalSearchMetadataUsesPersistedDistinctValues(@TempDir Path dir) throws Exception {
         try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
             storage.append(List.of(

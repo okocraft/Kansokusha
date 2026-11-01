@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
@@ -30,6 +31,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.Locale;
@@ -387,6 +389,11 @@ public final class DuckDbStorage {
         @Override
         public DatabaseHealth.Stored health() throws SQLException {
             return this.delegate.health();
+        }
+
+        @Override
+        public Map<Key, Long> countEventsByType() throws SQLException {
+            return this.delegate.countEventsByType();
         }
 
         @Override

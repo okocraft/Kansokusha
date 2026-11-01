@@ -36,6 +36,28 @@ public final class HealthCommandSupport {
         });
     }
 
+    public static void executeStoredCounts(EventSearchBackend backend, Consumer<Component> sendMessage) {
+        backend.storedEventCounts().whenComplete((counts, failure) -> {
+            if (failure != null) {
+                sendMessage.accept(HealthCommandMessages.FAILED.asComponent());
+                return;
+            }
+            renderCounts(HealthCommandMessages.STORED_BY_TYPE_HEADER, counts).forEach(sendMessage);
+        });
+    }
+
+    static List<Component> renderCounts(MessageKey header, Map<Key, Long> counts) {
+        var lines = new ArrayList<Component>();
+        lines.add(header.asComponent());
+        counts.entrySet().stream()
+            .sorted(Map.Entry.<Key, Long>comparingByValue().reversed().thenComparing(entry -> entry.getKey().asString()))
+            .forEach(entry -> lines.add(HealthCommandMessages.LINE.apply(
+                Component.text(entry.getKey().asString()),
+                Component.text(entry.getValue())
+            )));
+        return lines;
+    }
+
     static List<Component> render(DatabaseHealth health) {
         var stored = health.stored();
         var queue = health.queue();
@@ -54,13 +76,7 @@ public final class HealthCommandSupport {
         ));
 
         if (!queue.writtenByType().isEmpty()) {
-            lines.add(HealthCommandMessages.BY_TYPE_HEADER.asComponent());
-            queue.writtenByType().entrySet().stream()
-                .sorted(Map.Entry.<Key, Long>comparingByValue().reversed().thenComparing(entry -> entry.getKey().asString()))
-                .forEach(entry -> lines.add(HealthCommandMessages.LINE.apply(
-                    Component.text(entry.getKey().asString()),
-                    Component.text(entry.getValue())
-                )));
+            lines.addAll(renderCounts(HealthCommandMessages.BY_TYPE_HEADER, queue.writtenByType()));
         }
         return lines;
     }

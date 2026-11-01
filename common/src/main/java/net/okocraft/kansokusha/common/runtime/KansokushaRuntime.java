@@ -241,6 +241,24 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         ));
     }
 
+    @Override
+    public CompletableFuture<Map<Key, Long>> storedEventCounts() {
+        // The scan can take a long time, so it runs outside the storage thread.
+        var result = new CompletableFuture<Map<Key, Long>>();
+        try {
+            this.callbackExecutor.execute(() -> {
+                try {
+                    result.complete(this.storage.countEventsByType());
+                } catch (SQLException | RuntimeException e) {
+                    result.completeExceptionally(e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            result.completeExceptionally(e);
+        }
+        return result;
+    }
+
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {
         var registered = this.eventTypes.get(submission.eventType());
         if (registered == null || !submission.payloadGeneration().equals(registered.payloadGeneration())) {

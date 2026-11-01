@@ -1,5 +1,6 @@
 package net.okocraft.kansokusha.common.storage;
 
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
@@ -10,6 +11,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,6 +38,14 @@ public interface Storage extends AutoCloseable {
     /** Reads what the database holds. */
     default DatabaseHealth.Stored health() throws SQLException {
         throw new UnsupportedOperationException("Health is unavailable");
+    }
+
+    /**
+     * Counts the persisted events by event type. This scans the events table, so it is meant to be
+     * called off the storage thread: it reads through its own connection and does not block writes.
+     */
+    default Map<Key, Long> countEventsByType() throws SQLException {
+        throw new UnsupportedOperationException("Event counts are unavailable");
     }
 
     int deleteExpired(Instant now) throws SQLException;

@@ -63,6 +63,9 @@ public final class HealthCommandMessages {
     public static final MessageKey BY_TYPE_HEADER = DEFINER
         .define("kansokusha.command.health.by-type-header", "<gold>Events written since start, by type</gold>");
 
+    public static final MessageKey STORED_BY_TYPE_HEADER = DEFINER
+        .define("kansokusha.command.health.stored-by-type-header", "<gold>Stored events, by type</gold>");
+
     public static @UnmodifiableView Map<String, String> defaultMessages() {
         return DEFINER.getCollectedMessages();
     }
