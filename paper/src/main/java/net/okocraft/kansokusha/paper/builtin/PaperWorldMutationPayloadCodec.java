@@ -79,7 +79,8 @@ final class PaperWorldMutationPayloadCodec {
         Key pistonWorldKey,
         BlockPosition pistonOrigin,
         String direction,
-        String action
+        String action,
+        int moves
     ) {
         var payload = new CompoundTag();
         payload.put("from", PaperPayloadNbtCodec.position(from));
@@ -89,6 +90,8 @@ final class PaperWorldMutationPayloadCodec {
         payload.put("piston_origin", PaperPayloadNbtCodec.position(pistonOrigin));
         payload.putString("direction", normalized(direction));
         payload.putString("action", normalized(action));
+        // Added after the first events were recorded; events without it describe a single move.
+        payload.putInt("attempt_count", moves);
         return PaperPayloadNbtCodec.encode(payload);
     }
 

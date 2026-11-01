@@ -20,7 +20,7 @@ final class PaperBlockViews {
         of("block_burn", "<actor>burning <target><context>", BLOCK, "", "", ""),
         of("tnt_prime", "<actor>TNT priming <target><context>", BLOCK, "", "cause", "cause"),
         of("explosion_block_change", "<actor>explosion change <target><context>", BLOCK, "", "", ""),
-        of("piston_move", "<actor>piston movement <target><context>", BLOCK, "", "from to", "action direction"),
+        of("piston_move", "<actor>piston movement <target><context>", BLOCK, "", "from to attempt_count", "action direction attempt_count"),
         of("entity_block_change", "<actor>block change <target><context>", BLOCK, "", "before to", "before to"),
         of("natural_block_change", "natural change <target><context>", BLOCK, "", "pre_state post_state", "source_event pre_state post_state"),
         of("fluid_change", "<actor>fluid flow <target><context>", BLOCK, "", "source destination", "fluid"),

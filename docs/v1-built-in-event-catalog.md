@@ -29,7 +29,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:block_burn` | `BlockBurnEvent` | `short` | fire-caused destruction; burning TNT is owned by `tnt_prime` while `tntExplodes` is true |
 | `kansokusha:tnt_prime` | `TNTPrimeEvent` | `audit` | accepted TNT prime while `tntExplodes` is true |
 | `kansokusha:explosion_block_change` | `BlockExplodeEvent` / `EntityExplodeEvent` | `audit` | one submission per affected block; exploded TNT is owned by `tnt_prime` while `tntExplodes` is true, except for the Ender Dragon |
-| `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement |
+| `kansokusha:piston_move` | `BlockPistonExtendEvent` / `BlockPistonRetractEvent` | `audit` | piston movement; equal moves (same piston, action, direction, block and positions) are summed per 1-minute window into one event stamped with the window start and carrying `attempt_count` (events recorded before this have none and describe one move) |
 | `kansokusha:entity_block_change` | `EntityChangeBlockEvent` / `EntityBlockFormEvent` | `audit` | entity-caused block mutation |
 | `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent`, `PortalCreateEvent`, dragon-egg `BlockFromToEvent`, unsupported-state `BlockDestroyEvent` | `short` | natural/environmental change; destruction of blocks that no longer satisfy their NMS survival rule includes support-loss attachment breaks such as wall signs, torches and ladders |
 | `kansokusha:fluid_change` | water/lava `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
