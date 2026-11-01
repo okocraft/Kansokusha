@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.actor.PlayerActor;
 import net.okocraft.kansokusha.common.id.TimeBasedUUID;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -333,6 +334,32 @@ public final class DuckDbStorageImpl implements Storage {
             fileSize(this.filepath),
             fileSize(this.filepath.resolveSibling(this.filepath.getFileName() + ".wal"))
         );
+    }
+
+    @Override
+    public Map<Key, EventTypeStatistics> eventStatisticsByType(Instant recentSince) throws SQLException {
+        // A duplicated connection reads a committed snapshot concurrently with the writer.
+        var statistics = new LinkedHashMap<Key, EventTypeStatistics>();
+        try (var reader = this.connection.duplicate();
+             var statement = reader.prepareStatement("""
+                 SELECT event_type,
+                        count(*),
+                        count(*) FILTER (WHERE epoch_ms(occurred_at) >= ?),
+                        epoch_ms(max(occurred_at))
+                 FROM events
+                 GROUP BY event_type
+                 """)) {
+            statement.setLong(1, recentSince.toEpochMilli());
+            try (var rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    statistics.put(
+                        Key.key(rows.getString(1)),
+                        new EventTypeStatistics(rows.getLong(2), rows.getLong(3), optionalInstant(rows, 4))
+                    );
+                }
+            }
+        }
+        return statistics;
     }
 
     private static Optional<Instant> optionalInstant(ResultSet rows, int column) throws SQLException {

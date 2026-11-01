@@ -63,6 +63,24 @@ public final class HealthCommandMessages {
     public static final MessageKey BY_TYPE_HEADER = DEFINER
         .define("kansokusha.command.health.by-type-header", "<gold>Events written since start, by type</gold>");
 
+    public static final MessageKey STORED_HEADER = DEFINER
+        .define("kansokusha.command.health.stored.header", "<gold>Stored events by type</gold>");
+
+    public static final MessageKey.Arg5<Component, Component, Component, Component, Component> STORED_LINE = DEFINER
+        .define(
+            "kansokusha.command.health.stored.line",
+            "<gray><type><dark_gray>: </dark_gray><aqua><count></aqua> <dark_gray>(<share>)</dark_gray>"
+                + "<dark_gray> / last 24h </dark_gray><aqua><recent></aqua>"
+                + "<dark_gray> / latest </dark_gray><aqua><latest></aqua></gray>"
+        )
+        .with(
+            type -> Argument.component("type", type),
+            count -> Argument.component("count", count),
+            share -> Argument.component("share", share),
+            recent -> Argument.component("recent", recent),
+            latest -> Argument.component("latest", latest)
+        );
+
     public static @UnmodifiableView Map<String, String> defaultMessages() {
         return DEFINER.getCollectedMessages();
     }

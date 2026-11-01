@@ -1,11 +1,13 @@
 package net.okocraft.kansokusha.common.search;
 
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +46,14 @@ public interface EventSearchBackend {
     /** Reads the state of the database and of the write queue. */
     default CompletableFuture<DatabaseHealth> health() {
         return CompletableFuture.failedFuture(new UnsupportedOperationException("Health is unavailable"));
+    }
+
+    /**
+     * Summarizes the persisted events by event type without blocking writes. This scans every event,
+     * so it can take a long time on a large database.
+     */
+    default CompletableFuture<Map<Key, EventTypeStatistics>> storedEventStatistics() {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Event statistics are unavailable"));
     }
 
     CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);

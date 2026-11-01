@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
@@ -22,6 +23,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -60,6 +62,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     private static final int CLOSED_MASK = 1 << 31;
     // Bounds how long one flush task occupies the storage thread, so that queries queued behind it
     // are not starved while events keep arriving. The remainder is flushed by a follow-up task.
+    /** The window of the recent event count shown by the health command. */
+    public static final Duration RECENT_WINDOW = Duration.ofHours(24);
+
     static final int MAX_BATCHES_PER_FLUSH = 8;
 
     private final Optional<Key> localServerKey;
@@ -239,6 +244,24 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                 this.writtenByType
             )
         ));
+    }
+
+    @Override
+    public CompletableFuture<Map<Key, EventTypeStatistics>> storedEventStatistics() {
+        // The scan can take a long time, so it runs outside the storage thread.
+        var result = new CompletableFuture<Map<Key, EventTypeStatistics>>();
+        try {
+            this.callbackExecutor.execute(() -> {
+                try {
+                    result.complete(this.storage.eventStatisticsByType(Instant.now().minus(RECENT_WINDOW)));
+                } catch (SQLException | RuntimeException e) {
+                    result.completeExceptionally(e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            result.completeExceptionally(e);
+        }
+        return result;
     }
 
     private RegisteredEventType requireRegisteredEventType(EventSubmission submission) {

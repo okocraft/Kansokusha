@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -53,6 +54,26 @@ class HealthCommandSupportTest {
             HealthCommandMessages.LINE.apply(Component.text("kansokusha:block_break"), Component.text(900L)),
             HealthCommandMessages.LINE.apply(Component.text("kansokusha:chat"), Component.text(300L))
         ), sent);
+    }
+
+    @Test
+    void testStoredStatisticsAreRenderedMostFrequentFirst() {
+        var statistics = Map.of(
+            Key.key("kansokusha", "chat"), new EventTypeStatistics(25, 5, Optional.of(NEWEST)),
+            Key.key("kansokusha", "block_break"), new EventTypeStatistics(75, 50, Optional.empty())
+        );
+
+        Assertions.assertEquals(List.of(
+            HealthCommandMessages.STORED_HEADER.asComponent(),
+            HealthCommandMessages.STORED_LINE.apply(
+                Component.text("kansokusha:block_break"), Component.text("75"), Component.text("75.0%"),
+                Component.text("50"), Component.text("-")
+            ),
+            HealthCommandMessages.STORED_LINE.apply(
+                Component.text("kansokusha:chat"), Component.text("25"), Component.text("25.0%"),
+                Component.text("5"), Component.text("2026-09-27T12:30:00Z")
+            )
+        ), HealthCommandSupport.renderStored(statistics));
     }
 
     @Test

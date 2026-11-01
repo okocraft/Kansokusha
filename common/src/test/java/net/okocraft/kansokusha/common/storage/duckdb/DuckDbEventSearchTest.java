@@ -9,6 +9,7 @@ import net.okocraft.kansokusha.api.event.EventPayload;
 import net.okocraft.kansokusha.api.event.EventSubmission;
 import net.okocraft.kansokusha.api.event.PayloadGeneration;
 import net.okocraft.kansokusha.api.position.BlockPosition;
+import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.search.query.SearchQuery;
@@ -113,6 +114,23 @@ class DuckDbEventSearchTest {
             Assertions.assertEquals(Optional.of(NOW.plusSeconds(5)), health.newestEvent());
             Assertions.assertTrue(health.databaseBytes() > 0);
             Assertions.assertTrue(health.walBytes() >= 0);
+        }
+    }
+
+    @Test
+    void testEventStatisticsByTypeReadCommittedEvents(@TempDir Path dir) throws Exception {
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            Assertions.assertTrue(storage.eventStatisticsByType(NOW).isEmpty());
+
+            storage.append(List.of(
+                queued(event(AUDIT, NOW.minusSeconds(60), OVERWORLD, new BlockPosition(10, 64, 20), new PlayerActor(PLAYER_ONE), STONE), null),
+                queued(event(AUDIT, NOW, OVERWORLD, new BlockPosition(11, 64, 20), new PlayerActor(PLAYER_ONE), STONE), null)
+            ));
+
+            Assertions.assertEquals(
+                java.util.Map.of(AUDIT, new EventTypeStatistics(2, 1, Optional.of(NOW))),
+                storage.eventStatisticsByType(NOW)
+            );
         }
     }
 
