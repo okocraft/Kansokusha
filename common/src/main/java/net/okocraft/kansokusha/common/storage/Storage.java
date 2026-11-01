@@ -75,6 +75,23 @@ public interface Storage extends AutoCloseable {
         throw new UnsupportedOperationException("Archiving is unavailable");
     }
 
+    /**
+     * Recomputes {@code expires_at} of the events that occurred in {@code [from, to)} as
+     * {@code occurred_at + retention}, so that a changed retention configuration also applies to stored events.
+     *
+     * @param retentionMillis        the retention period of each listed event type, in milliseconds
+     * @param defaultRetentionMillis the retention period of the other event types, in milliseconds
+     * @return the number of events whose expiry changed
+     */
+    default long recalculateExpiry(
+        Instant from,
+        Instant to,
+        Map<Key, Long> retentionMillis,
+        long defaultRetentionMillis
+    ) throws SQLException {
+        throw new UnsupportedOperationException("Recalculating expiry is unavailable");
+    }
+
     @Override
     void close() throws SQLException;
 }

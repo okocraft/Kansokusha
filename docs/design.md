@@ -180,6 +180,9 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 - submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
 - `cleanup-interval` ごと（および起動直後と停止時）に `expires_at <= 現在時刻` の event を削除する。ただしアーカイブ対象の event type は削除しない。
 - 設定の変更は再起動で反映する。
+- 既存イベントに新しい保持期間を当てるには `/kansokusha admin retention apply confirm` を使う。起動時の `retention` から全 event の `expires_at` を `occurred_at + 保持期間` で計算し直す（submit 時と同じミリ秒演算）。`confirm` なしでは期間ごとの event type 数を表示するだけで DB に触れない。
+  - storage thread を長く占有すると write queue が溢れて event が破棄されるため、`occurred_at` の 1 時間ごとに別の task・別の transaction として処理する。各 task は次の task を投入して終わるので、その間に予定時刻を過ぎた flush が先に実行される。`expires_at` が変わらない行は書き換えない。
+  - 同時に 1 つだけ実行し、実行中の再実行は拒否する。終了後にすぐ cleanup / アーカイブはせず、通常の周期に任せる。
 
 ## アーカイブ
 

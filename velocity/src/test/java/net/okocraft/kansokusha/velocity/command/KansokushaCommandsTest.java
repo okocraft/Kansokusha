@@ -40,21 +40,46 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testRetentionApplyPreviewsUntilConfirmed() throws Exception {
+        ConsoleCommandSource console = TestSources.console();
+        TestSources.grant(console, "kansokusha.command", "kansokusha.command.admin.retention");
+        Mockito.when(this.backend.retention()).thenReturn(
+            new net.okocraft.kansokusha.common.config.KansokushaConfig.Retention(java.util.Map.of(), java.time.Duration.ofDays(30))
+        );
+        Mockito.when(this.backend.applyRetention()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(3L));
+
+        Assertions.assertEquals(1, this.tester.execute(console, "kansokusha admin retention apply"));
+        Mockito.verify(console).sendMessage(net.okocraft.kansokusha.common.command.RetentionCommandMessages.PREVIEW_CONFIRM.asComponent());
+        Mockito.verify(this.backend, Mockito.never()).applyRetention();
+
+        Assertions.assertEquals(1, this.tester.execute(console, "kansokusha admin retention apply confirm"));
+        Mockito.verify(this.backend).applyRetention();
+        Mockito.verify(console).sendMessage(net.okocraft.kansokusha.common.command.RetentionCommandMessages.COMPLETED.apply(3L));
+
+        ConsoleCommandSource healthOnly = TestSources.console();
+        TestSources.grant(healthOnly, "kansokusha.command", "kansokusha.command.admin.health");
+        Assertions.assertThrows(
+            CommandSyntaxException.class,
+            () -> this.tester.execute(healthOnly, "kansokusha admin retention apply confirm")
+        );
+    }
+
+    @Test
     void testHealthCommandIsWiredAndRequiresItsPermission() throws Exception {
         ConsoleCommandSource console = TestSources.console();
-        TestSources.grant(console, "kansokusha.command", "kansokusha.command.health");
+        TestSources.grant(console, "kansokusha.command", "kansokusha.command.admin.health");
         Mockito.when(this.backend.health()).thenReturn(java.util.concurrent.CompletableFuture.failedFuture(
             new IllegalStateException("closed")
         ));
 
-        Assertions.assertEquals(1, this.tester.execute(console, "kansokusha health"));
+        Assertions.assertEquals(1, this.tester.execute(console, "kansokusha admin health"));
         Mockito.verify(console).sendMessage(net.okocraft.kansokusha.common.command.HealthCommandMessages.FAILED.asComponent());
 
         ConsoleCommandSource denied = TestSources.console();
         TestSources.grant(denied, "kansokusha.command");
         Assertions.assertThrows(
             CommandSyntaxException.class,
-            () -> this.tester.execute(denied, "kansokusha health")
+            () -> this.tester.execute(denied, "kansokusha admin health")
         );
     }
 

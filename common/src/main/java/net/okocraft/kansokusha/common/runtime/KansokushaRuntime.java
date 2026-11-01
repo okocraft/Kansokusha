@@ -11,6 +11,7 @@ import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
+import net.okocraft.kansokusha.common.search.RetentionAlreadyRunningException;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
@@ -62,6 +63,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
     public static final String ARCHIVE_DIRECTORY = "archive";
+    // Small enough that one chunk of a busy server's events is rewritten within about a second.
+    private static final Duration RETENTION_CHUNK = Duration.ofHours(1);
     private static final DateTimeFormatter ARCHIVE_TIMESTAMP =
         DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssSSS'Z'", Locale.ROOT);
 
@@ -85,10 +88,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     private final AtomicBoolean earlyFlushScheduled = new AtomicBoolean();
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
-    private final AtomicLong writtenEvents = new AtomicLong();
     private final AtomicLong lostEvents = new AtomicLong();
-    // Confined to the storage thread, like the flush and the health query that read it.
-    private final Map<Key, Long> writtenByType = new HashMap<>();
+    private final AtomicBoolean applyingRetention = new AtomicBoolean();
     private final AtomicLong rejectedEvents = new AtomicLong();
     private final ScheduledExecutorService storageThread;
     // Runs the callbacks of query results so that rendering never occupies the storage thread.
@@ -259,12 +260,84 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             new DatabaseHealth.Queue(
                 this.queuedEvents.get(),
                 this.queueCapacity,
-                this.writtenEvents.get(),
                 this.lostEvents.get(),
-                this.rejectedEvents.get(),
-                this.writtenByType
+                this.rejectedEvents.get()
             )
         ));
+    }
+
+    @Override
+    public KansokushaConfig.Retention retention() {
+        return this.retention;
+    }
+
+    @Override
+    public CompletableFuture<Long> applyRetention() {
+        if (!this.applyingRetention.compareAndSet(false, true)) {
+            return CompletableFuture.failedFuture(new RetentionAlreadyRunningException());
+        }
+        var retentionMillis = new HashMap<Key, Long>();
+        this.retention.durations().forEach((eventType, duration) -> retentionMillis.put(eventType, duration.toMillis()));
+        var defaultMillis = this.retention.defaultDuration().toMillis();
+
+        var result = new CompletableFuture<Long>();
+        result.whenComplete((updated, failure) -> {
+            this.applyingRetention.set(false);
+            if (failure != null) {
+                this.errorReporter.accept("Failed to apply the retention settings to stored events.", failure);
+            }
+        });
+        try {
+            this.storageThread.execute(() -> {
+                try {
+                    var stored = this.storage.health();
+                    if (stored.oldestEvent().isEmpty() || stored.newestEvent().isEmpty()) {
+                        this.complete(result, 0L, null);
+                        return;
+                    }
+                    var end = stored.newestEvent().get().plusMillis(1);
+                    this.applyRetentionChunk(
+                        result, stored.oldestEvent().get(), end, retentionMillis, defaultMillis, 0
+                    );
+                } catch (SQLException | RuntimeException e) {
+                    this.complete(result, null, e);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            result.completeExceptionally(new IllegalStateException("Kansokusha is stopped.", e));
+        }
+        return result;
+    }
+
+    // Runs on the storage thread. Each chunk is a separate task, so flushes scheduled in the meantime run
+    // between chunks and the write queue keeps draining.
+    private void applyRetentionChunk(
+        CompletableFuture<Long> result,
+        Instant from,
+        Instant end,
+        Map<Key, Long> retentionMillis,
+        long defaultMillis,
+        long updatedSoFar
+    ) {
+        try {
+            var to = from.plus(RETENTION_CHUNK);
+            if (to.isAfter(end)) {
+                to = end;
+            }
+            var updated = updatedSoFar + this.storage.recalculateExpiry(from, to, retentionMillis, defaultMillis);
+            if (!to.isBefore(end)) {
+                this.complete(result, updated, null);
+                return;
+            }
+            var next = to;
+            this.storageThread.execute(
+                () -> this.applyRetentionChunk(result, next, end, retentionMillis, defaultMillis, updated)
+            );
+        } catch (RejectedExecutionException e) {
+            this.complete(result, null, new IllegalStateException("Kansokusha stopped while applying retention.", e));
+        } catch (SQLException | RuntimeException e) {
+            this.complete(result, null, e);
+        }
     }
 
     @Override
@@ -467,10 +540,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             this.queuedEvents.addAndGet(-drained);
             try {
                 this.storage.append(batch);
-                this.writtenEvents.addAndGet(batch.size());
-                for (var queued : batch) {
-                    this.writtenByType.merge(queued.submission().eventType(), 1L, Long::sum);
-                }
                 this.metadataCache.add(batch);
             } catch (SQLException | RuntimeException e) {
                 this.lostEvents.addAndGet(batch.size());

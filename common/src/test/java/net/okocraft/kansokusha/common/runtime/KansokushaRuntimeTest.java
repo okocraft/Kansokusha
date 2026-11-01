@@ -78,7 +78,7 @@ class KansokushaRuntimeTest {
             Assertions.assertFalse(runtime.submit(event(now)), "The queue is full.");
 
             var health = runtime.health().get(5, TimeUnit.SECONDS);
-            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 0, 1, java.util.Map.of()), health.queue());
+            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 1), health.queue());
             Assertions.assertEquals(0, health.stored().events());
             Assertions.assertTrue(health.stored().databaseBytes() > 0);
         }
@@ -192,6 +192,72 @@ class KansokushaRuntimeTest {
     private static QueuedEvent expired(EventSubmission event) {
         var millis = event.occurredAt().toEpochMilli();
         return new QueuedEvent(event, millis, millis + 1, null, null);
+    }
+
+    @Test
+    void testApplyRetentionRewritesEveryChunkOfStoredEvents(@TempDir Path dir) throws Exception {
+        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
+        var now = Instant.now();
+        // Spread over several hourly chunks, with the default retention of the test config (1 day) changed below.
+        storage.append(List.of(
+            new QueuedEvent(event(now.minus(Duration.ofHours(5))), now.minus(Duration.ofHours(5)).toEpochMilli(),
+                now.minus(Duration.ofHours(5)).plus(Duration.ofDays(400)).toEpochMilli(), null, null),
+            new QueuedEvent(event(now.minus(Duration.ofHours(1))), now.minus(Duration.ofHours(1)).toEpochMilli(),
+                now.minus(Duration.ofHours(1)).plus(Duration.ofDays(400)).toEpochMilli(), null, null),
+            new QueuedEvent(event(now), now.toEpochMilli(), now.plus(Duration.ofDays(1)).toEpochMilli(), null, null)
+        ));
+        var runtime = KansokushaRuntime.start(
+            storage,
+            Path.of("unused-archive"),
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        try {
+            Assertions.assertEquals(2L, runtime.applyRetention().get(5, TimeUnit.SECONDS));
+            Assertions.assertEquals(0L, runtime.applyRetention().get(5, TimeUnit.SECONDS));
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void testApplyRetentionRejectsAConcurrentRun() throws Exception {
+        var storage = new BlockingLookupStorage();
+        var runtime = KansokushaRuntime.start(
+            storage,
+            Path.of("unused-archive"),
+            config(10, BATCH_SIZE),
+            SERVER_KEY,
+            (message, failure) -> {
+            }
+        );
+        try {
+            // Hold the storage thread so that the first run is still pending.
+            var lookup = runtime.findEvent(UUID.fromString("0199a123-4567-789a-8bcd-ef0123456792"));
+            Assertions.assertTrue(storage.lookupStarted.await(5, TimeUnit.SECONDS));
+            var first = runtime.applyRetention();
+            var second = runtime.applyRetention();
+            var failure = Assertions.assertThrows(
+                java.util.concurrent.ExecutionException.class,
+                () -> second.get(5, TimeUnit.SECONDS)
+            );
+            Assertions.assertInstanceOf(
+                net.okocraft.kansokusha.common.search.RetentionAlreadyRunningException.class,
+                failure.getCause()
+            );
+            storage.lookupRelease.countDown();
+            lookup.get(5, TimeUnit.SECONDS);
+            // BlockingLookupStorage has no health, so the first run fails and frees the slot.
+            Assertions.assertThrows(java.util.concurrent.ExecutionException.class, () -> first.get(5, TimeUnit.SECONDS));
+            Assertions.assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> runtime.applyRetention().get(5, TimeUnit.SECONDS));
+        } finally {
+            storage.lookupRelease.countDown();
+            runtime.close();
+        }
     }
 
     @Test

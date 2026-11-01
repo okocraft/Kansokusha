@@ -459,6 +459,41 @@ public final class DuckDbStorageImpl implements Storage {
         }
     }
 
+    @Override
+    public long recalculateExpiry(
+        Instant from,
+        Instant to,
+        Map<Key, Long> retentionMillis,
+        long defaultRetentionMillis
+    ) throws SQLException {
+        String retention;
+        if (retentionMillis.isEmpty()) {
+            retention = Long.toString(defaultRetentionMillis);
+        } else {
+            var cases = new StringBuilder("CASE event_type");
+            for (var entry : retentionMillis.entrySet()) {
+                cases.append(" WHEN ").append(literal(entry.getKey().asString()))
+                    .append(" THEN ").append(entry.getValue().longValue());
+            }
+            retention = cases.append(" ELSE ").append(defaultRetentionMillis).append(" END").toString();
+        }
+        // The same millisecond arithmetic as at submission, so unchanged events compare equal.
+        var expiry = "epoch_ms(epoch_ms(occurred_at) + (" + retention + ")::BIGINT)";
+        try (var statement = this.connection.createStatement()) {
+            var updated = statement.executeUpdate(
+                "UPDATE events SET expires_at = " + expiry
+                    + " WHERE occurred_at >= epoch_ms(" + from.toEpochMilli() + "::BIGINT)"
+                    + " AND occurred_at < epoch_ms(" + to.toEpochMilli() + "::BIGINT)"
+                    + " AND expires_at <> " + expiry
+            );
+            this.connection.commit();
+            return updated;
+        } catch (SQLException | RuntimeException e) {
+            this.rollback(e);
+            throw e;
+        }
+    }
+
     private static String expiredCondition(Instant now) {
         return "expires_at <= epoch_ms(" + now.toEpochMilli() + "::BIGINT)";
     }

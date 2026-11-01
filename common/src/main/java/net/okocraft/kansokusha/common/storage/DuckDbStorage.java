@@ -423,6 +423,16 @@ public final class DuckDbStorage {
         }
 
         @Override
+        public long recalculateExpiry(
+            Instant from,
+            Instant to,
+            Map<Key, Long> retentionMillis,
+            long defaultRetentionMillis
+        ) throws SQLException {
+            return this.delegate.recalculateExpiry(from, to, retentionMillis, defaultRetentionMillis);
+        }
+
+        @Override
         public void close() throws SQLException {
             SQLException failure = null;
             try {

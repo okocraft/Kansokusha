@@ -32,7 +32,7 @@ class HealthCommandSupportTest {
     void testHealthIsRendered() {
         var health = new DatabaseHealth(
             new DatabaseHealth.Stored(1234, 56, Optional.of(OLDEST), Optional.of(NEWEST), 5 * 1024 * 1024, 0),
-            new DatabaseHealth.Queue(3, 10000, 1200, 0, 7, Map.of(Key.key("kansokusha", "block_break"), 900L, Key.key("kansokusha", "chat"), 300L))
+            new DatabaseHealth.Queue(3, 10000, 0, 7)
         );
         var sent = new ArrayList<Component>();
 
@@ -47,12 +47,8 @@ class HealthCommandSupportTest {
             line(HealthCommandMessages.DATABASE_SIZE, Component.text("5.0 MiB")),
             line(HealthCommandMessages.WAL_SIZE, Component.text("0 B")),
             line(HealthCommandMessages.QUEUE, Component.text("3 / 10000")),
-            line(HealthCommandMessages.WRITTEN, Component.text(1200L)),
             line(HealthCommandMessages.LOST, Component.text(0L, NamedTextColor.AQUA)),
-            line(HealthCommandMessages.REJECTED, Component.text(7L, NamedTextColor.RED)),
-            HealthCommandMessages.BY_TYPE_HEADER.asComponent(),
-            HealthCommandMessages.LINE.apply(Component.text("kansokusha:block_break"), Component.text(900L)),
-            HealthCommandMessages.LINE.apply(Component.text("kansokusha:chat"), Component.text(300L))
+            line(HealthCommandMessages.REJECTED, Component.text(7L, NamedTextColor.RED))
         ), sent);
     }
 
@@ -80,7 +76,7 @@ class HealthCommandSupportTest {
     void testEmptyDatabaseShowsPlaceholderForTimes() {
         var health = new DatabaseHealth(
             new DatabaseHealth.Stored(0, 0, Optional.empty(), Optional.empty(), 0, 0),
-            new DatabaseHealth.Queue(0, 10, 0, 0, 0, Map.of())
+            new DatabaseHealth.Queue(0, 10, 0, 0)
         );
         var sent = new ArrayList<Component>();
 

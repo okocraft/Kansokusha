@@ -41,7 +41,13 @@ public final class CommandMessages {
     public static final MessageKey HELP_HEALTH = DEFINER
         .define(
             "kansokusha.command.help.health",
-            "<aqua>/kansokusha health</aqua><dark_gray> - </dark_gray><gray>Show the state of the event database and the write queue</gray>"
+            "<aqua>/kansokusha admin health [stored]</aqua><dark_gray> - </dark_gray><gray>Show the state of the event database and the write queue</gray>"
+        );
+
+    public static final MessageKey HELP_RETENTION = DEFINER
+        .define(
+            "kansokusha.command.help.retention",
+            "<aqua>/kansokusha admin retention apply</aqua><dark_gray> - </dark_gray><gray>Recalculate the expiry of stored events from the current retention settings</gray>"
         );
 
     public static @UnmodifiableView Map<String, String> defaultMessages() {
