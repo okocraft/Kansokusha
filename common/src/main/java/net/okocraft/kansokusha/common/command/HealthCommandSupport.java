@@ -19,12 +19,12 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Implements {@code /kansokusha health}, which shows the state of the event database.
+ * Implements {@code /kansokusha admin health}, which shows the state of the event database.
  */
 @NotNullByDefault
 public final class HealthCommandSupport {
 
-    public static final String PERMISSION = "kansokusha.command.health";
+    public static final String PERMISSION = "kansokusha.command.admin.health";
 
     private static final String[] BINARY_UNITS = {"KiB", "MiB", "GiB", "TiB"};
 
@@ -69,19 +69,6 @@ public final class HealthCommandSupport {
         return lines;
     }
 
-    // Written events are shown per type too, so the list is built the same way.
-    static List<Component> renderCounts(MessageKey header, Map<Key, Long> counts) {
-        var lines = new ArrayList<Component>();
-        lines.add(header.asComponent());
-        counts.entrySet().stream()
-            .sorted(Map.Entry.<Key, Long>comparingByValue().reversed().thenComparing(entry -> entry.getKey().asString()))
-            .forEach(entry -> lines.add(HealthCommandMessages.LINE.apply(
-                Component.text(entry.getKey().asString()),
-                Component.text(entry.getValue())
-            )));
-        return lines;
-    }
-
     static String formatShare(long count, long total) {
         return total <= 0 ? "-" : String.format(Locale.ROOT, "%.1f%%", count * 100.0 / total);
     }
@@ -89,7 +76,7 @@ public final class HealthCommandSupport {
     static List<Component> render(DatabaseHealth health) {
         var stored = health.stored();
         var queue = health.queue();
-        var lines = new ArrayList<Component>(List.of(
+        return List.of(
             HealthCommandMessages.HEADER.asComponent(),
             line(HealthCommandMessages.EVENTS, Component.text(stored.events())),
             line(HealthCommandMessages.PLAYER_NAMES, Component.text(stored.playerNames())),
@@ -98,15 +85,9 @@ public final class HealthCommandSupport {
             line(HealthCommandMessages.DATABASE_SIZE, Component.text(formatBytes(stored.databaseBytes()))),
             line(HealthCommandMessages.WAL_SIZE, Component.text(formatBytes(stored.walBytes()))),
             line(HealthCommandMessages.QUEUE, Component.text(queue.queued() + " / " + queue.capacity())),
-            line(HealthCommandMessages.WRITTEN, Component.text(queue.written())),
             line(HealthCommandMessages.LOST, warning(queue.lost())),
             line(HealthCommandMessages.REJECTED, warning(queue.rejected()))
-        ));
-
-        if (!queue.writtenByType().isEmpty()) {
-            lines.addAll(renderCounts(HealthCommandMessages.BY_TYPE_HEADER, queue.writtenByType()));
-        }
-        return lines;
+        );
     }
 
     private static Component line(MessageKey label, Component value) {

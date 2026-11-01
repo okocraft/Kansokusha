@@ -338,6 +338,78 @@ class DuckDbStorageTest {
     }
 
     @Test
+    void testRecalculateExpiryAppliesRetentionWithinTheRange(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        var later = new EventSubmission(
+            SHORT, PayloadGeneration.FIRST, NOW.plus(Duration.ofHours(2)), null, null, null, null, null,
+            EventPayload.copyOf(new byte[0])
+        );
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            storage.append(List.of(queued(event(SHORT)), queued(event(LONG)), queued(later)));
+            var retention = Map.of(LONG, Duration.ofDays(3).toMillis());
+            var defaultMillis = Duration.ofDays(5).toMillis();
+
+            // SHORT (1 day -> 5 days) and LONG (10 days -> 3 days) change; the later event is outside the range.
+            Assertions.assertEquals(2, storage.recalculateExpiry(NOW, NOW.plusSeconds(1), retention, defaultMillis));
+            Assertions.assertEquals(0, storage.recalculateExpiry(NOW, NOW.plusSeconds(1), retention, defaultMillis),
+                "events that already have the expiry are not rewritten");
+            Assertions.assertEquals(1, storage.recalculateExpiry(NOW, NOW.plus(Duration.ofDays(1)), retention, defaultMillis));
+        }
+
+        try (var connection = new DuckDBDriver().connect("jdbc:duckdb:" + file, new Properties());
+             var rows = connection.createStatement().executeQuery(
+                 "SELECT event_type, epoch_ms(occurred_at), epoch_ms(expires_at) FROM events ORDER BY event_type, occurred_at"
+             )) {
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals("example:long", rows.getString(1));
+            Assertions.assertEquals(NOW.plus(Duration.ofDays(3)).toEpochMilli(), rows.getLong(3));
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(NOW.plus(Duration.ofDays(5)).toEpochMilli(), rows.getLong(3));
+            Assertions.assertTrue(rows.next());
+            Assertions.assertEquals(rows.getLong(2) + Duration.ofDays(5).toMillis(), rows.getLong(3));
+            Assertions.assertFalse(rows.next());
+        }
+    }
+
+    @Test
+    void testAppliedRetentionIsKeptAcrossReopening(@TempDir Path dir) throws Exception {
+        var file = dir.resolve("kansokusha.duckdb");
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            Assertions.assertEquals(java.util.Optional.empty(), storage.appliedRetention());
+            storage.recordAppliedRetention("first");
+            storage.recordAppliedRetention("second");
+        }
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            Assertions.assertEquals(java.util.Optional.of("second"), storage.appliedRetention());
+        }
+    }
+
+    @Test
+    void testRecalculationRangesCoverOnlyMinutesWithEventsAndAreBounded(@TempDir Path dir) throws Exception {
+        var minute = Instant.parse("2026-09-26T00:00:00Z");
+        try (var storage = DuckDbStorageImpl.open(dir.resolve("kansokusha.duckdb"))) {
+            Assertions.assertEquals(List.of(), storage.expiryRecalculationRanges(2));
+
+            var events = new ArrayList<QueuedEvent>();
+            // 1 event in minute 0, 1 in minute 1, 3 in minute 2, and 1 a year later.
+            for (var offset : List.of(0L, 61L, 120L, 121L, 122L, Duration.ofDays(365).toSeconds())) {
+                events.add(queued(new EventSubmission(
+                    SHORT, PayloadGeneration.FIRST, minute.plusSeconds(offset), null, null, null, null, null,
+                    EventPayload.copyOf(new byte[0])
+                )));
+            }
+            storage.append(events);
+
+            Assertions.assertEquals(List.of(
+                new OccurredRange(minute, minute.plusSeconds(120)),
+                // More than the limit in one minute stays one range.
+                new OccurredRange(minute.plusSeconds(120), minute.plusSeconds(180)),
+                new OccurredRange(minute.plus(Duration.ofDays(365)), minute.plus(Duration.ofDays(365)).plusSeconds(60))
+            ), storage.expiryRecalculationRanges(2));
+        }
+    }
+
+    @Test
     void testAppenderCanBeReusedAcrossTransactions(@TempDir Path dir) throws Exception {
         var file = dir.resolve("kansokusha.duckdb");
         try (var storage = DuckDbStorageImpl.open(file)) {

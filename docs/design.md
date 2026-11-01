@@ -180,6 +180,11 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 - submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
 - `cleanup-interval` ごと（および起動直後と停止時）に `expires_at <= 現在時刻` の event を削除する。ただしアーカイブ対象の event type は削除しない。
 - 設定の変更は再起動で反映する。
+- 保持期間の変更は起動時に既存 event にも反映する。DB の `metadata` テーブル（`name`, `value`）に、最後に適用した保持期間（event type ごとと default のミリ秒。`archive` は `expires_at` に影響しないので含めない）を記録しておき、起動時の設定と異なるか記録がなければ、全 event の `expires_at` を `occurred_at + 保持期間` で計算し直す（submit 時と同じミリ秒演算）。
+  - cleanup / アーカイブは再計算が終わってから開始する。古い `expires_at` のまま先に削除・アーカイブすると、延長した保持期間で残るはずの event が失われるため。停止時の最終 cleanup も、開始前なら行わない。
+  - 再計算の範囲は、別接続（書き込みを止めない）で `occurred_at` の分ごとの件数を 1 回数え、event のある分だけを連続して最大 10 万件ずつにまとめて決める。1 分に 10 万件を超える場合はその 1 分を 1 範囲とする。event のない期間には SQL を発行しない。
+  - 各範囲は storage thread 上の別の task・別の transaction として処理し、各 task は次の task を投入して終わるので、その間に予定時刻を過ぎた flush が先に実行され、write queue は溢れない。`expires_at` が変わらない行は書き換えない。
+  - すべての範囲を終えてから適用済みとして記録する。途中で停止・失敗した場合は記録せず、次回起動時にやり直す（済んだ範囲は変更なしとして書き換えない）。失敗時はエラーを出し、その起動中は cleanup / アーカイブを行わない。
 
 ## アーカイブ
 

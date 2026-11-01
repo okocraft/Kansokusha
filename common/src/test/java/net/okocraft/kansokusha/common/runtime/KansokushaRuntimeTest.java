@@ -78,7 +78,7 @@ class KansokushaRuntimeTest {
             Assertions.assertFalse(runtime.submit(event(now)), "The queue is full.");
 
             var health = runtime.health().get(5, TimeUnit.SECONDS);
-            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 0, 1, java.util.Map.of()), health.queue());
+            Assertions.assertEquals(new net.okocraft.kansokusha.common.search.DatabaseHealth.Queue(2, 2, 0, 1), health.queue());
             Assertions.assertEquals(0, health.stored().events());
             Assertions.assertTrue(health.stored().databaseBytes() > 0);
         }
@@ -192,6 +192,65 @@ class KansokushaRuntimeTest {
     private static QueuedEvent expired(EventSubmission event) {
         var millis = event.occurredAt().toEpochMilli();
         return new QueuedEvent(event, millis, millis + 1, null, null);
+    }
+
+    @Test
+    void testChangedRetentionIsAppliedToStoredEventsBeforeTheFirstCleanup(@TempDir Path dir) throws Exception {
+        var file = dir.resolve(KansokushaRuntime.DATABASE_FILENAME);
+        var occurredAt = Instant.now().minus(Duration.ofDays(2));
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            // Recorded under a 1-day retention: expired by the old expiry, alive under the 30 days below.
+            storage.append(List.of(new QueuedEvent(
+                event(occurredAt), occurredAt.toEpochMilli(), occurredAt.plus(Duration.ofDays(1)).toEpochMilli(), null, null
+            )));
+            storage.recordAppliedRetention(KansokushaRuntime.retentionFingerprint(
+                new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1))
+            ));
+        }
+        var base = config(10, BATCH_SIZE);
+        var config = new KansokushaConfig(
+            base.serverKey(), base.queueCapacity(), base.batchSize(), base.flushInterval(), base.cleanupInterval(),
+            base.archiveInterval(), base.searchTimeZone(),
+            new KansokushaConfig.Retention(Map.of(), Duration.ofDays(30))
+        );
+
+        var messages = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var runtime = KansokushaRuntime.start(
+            DuckDbStorageImpl.open(file), Path.of("unused-archive"), config, SERVER_KEY, messages::add,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
+        runtime.close();
+
+        Assertions.assertEquals(1, countEvents(dir), "the lengthened retention keeps the event");
+        Assertions.assertTrue(messages.getLast().contains("1 changed"), messages.toString());
+
+        // The same settings are not applied again.
+        messages.clear();
+        runtime = KansokushaRuntime.start(
+            DuckDbStorageImpl.open(file), Path.of("unused-archive"), config, SERVER_KEY, messages::add,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
+        runtime.close();
+        Assertions.assertEquals(List.of(), messages);
+    }
+
+    @Test
+    void testRetentionFingerprintIgnoresArchivingAndOrder() {
+        var a = Key.key("example", "a");
+        var b = Key.key("example", "b");
+        var durations = new java.util.LinkedHashMap<Key, Duration>();
+        durations.put(b, Duration.ofDays(2));
+        durations.put(a, Duration.ofDays(1));
+        Assertions.assertEquals(
+            "default=86400000;example:a=86400000;example:b=172800000",
+            KansokushaRuntime.retentionFingerprint(new KansokushaConfig.Retention(durations, Duration.ofDays(1), Set.of(a)))
+        );
     }
 
     @Test
@@ -322,6 +381,7 @@ class KansokushaRuntimeTest {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             runtime.submit(event(Instant.now().minus(Duration.ofDays(2))));
             runtime.submit(event(Instant.now()));
+            runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
         }
 
         Assertions.assertEquals(1, countEvents(dir));

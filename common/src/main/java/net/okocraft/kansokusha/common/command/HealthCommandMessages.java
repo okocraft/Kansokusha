@@ -51,17 +51,11 @@ public final class HealthCommandMessages {
     public static final MessageKey QUEUE = DEFINER
         .define("kansokusha.command.health.label.queue", "Write queue");
 
-    public static final MessageKey WRITTEN = DEFINER
-        .define("kansokusha.command.health.label.written", "Events written since start");
-
     public static final MessageKey LOST = DEFINER
         .define("kansokusha.command.health.label.lost", "Events lost to write failures");
 
     public static final MessageKey REJECTED = DEFINER
         .define("kansokusha.command.health.label.rejected", "Events rejected by a full queue");
-
-    public static final MessageKey BY_TYPE_HEADER = DEFINER
-        .define("kansokusha.command.health.by-type-header", "<gold>Events written since start, by type</gold>");
 
     public static final MessageKey STORED_HEADER = DEFINER
         .define("kansokusha.command.health.stored.header", "<gold>Stored events by type</gold>");

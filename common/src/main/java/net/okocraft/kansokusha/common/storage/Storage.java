@@ -75,6 +75,42 @@ public interface Storage extends AutoCloseable {
         throw new UnsupportedOperationException("Archiving is unavailable");
     }
 
+    /** The retention settings recorded by {@link #recordAppliedRetention}, if any. */
+    default Optional<String> appliedRetention() throws SQLException {
+        return Optional.empty();
+    }
+
+    /** Records that the stored events have the expiry of these retention settings. */
+    default void recordAppliedRetention(String retention) throws SQLException {
+    }
+
+    /**
+     * Splits the stored events into ascending, non-overlapping ranges of {@code occurred_at} holding at most
+     * about {@code maxEvents} events each. Times without events are not covered. This scans every event, so
+     * it is meant to be called off the storage thread: it reads through its own connection and does not block
+     * writes.
+     */
+    default List<OccurredRange> expiryRecalculationRanges(long maxEvents) throws SQLException {
+        return List.of();
+    }
+
+    /**
+     * Recomputes {@code expires_at} of the events that occurred in {@code [from, to)} as
+     * {@code occurred_at + retention}, so that a changed retention configuration also applies to stored events.
+     *
+     * @param retentionMillis        the retention period of each listed event type, in milliseconds
+     * @param defaultRetentionMillis the retention period of the other event types, in milliseconds
+     * @return the number of events whose expiry changed
+     */
+    default long recalculateExpiry(
+        Instant from,
+        Instant to,
+        Map<Key, Long> retentionMillis,
+        long defaultRetentionMillis
+    ) throws SQLException {
+        throw new UnsupportedOperationException("Recalculating expiry is unavailable");
+    }
+
     @Override
     void close() throws SQLException;
 }

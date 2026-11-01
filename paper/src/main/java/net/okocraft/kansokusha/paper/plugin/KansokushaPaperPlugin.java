@@ -37,6 +37,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
                 this.getDataPath(),
                 config,
                 serverKey,
+                message -> this.getLogger().info(message),
                 (message, failure) -> this.getLogger().log(Level.SEVERE, message, failure)
             );
             this.runtime = runtime;

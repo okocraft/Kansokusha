@@ -12,6 +12,7 @@ import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
+import net.okocraft.kansokusha.common.storage.OccurredRange;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import org.duckdb.DuckDBAppender;
@@ -107,6 +108,20 @@ public final class DuckDbStorageImpl implements Storage {
         "last_seen"
     );
 
+    // Values Kansokusha keeps about the database itself, such as the retention settings applied to it.
+    private static final String CREATE_METADATA_TABLE = """
+        CREATE TABLE IF NOT EXISTS metadata (
+            name VARCHAR NOT NULL PRIMARY KEY,
+            value VARCHAR NOT NULL
+        )
+        """;
+
+    private static final List<String> METADATA_COLUMNS = List.of("name", "value");
+
+    private static final String APPLIED_RETENTION = "applied_retention";
+
+    private static final long RANGE_BUCKET_MILLIS = 60_000;
+
     private static final byte[] PLAYER_ACTOR_KIND = "player".getBytes(StandardCharsets.UTF_8);
     private static final byte[] ENTITY_ACTOR_KIND = "entity".getBytes(StandardCharsets.UTF_8);
     private static final byte[] BLOCK_ACTOR_KIND = "block".getBytes(StandardCharsets.UTF_8);
@@ -147,6 +162,8 @@ public final class DuckDbStorageImpl implements Storage {
             verifyColumns(statement, "events", EVENTS_COLUMNS);
             statement.execute(CREATE_PLAYER_NAMES_TABLE);
             verifyColumns(statement, "player_names", PLAYER_NAMES_COLUMNS);
+            statement.execute(CREATE_METADATA_TABLE);
+            verifyColumns(statement, "metadata", METADATA_COLUMNS);
         } catch (SQLException e) {
             connection.close();
             throw e;
@@ -455,6 +472,103 @@ public final class DuckDbStorageImpl implements Storage {
                     e.addSuppressed(suppressed);
                 }
             }
+            throw e;
+        }
+    }
+
+    @Override
+    public Optional<String> appliedRetention() throws SQLException {
+        try (var statement = this.connection.prepareStatement("SELECT value FROM metadata WHERE name = ?")) {
+            statement.setString(1, APPLIED_RETENTION);
+            try (var rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(rows.getString(1)) : Optional.empty();
+            }
+        } finally {
+            // Ends the read transaction opened with auto-commit disabled.
+            this.connection.commit();
+        }
+    }
+
+    @Override
+    public void recordAppliedRetention(String retention) throws SQLException {
+        try (var statement = this.connection.prepareStatement(
+            "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?)"
+        )) {
+            statement.setString(1, APPLIED_RETENTION);
+            statement.setString(2, retention);
+            statement.executeUpdate();
+            this.connection.commit();
+        } catch (SQLException | RuntimeException e) {
+            this.rollback(e);
+            throw e;
+        }
+    }
+
+    @Override
+    public List<OccurredRange> expiryRecalculationRanges(long maxEvents) throws SQLException {
+        // Counts events per minute in one scan, then merges consecutive minutes up to maxEvents.
+        // A single minute holding more than maxEvents events becomes a range of its own.
+        var ranges = new ArrayList<OccurredRange>();
+        try (var reader = this.connection.duplicate();
+             var statement = reader.createStatement();
+             var rows = statement.executeQuery(
+                 "SELECT epoch_ms(occurred_at) // " + RANGE_BUCKET_MILLIS + " AS bucket, count(*) "
+                     + "FROM events GROUP BY bucket ORDER BY bucket"
+             )) {
+            long start = 0;
+            long end = 0;
+            long count = 0;
+            while (rows.next()) {
+                var bucketStart = rows.getLong(1) * RANGE_BUCKET_MILLIS;
+                var events = rows.getLong(2);
+                if (count > 0 && count + events > maxEvents) {
+                    ranges.add(new OccurredRange(Instant.ofEpochMilli(start), Instant.ofEpochMilli(end)));
+                    count = 0;
+                }
+                if (count == 0) {
+                    start = bucketStart;
+                }
+                end = bucketStart + RANGE_BUCKET_MILLIS;
+                count += events;
+            }
+            if (count > 0) {
+                ranges.add(new OccurredRange(Instant.ofEpochMilli(start), Instant.ofEpochMilli(end)));
+            }
+        }
+        return ranges;
+    }
+
+    @Override
+    public long recalculateExpiry(
+        Instant from,
+        Instant to,
+        Map<Key, Long> retentionMillis,
+        long defaultRetentionMillis
+    ) throws SQLException {
+        String retention;
+        if (retentionMillis.isEmpty()) {
+            retention = Long.toString(defaultRetentionMillis);
+        } else {
+            var cases = new StringBuilder("CASE event_type");
+            for (var entry : retentionMillis.entrySet()) {
+                cases.append(" WHEN ").append(literal(entry.getKey().asString()))
+                    .append(" THEN ").append(entry.getValue().longValue());
+            }
+            retention = cases.append(" ELSE ").append(defaultRetentionMillis).append(" END").toString();
+        }
+        // The same millisecond arithmetic as at submission, so unchanged events compare equal.
+        var expiry = "epoch_ms(epoch_ms(occurred_at) + (" + retention + ")::BIGINT)";
+        try (var statement = this.connection.createStatement()) {
+            var updated = statement.executeUpdate(
+                "UPDATE events SET expires_at = " + expiry
+                    + " WHERE occurred_at >= epoch_ms(" + from.toEpochMilli() + "::BIGINT)"
+                    + " AND occurred_at < epoch_ms(" + to.toEpochMilli() + "::BIGINT)"
+                    + " AND expires_at <> " + expiry
+            );
+            this.connection.commit();
+            return updated;
+        } catch (SQLException | RuntimeException e) {
+            this.rollback(e);
             throw e;
         }
     }

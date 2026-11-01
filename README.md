@@ -60,7 +60,10 @@ contained in the packaged artifact and verifies the flushed event.
 retention periods recommended by `docs/v1-built-in-event-catalog.md` and
 `search-time-zone` (empty by default, using the server system time zone) for search expressions such as `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit offset. Restart the
-server or proxy to apply changes. Existing configurations with `search-time-zone: UTC`
+server or proxy to apply changes. When the `retention` periods differ from the ones last applied to the
+database, startup first recalculates the expiry of the stored events (logging when it starts and ends),
+and only then starts deleting and archiving expired events, so a lengthened period also keeps events
+that the old period would already have removed. Existing configurations with `search-time-zone: UTC`
 keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
 The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
@@ -120,15 +123,17 @@ The packaged Paper verification and the manual Paper/Folia interaction checklist
 `/kansokusha` and `/kansokusha help` show the commands available to the sender.
 Running `/kansokusha event` without an ID shows its usage.
 
-`/kansokusha health` (permission `kansokusha.command.health`) shows the state of the event
+Database operations are under `/kansokusha admin`.
+
+`/kansokusha admin health` (permission `kansokusha.command.admin.health`) shows the state of the event
 database: stored event and player name counts, the time range of stored events, the sizes of the
-database file and its write-ahead log, and the write queue. The queue lines count events written,
-lost to write failures, and rejected by a full queue since startup; the last two are highlighted
-when they are not zero. The events written since startup are also listed per event type, most
-frequent first. `/kansokusha health stored` lists, for each event type, the stored event count and its share,
+database file and its write-ahead log, and the write queue. The queue lines count events lost to
+write failures and rejected by a full queue since startup, highlighted when they are not zero.
+`/kansokusha admin health stored` lists, for each event type, the stored event count and its share,
 the count of the last 24 hours and the time of the latest event; it scans the
 whole events table on a separate connection, so it does not block writes but can take a while on
 a large database.
+
 
 English and Japanese messages are provided by default, with English as the fallback.
 Administrators can customize `languages/*.properties` in the plugin data directory.

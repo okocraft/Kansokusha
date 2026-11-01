@@ -57,7 +57,7 @@ public final class KansokushaCommands {
                 .then(BrigadierCommand.literalArgumentBuilder("help")
                     .executes(context -> sendHelp(context.getSource())))
                 .then(VersionCommand.createVersionCommand())
-                .then(HealthCommand.createHealthCommand(backend))
+                .then(AdminCommand.createAdminCommand(backend))
                 .then(SearchCommand.createSearchCommand(backend, clock, searchTimeZone))
                 .then(EventCommand.createEventCommand(backend, clock, searchTimeZone))
         );
