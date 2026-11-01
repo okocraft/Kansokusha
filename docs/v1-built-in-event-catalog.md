@@ -61,7 +61,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:player_death` | `PlayerDeathEvent` | `audit` | death context plus detached storage/armor/offhand inventory snapshot |
 | `kansokusha:paper_chat` | `AsyncChatEvent` | `default` | original raw message only |
 | `kansokusha:paper_player_command` | `PlayerCommandPreprocessEvent` | `audit` | original raw command line only |
-| `kansokusha:paper_server_command` | `ServerCommandEvent` / `RemoteServerCommandEvent` | `audit` | source descriptor + original raw command only |
+| `kansokusha:paper_server_command` | `ServerCommandEvent` / `RemoteServerCommandEvent` | `audit` | source descriptor + original raw command only; runs of the same command by the same command block are summed per 1-minute window into one event stamped with the window start and carrying `attempt_count` (console and rcon input is recorded one by one) |
 | `kansokusha:entity_place` | `EntityPlaceEvent` / `HangingPlaceEvent` | `audit` | #156 hanging place is canonicalized into #155 |
 | `kansokusha:entity_break` | `HangingBreakEvent` / `HangingBreakByEntityEvent` | `audit` | by-entity subclass is canonicalized into the same event type without duplicate submission |
 | `kansokusha:entity_death` | selected `EntityDeathEvent` | `audit` | non-player deaths with a direct player killer, or villager/named/tamed/armor-stand targets |

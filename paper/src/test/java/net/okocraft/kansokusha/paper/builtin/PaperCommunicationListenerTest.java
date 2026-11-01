@@ -32,6 +32,7 @@ import org.mockito.Mockito;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -187,6 +188,9 @@ class PaperCommunicationListenerTest {
         Mockito.when(event.getCommand()).thenReturn("setblock ~ ~ ~ stone");
         listener.record(event);
 
+        Assertions.assertTrue(api.submissions.isEmpty(), "Command block runs are buffered until their window ends.");
+        listener.flushAll();
+
         assertServerSubmission(
             onlySubmission(api),
             "command_block",
@@ -225,6 +229,74 @@ class PaperCommunicationListenerTest {
             null
         );
         Assertions.assertEquals("list", onlySearchText(api));
+    }
+
+    @Test
+    void testRepeatedCommandBlockRunsAreAggregatedPerWindow() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var instant = new java.util.concurrent.atomic.AtomicReference<>(OCCURRED_AT);
+        var clock = new Clock() {
+            @Override
+            public ZoneOffset getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public java.time.Instant instant() {
+                return instant.get();
+            }
+        };
+        var listener = PaperServerCommandListener.register(api, PaperBlockEventTestSupport.SERVER_KEY, clock);
+        var world = PaperBlockEventTestSupport.world();
+        var block = block(world, 21, 70, -4);
+        var sender = Mockito.mock(BlockCommandSender.class);
+        Mockito.when(sender.getName()).thenReturn("command-block");
+        Mockito.when(sender.getBlock()).thenReturn(block);
+        var blockData = Mockito.mock(BlockData.class);
+        Mockito.when(blockData.getMaterial()).thenReturn(Material.REPEATING_COMMAND_BLOCK);
+        Mockito.when(block.getBlockData()).thenReturn(blockData);
+
+        for (var command : List.of("tick", "tick", "tick", "other")) {
+            var event = Mockito.mock(ServerCommandEvent.class);
+            Mockito.when(event.getSender()).thenReturn(sender);
+            Mockito.when(event.getCommand()).thenReturn(command);
+            listener.record(event);
+        }
+        var console = Mockito.mock(org.bukkit.command.ConsoleCommandSender.class);
+        Mockito.when(console.getName()).thenReturn("CONSOLE");
+        var consoleEvent = Mockito.mock(ServerCommandEvent.class);
+        Mockito.when(consoleEvent.getSender()).thenReturn(console);
+        Mockito.when(consoleEvent.getCommand()).thenReturn("list");
+        listener.record(consoleEvent);
+
+        Assertions.assertEquals(1, api.submissions.size(), "Console input is recorded immediately.");
+        api.submissions.clear();
+        api.searchTexts.clear();
+
+        listener.flushDue();
+        Assertions.assertTrue(api.submissions.isEmpty());
+
+        instant.set(OCCURRED_AT.plus(PaperServerCommandListener.COMMAND_BLOCK_WINDOW));
+        listener.flushDue();
+
+        Assertions.assertEquals(2, api.submissions.size());
+        var counts = new java.util.HashMap<String, Integer>();
+        var texts = List.copyOf(api.searchTexts);
+        var submissions = List.copyOf(api.submissions);
+        for (var i = 0; i < submissions.size(); i++) {
+            counts.put(texts.get(i), PaperPayloadNbtCodec.decode(submissions.get(i).payload()).getIntOr("attempt_count", 0));
+            Assertions.assertEquals(OCCURRED_AT, submissions.get(i).occurredAt());
+        }
+        Assertions.assertEquals(java.util.Map.of("tick", 3, "other", 1), counts);
+
+        api.submissions.clear();
+        listener.flushAll();
+        Assertions.assertTrue(api.submissions.isEmpty(), "Flushed runs are not submitted twice.");
     }
 
     private static PaperServerCommandListener serverListener(

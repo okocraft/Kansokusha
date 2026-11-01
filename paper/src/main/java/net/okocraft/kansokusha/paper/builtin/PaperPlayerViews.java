@@ -18,7 +18,7 @@ final class PaperPlayerViews {
         of("player_death", "<actor>death<context>", OTHER, "", "death_message last_damage_cause", "death_message last_damage_cause"),
         of("paper_chat", "<actor>chat<context>", OTHER, "", "message", "message"),
         of("paper_player_command", "<actor>command<context>", OTHER, "", "command", "command"),
-        of("paper_server_command", "server command<context>", OTHER, "", "source_kind source_name command", "source_kind source_name command")
+        of("paper_server_command", "server command<context>", OTHER, "", "source_kind source_name command attempt_count", "source_kind source_name command attempt_count")
     );
 
     private PaperPlayerViews() {
