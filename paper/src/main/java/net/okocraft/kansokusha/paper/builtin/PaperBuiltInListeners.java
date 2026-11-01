@@ -65,7 +65,7 @@ public final class PaperBuiltInListeners {
         PaperWhitelistChangeListener::register
     );
 
-    private static final Duration FLUSH_INTERVAL = Duration.ofSeconds(10);
+    private static final Duration FLUSH_INTERVAL = Duration.ofSeconds(5);
 
     private PaperBuiltInListeners() {
     }

@@ -116,7 +116,7 @@ class PaperContainerTransferListenerTest {
         listener.flushDue();
         Assertions.assertTrue(api.submissions.isEmpty(), "The window has not ended yet.");
 
-        clock.instant = OCCURRED_AT.plus(PaperContainerTransferListener.AGGREGATION_WINDOW);
+        clock.instant = OCCURRED_AT.plus(PaperContainerTransferListener.CONTAINER_WINDOW);
         listener.flushDue();
 
         Assertions.assertEquals(3, api.submissions.size(), "Different items and directions stay separate.");
@@ -140,11 +140,34 @@ class PaperContainerTransferListenerTest {
         Assertions.assertTrue(api.submissions.isEmpty(), "Flushed transfers are not submitted twice.");
 
         PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.DIAMOND, 1)));
-        clock.instant = clock.instant.plus(PaperContainerTransferListener.AGGREGATION_WINDOW);
+        clock.instant = clock.instant.plus(PaperContainerTransferListener.CONTAINER_WINDOW);
         PaperListenerTestSupport.fire(listener, transfer(source, destination, ItemStack.of(Material.DIAMOND, 1)));
         Assertions.assertEquals(1, api.submissions.size(), "A transfer after the window closes the previous one.");
         listener.flushAll();
         Assertions.assertEquals(2, api.submissions.size());
+    }
+
+    @Test
+    void testTransfersBetweenHoppersUseTheLongWindow() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var clock = new MutableClock(OCCURRED_AT);
+        var listener = PaperContainerTransferListener.register(api, PaperBlockEventTestSupport.SERVER_KEY, clock);
+        var world = PaperBlockEventTestSupport.world();
+        var upper = inventory(InventoryType.HOPPER, 5, new Location(world, 1.5, 65, 1.5));
+        var lower = inventory(InventoryType.HOPPER, 5, new Location(world, 1.5, 64, 1.5));
+        var chest = inventory(InventoryType.CHEST, 27, new Location(world, 1.5, 63, 1.5));
+
+        PaperListenerTestSupport.fire(listener, transfer(upper, lower, ItemStack.of(Material.DIAMOND, 1)));
+        PaperListenerTestSupport.fire(listener, transfer(lower, chest, ItemStack.of(Material.DIAMOND, 1)));
+
+        clock.instant = OCCURRED_AT.plus(PaperContainerTransferListener.CONTAINER_WINDOW);
+        listener.flushDue();
+        Assertions.assertEquals(1, api.submissions.size(), "Only the move into the chest uses the short window.");
+        api.submissions.clear();
+
+        clock.instant = OCCURRED_AT.plus(PaperContainerTransferListener.CHAIN_WINDOW);
+        listener.flushDue();
+        Assertions.assertEquals(1, api.submissions.size(), "The hopper-to-hopper move is submitted after the long window.");
     }
 
     private static InventoryMoveItemEvent transfer(Inventory source, Inventory destination, ItemStack item) {

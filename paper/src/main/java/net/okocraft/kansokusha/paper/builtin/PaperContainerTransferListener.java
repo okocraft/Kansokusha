@@ -28,15 +28,21 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Hoppers and hopper minecarts fire the event for every move attempt, which dominates the database
  * (tens of millions of events per hour on a busy server). Attempts with the same source, destination,
- * initiator and item are therefore summed per {@link #AGGREGATION_WINDOW} into one event that carries
- * the number of attempts and the total item amount. The event is stamped with the start of its window.</p>
+ * initiator and item are therefore summed into one event that carries the number of attempts and the
+ * total item amount. The event is stamped with the start of its window.</p>
+ *
+ * <p>Moves from one hopper to another only pass items along a chain, and the moves into and out of the
+ * chain are recorded as well, so they are summed over the long {@link #CHAIN_WINDOW}. Moves between a
+ * hopper and any other container change what that container holds, so they use the short
+ * {@link #CONTAINER_WINDOW} to keep their times precise.</p>
  */
 @ApiStatus.Internal
 @NotNullByDefault
 public final class PaperContainerTransferListener implements Listener, PaperBufferedListener {
 
     static final Key EVENT_TYPE = Key.key("kansokusha", "container_transfer");
-    static final Duration AGGREGATION_WINDOW = Duration.ofMinutes(1);
+    static final Duration CHAIN_WINDOW = Duration.ofMinutes(10);
+    static final Duration CONTAINER_WINDOW = Duration.ofSeconds(15);
 
     // Bounds the memory used by the aggregation; transfers beyond it are submitted one by one.
     static final int MAX_PENDING = 100_000;
@@ -130,8 +136,11 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
         var initiator = PaperContainerPayloadCodec.snapshotInventory(initiatorInventory);
         var item = event.getItem().clone();
         item.setAmount(1);
+        var chain = sourceInventory.getType() == InventoryType.HOPPER
+            && destinationInventory.getType() == InventoryType.HOPPER;
         return new Pending(
             now,
+            chain ? CHAIN_WINDOW : CONTAINER_WINDOW,
             source,
             destination,
             initiator,
@@ -247,6 +256,7 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
     private static final class Pending {
 
         private final Instant start;
+        private final Duration window;
         private final PaperContainerPayloadCodec.InventorySnapshot source;
         private final PaperContainerPayloadCodec.InventorySnapshot destination;
         private final PaperContainerPayloadCodec.InventorySnapshot initiator;
@@ -258,6 +268,7 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
 
         private Pending(
             Instant start,
+            Duration window,
             PaperContainerPayloadCodec.InventorySnapshot source,
             PaperContainerPayloadCodec.InventorySnapshot destination,
             PaperContainerPayloadCodec.InventorySnapshot initiator,
@@ -266,6 +277,7 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
             long amount
         ) {
             this.start = start;
+            this.window = window;
             this.source = source;
             this.destination = destination;
             this.initiator = initiator;
@@ -275,7 +287,7 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
         }
 
         private boolean isDue(Instant now) {
-            return !now.isBefore(this.start.plus(AGGREGATION_WINDOW));
+            return !now.isBefore(this.start.plus(this.window));
         }
 
         private synchronized boolean add(long amount) {
