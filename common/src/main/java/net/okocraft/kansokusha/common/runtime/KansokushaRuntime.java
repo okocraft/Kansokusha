@@ -11,11 +11,11 @@ import net.okocraft.kansokusha.common.search.DatabaseHealth;
 import net.okocraft.kansokusha.common.search.EventDetail;
 import net.okocraft.kansokusha.common.search.EventTypeStatistics;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
-import net.okocraft.kansokusha.common.search.RetentionAlreadyRunningException;
 import net.okocraft.kansokusha.common.search.SearchMetadata;
 import net.okocraft.kansokusha.common.search.SearchPage;
 import net.okocraft.kansokusha.common.search.SearchRequest;
 import net.okocraft.kansokusha.common.storage.DuckDbStorage;
+import net.okocraft.kansokusha.common.storage.OccurredRange;
 import net.okocraft.kansokusha.common.storage.QueuedEvent;
 import net.okocraft.kansokusha.common.storage.Storage;
 import org.jetbrains.annotations.NotNullByDefault;
@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -49,6 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Implements {@link KansokushaApi} on top of a bounded queue and one storage thread.
@@ -63,8 +65,8 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
     public static final String ARCHIVE_DIRECTORY = "archive";
-    // Small enough that one chunk of a busy server's events is rewritten within about a second.
-    private static final Duration RETENTION_CHUNK = Duration.ofHours(1);
+    // Small enough that one range is rewritten quickly, so the write queue does not fill up meanwhile.
+    private static final long MAX_EVENTS_PER_RECALCULATION = 100_000;
     private static final DateTimeFormatter ARCHIVE_TIMESTAMP =
         DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssSSS'Z'", Locale.ROOT);
 
@@ -89,7 +91,12 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     // Avoids taking ArrayBlockingQueue's lock again just to check its size after offer().
     private final AtomicInteger queuedEvents = new AtomicInteger();
     private final AtomicLong lostEvents = new AtomicLong();
-    private final AtomicBoolean applyingRetention = new AtomicBoolean();
+    private final Consumer<String> infoReporter;
+    private final Duration cleanupInterval;
+    private final Duration archiveInterval;
+    private final CompletableFuture<Void> maintenance = new CompletableFuture<>();
+    // Only accessed on the storage thread. The final cleanup on close must not use expiry that is not updated yet.
+    private boolean maintenanceStarted;
     private final AtomicLong rejectedEvents = new AtomicLong();
     private final ScheduledExecutorService storageThread;
     // Runs the callbacks of query results so that rendering never occupies the storage thread.
@@ -107,8 +114,12 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         KansokushaConfig config,
         Storage storage,
         Path archiveDirectory,
+        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) {
+        this.infoReporter = infoReporter;
+        this.cleanupInterval = config.cleanupInterval();
+        this.archiveInterval = config.archiveInterval();
         this.localServerKey = Optional.ofNullable(localServerKey);
         this.retention = config.retention();
         this.storage = storage;
@@ -126,12 +137,14 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
      * Opens the database in the data directory and starts the storage thread.
      *
      * @param localServerKey the local server identity, or {@code null} for proxies
+     * @param infoReporter   receives progress of long-running maintenance, such as applying changed retention
      * @param errorReporter  receives storage failures so that administrators can notice them
      */
     public static KansokushaRuntime start(
         Path dataDirectory,
         KansokushaConfig config,
         @Nullable Key localServerKey,
+        Consumer<String> infoReporter,
         BiConsumer<String, Throwable> errorReporter
     ) throws IOException, SQLException {
         var storage = DuckDbStorage.open(
@@ -140,7 +153,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             config.duckDb().memoryLimit().orElse(""),
             config.duckDb().threads()
         );
-        return start(storage, dataDirectory.resolve(ARCHIVE_DIRECTORY), config, localServerKey, errorReporter);
+        return start(
+            storage, dataDirectory.resolve(ARCHIVE_DIRECTORY), config, localServerKey, infoReporter, errorReporter
+        );
     }
 
     static KansokushaRuntime start(
@@ -150,7 +165,21 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         @Nullable Key localServerKey,
         BiConsumer<String, Throwable> errorReporter
     ) {
-        var runtime = new KansokushaRuntime(localServerKey, config, storage, archiveDirectory, errorReporter);
+        return start(storage, archiveDirectory, config, localServerKey, message -> {
+        }, errorReporter);
+    }
+
+    static KansokushaRuntime start(
+        Storage storage,
+        Path archiveDirectory,
+        KansokushaConfig config,
+        @Nullable Key localServerKey,
+        Consumer<String> infoReporter,
+        BiConsumer<String, Throwable> errorReporter
+    ) {
+        var runtime = new KansokushaRuntime(
+            localServerKey, config, storage, archiveDirectory, infoReporter, errorReporter
+        );
 
         var flushMillis = config.flushInterval().toMillis();
         runtime.storageThread.scheduleWithFixedDelay(
@@ -159,22 +188,124 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             flushMillis,
             TimeUnit.MILLISECONDS
         );
-        runtime.storageThread.scheduleWithFixedDelay(
-            runtime::deleteExpired,
+        // Cleanup and archiving start only once stored events have the expiry of the current retention
+        // settings, so that a lengthened retention period is not cut short by the old expiry.
+        runtime.storageThread.execute(runtime::applyRetentionThenStartMaintenance);
+        return runtime;
+    }
+
+    // Runs on the storage thread.
+    private void applyRetentionThenStartMaintenance() {
+        var retention = retentionFingerprint(this.retention);
+        try {
+            if (this.storage.appliedRetention().filter(retention::equals).isPresent()) {
+                this.startMaintenance();
+                return;
+            }
+        } catch (SQLException | RuntimeException e) {
+            this.reportRetentionFailure(e);
+            return;
+        }
+
+        this.infoReporter.accept(
+            "The retention settings differ from the ones applied to the stored events. Recalculating their expiry"
+                + " before deleting or archiving expired events; this can take a while on a large database."
+        );
+        var retentionMillis = new HashMap<Key, Long>();
+        this.retention.durations().forEach((eventType, duration) -> retentionMillis.put(eventType, duration.toMillis()));
+        var defaultMillis = this.retention.defaultDuration().toMillis();
+        try {
+            // Finding the ranges scans every event, so it runs on its own connection off the storage thread.
+            this.callbackExecutor.execute(() -> {
+                try {
+                    var ranges = this.storage.expiryRecalculationRanges(MAX_EVENTS_PER_RECALCULATION);
+                    this.storageThread.execute(
+                        () -> this.recalculateExpiry(ranges, 0, 0, retentionMillis, defaultMillis, retention)
+                    );
+                } catch (RejectedExecutionException ignored) {
+                    // Stopping; the next start recalculates again.
+                } catch (SQLException | RuntimeException e) {
+                    this.reportRetentionFailure(e);
+                }
+            });
+        } catch (RejectedExecutionException ignored) {
+            // Stopping; the next start recalculates again.
+        }
+    }
+
+    // Runs on the storage thread. Each range is a separate task, so flushes that became due in the meantime
+    // run between ranges and the write queue keeps draining.
+    private void recalculateExpiry(
+        List<OccurredRange> ranges,
+        int index,
+        long changed,
+        Map<Key, Long> retentionMillis,
+        long defaultMillis,
+        String retention
+    ) {
+        try {
+            if (index == ranges.size()) {
+                this.storage.recordAppliedRetention(retention);
+                this.infoReporter.accept("Recalculated the expiry of stored events; " + changed + " changed.");
+                this.startMaintenance();
+                return;
+            }
+            var range = ranges.get(index);
+            var total = changed + this.storage.recalculateExpiry(range.from(), range.to(), retentionMillis, defaultMillis);
+            this.storageThread.execute(
+                () -> this.recalculateExpiry(ranges, index + 1, total, retentionMillis, defaultMillis, retention)
+            );
+        } catch (RejectedExecutionException ignored) {
+            // Stopping; the next start recalculates again. Ranges already done are skipped as unchanged.
+        } catch (SQLException | RuntimeException e) {
+            this.reportRetentionFailure(e);
+        }
+    }
+
+    private void reportRetentionFailure(Exception failure) {
+        if ((this.submissionState.get() & CLOSED_MASK) != 0) {
+            return;
+        }
+        this.errorReporter.accept(
+            "Failed to apply the retention settings to stored events. Expired events are neither deleted nor"
+                + " archived until Kansokusha starts again and succeeds.",
+            failure
+        );
+    }
+
+    // Runs on the storage thread.
+    private void startMaintenance() {
+        this.maintenanceStarted = true;
+        this.storageThread.scheduleWithFixedDelay(
+            this::deleteExpired,
             0,
-            config.cleanupInterval().toMillis(),
+            this.cleanupInterval.toMillis(),
             TimeUnit.MILLISECONDS
         );
-        if (!runtime.retention.archivedEventTypes().isEmpty()) {
+        if (!this.retention.archivedEventTypes().isEmpty()) {
             // Also runs at startup, so that servers restarting more often than the interval still archive.
-            runtime.storageThread.scheduleWithFixedDelay(
-                runtime::archiveExpired,
+            this.storageThread.scheduleWithFixedDelay(
+                this::archiveExpired,
                 0,
-                config.archiveInterval().toMillis(),
+                this.archiveInterval.toMillis(),
                 TimeUnit.MILLISECONDS
             );
         }
-        return runtime;
+        this.maintenance.complete(null);
+    }
+
+    // Durations only: whether a policy archives does not change expires_at.
+    static String retentionFingerprint(KansokushaConfig.Retention retention) {
+        var fingerprint = new StringBuilder("default=").append(retention.defaultDuration().toMillis());
+        new TreeMap<>(retention.durations().entrySet().stream().collect(
+            java.util.stream.Collectors.toMap(entry -> entry.getKey().asString(), entry -> entry.getValue().toMillis())
+        )).forEach((eventType, millis) -> fingerprint.append(';').append(eventType).append('=').append(millis));
+        return fingerprint.toString();
+    }
+
+    /** Completes once cleanup and archiving have started. */
+    CompletableFuture<Void> maintenanceStarted() {
+        return this.maintenance;
     }
 
     @Override
@@ -264,80 +395,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                 this.rejectedEvents.get()
             )
         ));
-    }
-
-    @Override
-    public KansokushaConfig.Retention retention() {
-        return this.retention;
-    }
-
-    @Override
-    public CompletableFuture<Long> applyRetention() {
-        if (!this.applyingRetention.compareAndSet(false, true)) {
-            return CompletableFuture.failedFuture(new RetentionAlreadyRunningException());
-        }
-        var retentionMillis = new HashMap<Key, Long>();
-        this.retention.durations().forEach((eventType, duration) -> retentionMillis.put(eventType, duration.toMillis()));
-        var defaultMillis = this.retention.defaultDuration().toMillis();
-
-        var result = new CompletableFuture<Long>();
-        result.whenComplete((updated, failure) -> {
-            this.applyingRetention.set(false);
-            if (failure != null) {
-                this.errorReporter.accept("Failed to apply the retention settings to stored events.", failure);
-            }
-        });
-        try {
-            this.storageThread.execute(() -> {
-                try {
-                    var stored = this.storage.health();
-                    if (stored.oldestEvent().isEmpty() || stored.newestEvent().isEmpty()) {
-                        this.complete(result, 0L, null);
-                        return;
-                    }
-                    var end = stored.newestEvent().get().plusMillis(1);
-                    this.applyRetentionChunk(
-                        result, stored.oldestEvent().get(), end, retentionMillis, defaultMillis, 0
-                    );
-                } catch (SQLException | RuntimeException e) {
-                    this.complete(result, null, e);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            result.completeExceptionally(new IllegalStateException("Kansokusha is stopped.", e));
-        }
-        return result;
-    }
-
-    // Runs on the storage thread. Each chunk is a separate task, so flushes scheduled in the meantime run
-    // between chunks and the write queue keeps draining.
-    private void applyRetentionChunk(
-        CompletableFuture<Long> result,
-        Instant from,
-        Instant end,
-        Map<Key, Long> retentionMillis,
-        long defaultMillis,
-        long updatedSoFar
-    ) {
-        try {
-            var to = from.plus(RETENTION_CHUNK);
-            if (to.isAfter(end)) {
-                to = end;
-            }
-            var updated = updatedSoFar + this.storage.recalculateExpiry(from, to, retentionMillis, defaultMillis);
-            if (!to.isBefore(end)) {
-                this.complete(result, updated, null);
-                return;
-            }
-            var next = to;
-            this.storageThread.execute(
-                () -> this.applyRetentionChunk(result, next, end, retentionMillis, defaultMillis, updated)
-            );
-        } catch (RejectedExecutionException e) {
-            this.complete(result, null, new IllegalStateException("Kansokusha stopped while applying retention.", e));
-        } catch (SQLException | RuntimeException e) {
-            this.complete(result, null, e);
-        }
     }
 
     @Override
@@ -487,7 +544,9 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         // to the thread that created it, even when calls are not concurrent.
         this.storageThread.execute(() -> {
             this.flush(Integer.MAX_VALUE);
-            this.deleteExpired();
+            if (this.maintenanceStarted) {
+                this.deleteExpired();
+            }
             try {
                 this.storage.close();
             } catch (SQLException e) {

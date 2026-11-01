@@ -60,7 +60,10 @@ contained in the packaged artifact and verifies the flushed event.
 retention periods recommended by `docs/v1-built-in-event-catalog.md` and
 `search-time-zone` (empty by default, using the server system time zone) for search expressions such as `today`,
 `yesterday`, date-only bounds, and datetimes without an explicit offset. Restart the
-server or proxy to apply changes. Existing configurations with `search-time-zone: UTC`
+server or proxy to apply changes. When the `retention` periods differ from the ones last applied to the
+database, startup first recalculates the expiry of the stored events (logging when it starts and ends),
+and only then starts deleting and archiving expired events, so a lengthened period also keeps events
+that the old period would already have removed. Existing configurations with `search-time-zone: UTC`
 keep UTC; set `Asia/Tokyo` or another IANA zone explicitly to change them.
 The resolved zone is logged at startup. See `docs/design.md` for the recording pipeline and
 storage layout.
@@ -131,12 +134,6 @@ the count of the last 24 hours and the time of the latest event; it scans the
 whole events table on a separate connection, so it does not block writes but can take a while on
 a large database.
 
-The expiry of an event is fixed when it is recorded, so a changed `retention` setting applies only to
-new events. `/kansokusha admin retention apply` (permission `kansokusha.command.admin.retention`) shows
-the retention periods the server was started with; `/kansokusha admin retention apply confirm`
-recalculates the expiry of every stored event from them. The work runs in hourly slices of stored
-events that interleave with writes, so it does not stall the write queue. Events that become expired
-are deleted by the next cleanup or archived by the next archive run, as usual.
 
 English and Japanese messages are provided by default, with English as the fallback.
 Administrators can customize `languages/*.properties` in the plugin data directory.

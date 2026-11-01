@@ -195,69 +195,62 @@ class KansokushaRuntimeTest {
     }
 
     @Test
-    void testApplyRetentionRewritesEveryChunkOfStoredEvents(@TempDir Path dir) throws Exception {
-        var storage = DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME));
-        var now = Instant.now();
-        // Spread over several hourly chunks, with the default retention of the test config (1 day) changed below.
-        storage.append(List.of(
-            new QueuedEvent(event(now.minus(Duration.ofHours(5))), now.minus(Duration.ofHours(5)).toEpochMilli(),
-                now.minus(Duration.ofHours(5)).plus(Duration.ofDays(400)).toEpochMilli(), null, null),
-            new QueuedEvent(event(now.minus(Duration.ofHours(1))), now.minus(Duration.ofHours(1)).toEpochMilli(),
-                now.minus(Duration.ofHours(1)).plus(Duration.ofDays(400)).toEpochMilli(), null, null),
-            new QueuedEvent(event(now), now.toEpochMilli(), now.plus(Duration.ofDays(1)).toEpochMilli(), null, null)
-        ));
+    void testChangedRetentionIsAppliedToStoredEventsBeforeTheFirstCleanup(@TempDir Path dir) throws Exception {
+        var file = dir.resolve(KansokushaRuntime.DATABASE_FILENAME);
+        var occurredAt = Instant.now().minus(Duration.ofDays(2));
+        try (var storage = DuckDbStorageImpl.open(file)) {
+            // Recorded under a 1-day retention: expired by the old expiry, alive under the 30 days below.
+            storage.append(List.of(new QueuedEvent(
+                event(occurredAt), occurredAt.toEpochMilli(), occurredAt.plus(Duration.ofDays(1)).toEpochMilli(), null, null
+            )));
+            storage.recordAppliedRetention(KansokushaRuntime.retentionFingerprint(
+                new KansokushaConfig.Retention(Map.of(), Duration.ofDays(1))
+            ));
+        }
+        var base = config(10, BATCH_SIZE);
+        var config = new KansokushaConfig(
+            base.serverKey(), base.queueCapacity(), base.batchSize(), base.flushInterval(), base.cleanupInterval(),
+            base.archiveInterval(), base.searchTimeZone(),
+            new KansokushaConfig.Retention(Map.of(), Duration.ofDays(30))
+        );
+
+        var messages = new java.util.concurrent.CopyOnWriteArrayList<String>();
         var runtime = KansokushaRuntime.start(
-            storage,
-            Path.of("unused-archive"),
-            config(10, BATCH_SIZE),
-            SERVER_KEY,
+            DuckDbStorageImpl.open(file), Path.of("unused-archive"), config, SERVER_KEY, messages::add,
             (message, failure) -> {
                 throw new AssertionError(message, failure);
             }
         );
-        try {
-            Assertions.assertEquals(2L, runtime.applyRetention().get(5, TimeUnit.SECONDS));
-            Assertions.assertEquals(0L, runtime.applyRetention().get(5, TimeUnit.SECONDS));
-        } finally {
-            runtime.close();
-        }
+        runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
+        runtime.close();
+
+        Assertions.assertEquals(1, countEvents(dir), "the lengthened retention keeps the event");
+        Assertions.assertTrue(messages.getLast().contains("1 changed"), messages.toString());
+
+        // The same settings are not applied again.
+        messages.clear();
+        runtime = KansokushaRuntime.start(
+            DuckDbStorageImpl.open(file), Path.of("unused-archive"), config, SERVER_KEY, messages::add,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
+        runtime.close();
+        Assertions.assertEquals(List.of(), messages);
     }
 
     @Test
-    void testApplyRetentionRejectsAConcurrentRun() throws Exception {
-        var storage = new BlockingLookupStorage();
-        var runtime = KansokushaRuntime.start(
-            storage,
-            Path.of("unused-archive"),
-            config(10, BATCH_SIZE),
-            SERVER_KEY,
-            (message, failure) -> {
-            }
+    void testRetentionFingerprintIgnoresArchivingAndOrder() {
+        var a = Key.key("example", "a");
+        var b = Key.key("example", "b");
+        var durations = new java.util.LinkedHashMap<Key, Duration>();
+        durations.put(b, Duration.ofDays(2));
+        durations.put(a, Duration.ofDays(1));
+        Assertions.assertEquals(
+            "default=86400000;example:a=86400000;example:b=172800000",
+            KansokushaRuntime.retentionFingerprint(new KansokushaConfig.Retention(durations, Duration.ofDays(1), Set.of(a)))
         );
-        try {
-            // Hold the storage thread so that the first run is still pending.
-            var lookup = runtime.findEvent(UUID.fromString("0199a123-4567-789a-8bcd-ef0123456792"));
-            Assertions.assertTrue(storage.lookupStarted.await(5, TimeUnit.SECONDS));
-            var first = runtime.applyRetention();
-            var second = runtime.applyRetention();
-            var failure = Assertions.assertThrows(
-                java.util.concurrent.ExecutionException.class,
-                () -> second.get(5, TimeUnit.SECONDS)
-            );
-            Assertions.assertInstanceOf(
-                net.okocraft.kansokusha.common.search.RetentionAlreadyRunningException.class,
-                failure.getCause()
-            );
-            storage.lookupRelease.countDown();
-            lookup.get(5, TimeUnit.SECONDS);
-            // BlockingLookupStorage has no health, so the first run fails and frees the slot.
-            Assertions.assertThrows(java.util.concurrent.ExecutionException.class, () -> first.get(5, TimeUnit.SECONDS));
-            Assertions.assertThrows(java.util.concurrent.ExecutionException.class,
-                () -> runtime.applyRetention().get(5, TimeUnit.SECONDS));
-        } finally {
-            storage.lookupRelease.countDown();
-            runtime.close();
-        }
     }
 
     @Test
@@ -388,6 +381,7 @@ class KansokushaRuntimeTest {
             runtime.registerEventType(new EventTypeDefinition(EVENT_TYPE, PayloadGeneration.FIRST));
             runtime.submit(event(Instant.now().minus(Duration.ofDays(2))));
             runtime.submit(event(Instant.now()));
+            runtime.maintenanceStarted().get(5, TimeUnit.SECONDS);
         }
 
         Assertions.assertEquals(1, countEvents(dir));

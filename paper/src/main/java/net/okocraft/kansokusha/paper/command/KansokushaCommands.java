@@ -9,7 +9,6 @@ import net.okocraft.kansokusha.common.command.EventCommandMessages;
 import net.okocraft.kansokusha.common.command.EventFieldMessages;
 import net.okocraft.kansokusha.common.command.EventPresentationMessages;
 import net.okocraft.kansokusha.common.command.HealthCommandMessages;
-import net.okocraft.kansokusha.common.command.RetentionCommandMessages;
 import net.okocraft.kansokusha.common.command.SearchCommandMessages;
 import net.okocraft.kansokusha.common.search.EventSearchBackend;
 import net.okocraft.kansokusha.common.search.query.SearchQueryMessages;
@@ -42,7 +41,6 @@ public final class KansokushaCommands {
             InspectionSearchMessages.defaultMessages(),
             EventFieldMessages.defaultMessages(),
             HealthCommandMessages.defaultMessages(),
-            RetentionCommandMessages.defaultMessages(),
             PaperViewMessages.defaultMessages()
         ));
         defaults.addAll(PaperEventPresenter.defaultMessages());

@@ -3,7 +3,6 @@ package net.okocraft.kansokusha.common.search;
 import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.api.event.EventSubmission;
-import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
 
@@ -55,22 +54,6 @@ public interface EventSearchBackend {
      */
     default CompletableFuture<Map<Key, EventTypeStatistics>> storedEventStatistics() {
         return CompletableFuture.failedFuture(new UnsupportedOperationException("Event statistics are unavailable"));
-    }
-
-    /** The retention configuration the runtime was started with. */
-    default KansokushaConfig.Retention retention() {
-        throw new UnsupportedOperationException("Retention is unavailable");
-    }
-
-    /**
-     * Recomputes the expiry of every stored event from {@link #retention()}. The work is split into
-     * small chunks that interleave with writes, so it does not stall the write queue.
-     *
-     * @return the number of events whose expiry changed; fails with {@link RetentionAlreadyRunningException}
-     * when an application is still running
-     */
-    default CompletableFuture<Long> applyRetention() {
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("Applying retention is unavailable"));
     }
 
     CompletableFuture<Optional<EventDetail>> findEvent(UUID eventId);

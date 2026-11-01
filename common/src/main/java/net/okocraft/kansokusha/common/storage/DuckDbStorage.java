@@ -423,6 +423,21 @@ public final class DuckDbStorage {
         }
 
         @Override
+        public Optional<String> appliedRetention() throws SQLException {
+            return this.delegate.appliedRetention();
+        }
+
+        @Override
+        public void recordAppliedRetention(String retention) throws SQLException {
+            this.delegate.recordAppliedRetention(retention);
+        }
+
+        @Override
+        public List<OccurredRange> expiryRecalculationRanges(long maxEvents) throws SQLException {
+            return this.delegate.expiryRecalculationRanges(maxEvents);
+        }
+
+        @Override
         public long recalculateExpiry(
             Instant from,
             Instant to,
