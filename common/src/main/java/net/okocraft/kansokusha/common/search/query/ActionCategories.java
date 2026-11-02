@@ -29,10 +29,10 @@ public final class ActionCategories {
         add(result, "+block", "block_place");
         add(result, "container", "container_transaction", "container_pickup", "container_transfer");
         add(result, "item", "item_drop", "item_pickup");
-        add(result, "chat", "paper_chat", "velocity_chat");
-        add(result, "command", "paper_player_command", "paper_server_command", "velocity_command");
+        add(result, "chat", "paper_chat", "velocity_chat", "neoforge_chat");
+        add(result, "command", "paper_player_command", "paper_server_command", "velocity_command", "neoforge_player_command", "neoforge_server_command");
         add(result, "session", "paper_join", "paper_quit", "paper_kick", "velocity_post_login",
-            "velocity_disconnect", "server_connected", "backend_kick");
+            "velocity_disconnect", "server_connected", "backend_kick", "neoforge_join", "neoforge_quit", "neoforge_kick");
         add(result, "death", "player_death");
         add(result, "kill", "entity_death");
         return java.util.Collections.unmodifiableMap(result);

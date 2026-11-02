@@ -19,6 +19,7 @@ addProject("paper")
 addProject("paper-test-plugin")
 addProject("velocity")
 addProject("velocity-test-plugin")
+addProject("neoforge")
 
 fun addProject(name: String) {
     include("${rootProject.name}-$name")

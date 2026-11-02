@@ -1,0 +1,12 @@
+modLoader="javafml"
+loaderVersion="[11,)"
+license="MIT"
+[[mods]]
+modId="kansokusha_test"
+version="1"
+displayName="Kansokusha native contract fixture"
+[[dependencies.kansokusha_test]]
+modId="kansokusha"
+type="required"
+versionRange="*"
+side="SERVER"

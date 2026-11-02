@@ -1,0 +1,20 @@
+modLoader="javafml"
+loaderVersion="[11,)"
+license="GPL-3.0"
+[[mods]]
+modId="kansokusha"
+version="${mod_version}"
+displayName="Kansokusha"
+description="Event audit and search for NeoForge servers."
+[[mixins]]
+config="kansokusha.mixins.json"
+[[dependencies.kansokusha]]
+modId="neoforge"
+type="required"
+versionRange="[26.2.0.88,26.3)"
+side="SERVER"
+[[dependencies.kansokusha]]
+modId="minecraft"
+type="required"
+versionRange="[26.2,26.3)"
+side="SERVER"

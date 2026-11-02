@@ -1,0 +1,89 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+neoForge {
+    version = '26.2.0.88'
+    mods { kansokusha { sourceSet sourceSets.main } }
+}
+
+dependencies {
+    implementation project(':kansokusha-common')
+    compileOnly 'net.luckperms:api:5.5'
+
+    jarJar(implementation('net.kyori:adventure-api:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('net.kyori:adventure-key:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('net.kyori:adventure-text-serializer-plain:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('net.kyori:adventure-text-serializer-gson:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('net.kyori:adventure-text-serializer-json:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('net.kyori:adventure-text-minimessage:5.2.0')) { version { strictly '[5.2.0,6.0)'; prefer '5.2.0' } }
+    jarJar(implementation('org.spongepowered:configurate-yaml:4.2.0')) { version { strictly '[4.2.0,5.0)'; prefer '4.2.0' } }
+    jarJar(implementation('org.spongepowered:configurate-core:4.2.0')) { version { strictly '[4.2.0,5.0)'; prefer '4.2.0' } }
+    jarJar(implementation('io.leangen.geantyref:geantyref:1.3.16')) { version { strictly '[1.3.16,2.0)'; prefer '1.3.16' } }
+    jarJar(implementation('net.kyori:option:1.1.0')) { version { strictly '[1.1.0,2.0)'; prefer '1.1.0' } }
+    jarJar(implementation('dev.siroshun.mcmsgdef:mcmsgdef:1.3.0')) { version { strictly '[1.3.0,2.0)'; prefer '1.3.0' } }
+    jarJar(implementation('org.duckdb:duckdb_jdbc:2.0.0.0')) { version { strictly '[2.0.0.0,3.0)'; prefer '2.0.0.0' } }
+    testImplementation platform('org.junit:junit-bom:6.1.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.24.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'com.google.code.gson:gson:2.13.2'
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 25 }
+tasks.named('test') { useJUnitPlatform() }
+
+def commonJapanese = project(':kansokusha-common').file('src/main/languages/ja.properties')
+def nativeJapanese = file('src/main/languages/ja.properties')
+def mergedJapanese = layout.buildDirectory.file('generated/languages/ja.properties')
+tasks.register('mergeJapaneseMessages') {
+    inputs.files(commonJapanese, nativeJapanese)
+    outputs.file(mergedJapanese)
+    doLast {
+        def target = mergedJapanese.get().asFile
+        target.parentFile.mkdirs()
+        target.write(commonJapanese.getText('UTF-8') + System.lineSeparator()
+            + nativeJapanese.getText('UTF-8'), 'UTF-8')
+    }
+}
+
+tasks.named('jar', Jar) {
+    dependsOn tasks.named('mergeJapaneseMessages')
+    archiveFileName = "Kansokusha-NeoForge-${project.version}.jar"
+    from project(':kansokusha-api').sourceSets.main.output
+    from project(':kansokusha-common').sourceSets.main.output
+    from(mergedJapanese) { into 'languages' }
+    from(rootProject.file('LICENSE')) { into 'META-INF' }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('copyDistribution', Copy) {
+    from tasks.named('jar', Jar).flatMap { it.archiveFile }
+    into rootProject.layout.buildDirectory.dir('libs')
+}
+tasks.named('processResources') {
+    inputs.property 'mod_version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand mod_version: project.version
+    }
+}
+tasks.named('assemble') { dependsOn tasks.named('copyDistribution') }
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.compileClasspath
+    }
+    testmod {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+tasks.register('testmodJar', Jar) {
+    from sourceSets.testmod.output
+    archiveFileName = 'Kansokusha-NeoForge-testmod.jar'
+    destinationDirectory = layout.buildDirectory.dir('testmods')
+}
