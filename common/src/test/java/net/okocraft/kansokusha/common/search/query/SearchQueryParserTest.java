@@ -41,9 +41,21 @@ class SearchQueryParserTest {
             java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, null);
         Assertions.assertEquals(Set.of(Key.key("kansokusha", "block_break"), Key.key("kansokusha", "block_place"),
             Key.key("example", "custom")), query.conditions().actions());
-        Assertions.assertEquals(ActionCategories.events("chat"), query.exclusions().actions());
+        Assertions.assertEquals(Set.of(Key.key("kansokusha", "paper_chat"),
+            Key.key("kansokusha", "velocity_chat"), Key.key("kansokusha", "neoforge_chat")),
+            query.exclusions().actions());
         Assertions.assertEquals(Set.of(Key.key("kansokusha", "block")), SearchQueryParser.parse("action kansokusha:block",
             java.time.Clock.systemUTC(), java.time.ZoneOffset.UTC, null).conditions().actions());
+    }
+
+    @Test
+    void nativeBackendActionsRemainInThePublicSearchCategories() {
+        Assertions.assertTrue(parse("action command").conditions().actions().containsAll(Set.of(
+            Key.key("kansokusha", "neoforge_player_command"),
+            Key.key("kansokusha", "neoforge_server_command"))));
+        Assertions.assertTrue(parse("action session").conditions().actions().containsAll(Set.of(
+            Key.key("kansokusha", "neoforge_join"), Key.key("kansokusha", "neoforge_quit"),
+            Key.key("kansokusha", "neoforge_kick"))));
     }
 
     @Test
