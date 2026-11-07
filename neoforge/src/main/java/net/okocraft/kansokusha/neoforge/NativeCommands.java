@@ -2,14 +2,11 @@ package net.okocraft.kansokusha.neoforge;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.serialization.JsonOps;
+import net.kyori.adventure.platform.modcommon.MinecraftServerAudiences;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.kyori.adventure.translation.GlobalTranslator;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.ComponentSerialization;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -175,9 +172,8 @@ final class NativeCommands {
         return message -> source.getServer().execute(() -> {
             var locale = source.getEntity() instanceof ServerPlayer player
                 && player.clientInformation().language().startsWith("ja") ? Locale.JAPANESE : Locale.ENGLISH;
-            var json = GsonComponentSerializer.gson().serializeToTree(GlobalTranslator.render(message, locale));
-            var nativeMessage = ComponentSerialization.CODEC
-                .parse(RegistryOps.create(JsonOps.INSTANCE, source.getServer().registryAccess()), json).getOrThrow();
+            var nativeMessage = MinecraftServerAudiences.of(source.getServer()).nonWrappingSerializer()
+                .serialize(GlobalTranslator.render(message, locale));
             source.sendSystemMessage(nativeMessage);
         });
     }
