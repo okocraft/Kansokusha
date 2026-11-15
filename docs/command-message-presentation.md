@@ -61,7 +61,7 @@ Paper の現行 `id/properties` と従来の `Name/Properties` のブロック�
 
 ## 確認項目
 
-- Paper登録58種と表示定義の集合一致、Velocity全7種のCodec経由表示。
+- Paper登録59種と表示定義の集合一致、Velocity全7種のCodec経由表示。
 - 実際のMinecraftブロック状態で、一覧に `properties` や内部イベントコードが出ないこと。
 - 座標の出し分け、時刻ホバーと行クリック、概要・全文・記録情報の分離とページ境界。
 - 日英メッセージのキー／引数一致、既存カスタマイズの保持、原文中のタグを解釈しないこと。
@@ -71,7 +71,7 @@ Paper の現行 `id/properties` と従来の `Name/Properties` のブロック�
 
 ## Paper イベントごとの概要フィールド
 
-全58種の一覧には短い操作・対象を表示し、下表の状態差分は詳細／ホバーに置く。詳細フィールドが空のイベントは、要約・場所と必要時の記録情報を表示する。数量列は保存済み数量を一覧に使える場合の取得元である。
+全59種の一覧には短い操作・対象を表示し、下表の状態差分は詳細／ホバーに置く。詳細フィールドが空のイベントは、要約・場所と必要時の記録情報を表示する。数量列は保存済み数量を一覧に使える場合の取得元である。
 
 | イベント | 一覧の数量 | 概要の主要フィールド |
 | --- | --- | --- |
@@ -112,6 +112,7 @@ Paper の現行 `id/properties` と従来の `Name/Properties` のブロック�
 | `item_pickup` | `—` | `stack remaining` |
 | `lectern_change` | `—` | `before after` |
 | `natural_block_change` | `—` | `pre_state post_state` |
+| `ore_vein_found` | `vein_count` | `vein_count` |
 | `paper_chat` | `—` | `message` |
 | `paper_join` | `—` | `$server` |
 | `paper_kick` | `—` | `$server ~reason cause` |

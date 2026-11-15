@@ -33,14 +33,14 @@ duckdb:
   # Number of threads DuckDB may use. 0 uses the DuckDB default.
   threads: 0
 
-# Paper only. Sends a Discord message when a player in survival or adventure mode breaks the first
-# ore of a naturally generated vein. Blocks placed by players and veins already reported are
-# remembered in memory until the server stops.
+# Paper only. Records kansokusha:ore_vein_found, and sends a Discord message when webhook-url is set,
+# when a player in survival or adventure mode breaks the first ore of a naturally generated vein.
+# Blocks placed by players and veins already reported are remembered in memory until the server stops.
 ore-vein:
-  # Discord webhook URL. Add ?thread_id=<id> to post into a thread. Empty disables this notification.
+  # Discord webhook URL. Add ?thread_id=<id> to post into a thread. Empty records veins without notifying.
   # The URL contains the webhook token; keep this file private.
   webhook-url: ''
-  # Block types to report, such as minecraft:diamond_ore. Empty disables this notification.
+  # Block types to record and report, such as minecraft:diamond_ore. Empty disables both.
   ores: []
   # Maximum number of blocks inspected when counting a vein. The rest of a larger vein may be reported again.
   max-search-count: 100
@@ -71,6 +71,7 @@ retention:
         - kansokusha:piston_move
         - kansokusha:entity_block_change
         - kansokusha:sponge_absorb
+        - kansokusha:ore_vein_found
         - kansokusha:block_fertilize
         - kansokusha:cauldron_level_change
         - kansokusha:item_drop

@@ -34,6 +34,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:natural_block_change` | `BlockFadeEvent`, `BlockFormEvent`, `BlockGrowEvent`, `BlockSpreadEvent`, `LeavesDecayEvent`, `MoistureChangeEvent`, non-bonemeal `StructureGrowEvent`, `PortalCreateEvent`, dragon-egg `BlockFromToEvent`, unsupported-state `BlockDestroyEvent` | `short` | natural/environmental change; destruction of blocks that no longer satisfy their NMS survival rule includes support-loss attachment breaks such as wall signs, torches and ladders |
 | `kansokusha:fluid_change` | water/lava `BlockFromToEvent` | `short` | water/lava source → destination arrival only |
 | `kansokusha:sponge_absorb` | `SpongeAbsorbEvent` | `audit` | one submission per absorbed block |
+| `kansokusha:ore_vein_found` | `BlockBreakEvent` | `audit` | first broken ore of a natural vein listed in `ore-vein.ores`; disabled when the list is empty |
 | `kansokusha:block_fertilize` | `BlockFertilizeEvent` | `audit` | bone meal changes; grow/spread events fired during bone meal are also recorded as `natural_block_change` |
 | `kansokusha:cauldron_level_change` | `CauldronLevelChangeEvent` | `audit` | player/entity/natural changes; the payload records `reason`, while actor identity stays in the common actor columns |
 | `kansokusha:container_transfer` | `InventoryMoveItemEvent` | `short` | non-cancelled transfer attempt, not a post-storage success signal; attempts with the same source, destination, initiator and item are summed into one event stamped with the window start (5 minutes when both inventories are hoppers, 15 seconds otherwise), carrying `attempt_count` and `item_amount` (events recorded before this have neither and describe one attempt) |
@@ -131,6 +132,7 @@ block の変化で変化前と変化後の両方がある event の target は�
 | `natural_block_change` | `BlockSpreadEvent` では広がり元の block、`PortalCreateEvent` では source entity があればその entity。それ以外はなし | 変化した block（`LeavesDecayEvent` では葉の block） |
 | `fluid_change` | 流れた液体の block（`minecraft:water` / `minecraft:lava`） | 流入先の block。流入先が空気なら液体の block |
 | `sponge_absorb` | sponge の block | 吸収された block |
+| `ore_vein_found` | player | 壊された鉱石の block |
 | `block_fertilize` | player。なければなし | 変化した block |
 | `cauldron_level_change` | 変化させた entity。なければなし | 変化前の cauldron の block |
 | `container_transfer` | 移動を起こした inventory の holder（hopper の block、hopper minecart の entity）。holder が block / entity でなければなし | 移動した item |
@@ -231,7 +233,7 @@ current built-in catalog の推奨保持期間は bundled `config.yml`（`common
 | `short` | `P7D` | natural/fire/fluid/automated-container 等の高頻度・低長期価値 event |
 | default | `P30D` | 上記以外（session transition、chat） |
 
-- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `container_transaction`, `craft_item`, `anvil_use`, `smith_item`, `enchant_item`, `block_interaction`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `entity_break`, `entity_death`, `entity_spawn`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
+- `audit`: `block_break`, `block_place`, `sign_change`, `bucket_empty`, `bucket_fill`, `block_harvest`, `flower_pot_change`, `block_ignite`, `tnt_prime`, `explosion_block_change`, `piston_move`, `entity_block_change`, `sponge_absorb`, `ore_vein_found`, `block_fertilize`, `cauldron_level_change`, `item_drop`, `item_pickup`, `book_edit`, `lectern_change`, `player_trade`, `container_transaction`, `craft_item`, `anvil_use`, `smith_item`, `enchant_item`, `block_interaction`, `player_gamemode_change`, `player_spawn_change`, `player_death`, `paper_player_command`, `paper_server_command`, `velocity_command`, `entity_place`, `entity_break`, `entity_death`, `entity_spawn`, `armor_stand_manipulate`, `entity_leash_change`, `item_frame_change`, `entity_tame`, `entity_name_change`, `gamerule_change`, `world_difficulty_change`, `world_border_change`, `world_spawn_change`, `whitelist_change`, `backend_registry_change`.
 - `short`: `block_burn`, `natural_block_change`, `fluid_change`, `container_transfer`, `container_pickup`, `container_process`, `dispenser_dispense`.
 - default: `server_connected`, `paper_join`, `paper_quit`, `paper_kick`, `player_world_change`, `player_teleport`, `velocity_post_login`, `velocity_disconnect`, `backend_kick`, `paper_chat`, `velocity_chat`.
 
@@ -470,6 +472,14 @@ cancel されていない purchase の final merchant、recipe、reward/increase
 
 merchant が Entity の場合は UUID/type を保存し、standalone merchant は `kind = standalone` とする。trade payload は result、ingredients、adjusted first ingredient、uses/max uses、experience、price/demand/special-price 等の event API が提供する確定値を detached ItemStack/value として保存する。
 
+## `kansokusha:ore_vein_found`
+
+Recorded at `MONITOR` for a non-cancelled `BlockBreakEvent` when a player in survival or adventure mode breaks an ore listed in `ore-vein.ores` that was neither placed by a player nor counted in an earlier vein. Position and target are the broken ore; the actor is the player.
+
+- `vein_count`: number of connected ores of the same type, including the broken one, counted over the 26 neighbours without loading chunks or reading other Folia regions and limited by `max-search-count`.
+
+Placed ores and counted veins are remembered in memory only, so after a restart an already counted vein can be recorded again. The event is recorded whether or not `webhook-url` is set.
+
 ## Player login name observation
 
 Paper `kansokusha:paper_join` と Velocity `kansokusha:velocity_post_login` は、login 時点の player username を payload に保持する。名前の変化はこれらの login event から追跡でき、名前変更専用の event は記録しない。
@@ -518,7 +528,7 @@ target backend name は common `server` field から復元可能なため payloa
 
 | Area | Current contract |
 | --- | --- |
-| runtime wiring | Paper 58 event type / Velocity 7 event type = 65 platform-sourced built-ins are registered at startup |
+| runtime wiring | Paper 59 event type / Velocity 7 event type = 66 platform-sourced built-ins are registered at startup |
 | closed/out-of-scope | reviewed exclusions above are not registered as built-in listeners |
 | canonical merges | #110 → #109 `block_harvest`; #156 → #155 `entity_place`; #157 → #164 `entity_break` |
 | retention | the bundled `config.yml` maps event types to `audit` / `short`; the others use the default period |

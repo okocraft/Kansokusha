@@ -27,7 +27,8 @@ final class PaperBlockViews {
         of("sponge_absorb", "<actor>absorption <target><context>", BLOCK, "", "", ""),
         of("block_fertilize", "<actor>bone meal <target><context>", BLOCK, "", "pre_state post_state", "post_state"),
         of("cauldron_level_change", "<actor>cauldron change <target><context>", BLOCK, "", "old_state new_state reason", "old_state new_state reason"),
-        of("block_interaction", "<actor>interaction <target><context>", BLOCK, "", "", "operation")
+        of("block_interaction", "<actor>interaction <target><context>", BLOCK, "", "", "operation"),
+        of("ore_vein_found", "<actor>ore vein <target><context>", BLOCK, "vein_count", "vein_count", "vein_count")
     );
 
     private PaperBlockViews() {

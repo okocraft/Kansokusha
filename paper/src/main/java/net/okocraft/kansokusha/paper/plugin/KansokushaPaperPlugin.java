@@ -2,6 +2,7 @@ package net.okocraft.kansokusha.paper.plugin;
 
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import net.kyori.adventure.key.Key;
 import net.okocraft.kansokusha.api.Kansokusha;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.language.LanguageProvider;
@@ -12,7 +13,7 @@ import net.okocraft.kansokusha.paper.inspection.InspectionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
 import net.okocraft.kansokusha.paper.notification.DiscordWebhook;
-import net.okocraft.kansokusha.paper.notification.OreVeinNotificationListener;
+import net.okocraft.kansokusha.paper.notification.OreVeinListener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Nullable;
 
@@ -62,7 +63,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             this.getServer().getPluginManager().registerEvents(
                 new net.okocraft.kansokusha.paper.command.CommandNavigation(), this);
             this.flushBufferedEvents = PaperBuiltInListeners.registerAll(this, runtime, serverKey);
-            this.registerNotifications(config);
+            this.registerOreVeinListener(config, runtime, serverKey);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
             LanguageProvider.unload();
@@ -72,11 +73,12 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void registerNotifications(KansokushaConfig config) {
+    private void registerOreVeinListener(KansokushaConfig config, KansokushaRuntime runtime, Key serverKey) {
         var oreVein = config.oreVein();
         if (oreVein.enabled()) {
-            this.discordWebhook = new DiscordWebhook(oreVein.webhookUrl().orElseThrow(), this.getLogger());
-            this.getServer().getPluginManager().registerEvents(new OreVeinNotificationListener(oreVein, this.discordWebhook), this);
+            this.discordWebhook = oreVein.webhookUrl().map(url -> new DiscordWebhook(url, this.getLogger())).orElse(null);
+            this.getServer().getPluginManager().registerEvents(
+                new OreVeinListener(oreVein, runtime, serverKey, this.discordWebhook), this);
         }
     }
 

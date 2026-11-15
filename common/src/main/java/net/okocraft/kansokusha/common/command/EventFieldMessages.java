@@ -42,6 +42,7 @@ public final class EventFieldMessages {
         label("destination_inventory", "Destination inventory");
         label("transfer_direction", "Direction");
         label("amount_delta", "Container net delta");
+        label("vein_count", "Vein size");
         label("attempt_count", "Aggregated count");
         label("item_amount", "Total item amount");
         label("item", "Item");

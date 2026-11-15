@@ -111,10 +111,10 @@ public record KansokushaConfig(
     }
 
     /**
-     * Discord notification for ore veins found by players. Paper only.
+     * Recording and Discord notification of ore veins found by players. Paper only.
      *
-     * @param webhookUrl     the Discord webhook URL; empty disables the notification
-     * @param ores           block types that trigger the notification; empty disables it
+     * @param webhookUrl     the Discord webhook URL; empty records veins without notifying Discord
+     * @param ores           block types whose veins are recorded and notified; empty disables both
      * @param maxSearchCount the maximum number of blocks inspected around a broken ore
      * @param format         the message, with {@code %player_name%}, {@code %block_type%},
      *                       {@code %block_world%}, {@code %block_location%} and {@code %vein_count%}
@@ -139,7 +139,7 @@ public record KansokushaConfig(
         }
 
         public boolean enabled() {
-            return this.webhookUrl.isPresent() && !this.ores.isEmpty();
+            return !this.ores.isEmpty();
         }
     }
 
