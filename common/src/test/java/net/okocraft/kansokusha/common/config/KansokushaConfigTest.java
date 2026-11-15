@@ -6,10 +6,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -30,6 +33,7 @@ class KansokushaConfigTest {
         Assertions.assertFalse(config.retention().archivedEventTypes().contains(Key.key("kansokusha", "fluid_change")));
         Assertions.assertEquals(ZoneId.systemDefault(), config.searchTimeZone());
         Assertions.assertEquals(KansokushaConfig.DuckDb.DEFAULT, config.duckDb());
+        Assertions.assertFalse(config.oreVeinNotification().enabled());
 
         var retention = config.retention();
         Assertions.assertEquals(Duration.ofDays(180), retention.durationOf(Key.key("kansokusha", "block_break")));
@@ -62,6 +66,51 @@ class KansokushaConfigTest {
 
         Files.writeString(dir.resolve("config.yml"), base + "duckdb:\n  threads: -1\n");
         Assertions.assertThrows(IOException.class, () -> KansokushaConfig.load(dir));
+    }
+
+    @Test
+    void testOreVeinNotificationIsLoadedAndValidated(@TempDir Path dir) throws IOException {
+        var base = """
+            queue-capacity: 4
+            batch-size: 2
+            flush-interval: PT1S
+            cleanup-interval: PT5M
+            retention:
+              default: P1D
+            """;
+        Files.writeString(dir.resolve("config.yml"), base);
+        Assertions.assertFalse(KansokushaConfig.load(dir).oreVeinNotification().enabled());
+
+        Files.writeString(dir.resolve("config.yml"), base + """
+            ore-vein-notification:
+              webhook-url: ' https://discord.com/api/webhooks/1/token?thread_id=2 '
+              ores: [minecraft:diamond_ore, minecraft:deepslate_diamond_ore]
+              max-search-count: 50
+              format: '%player_name% %vein_count%'
+              display-names:
+                "minecraft:diamond_ore": Diamond
+            """);
+        Assertions.assertEquals(
+            new KansokushaConfig.OreVeinNotification(
+                Optional.of(URI.create("https://discord.com/api/webhooks/1/token?thread_id=2")),
+                Set.of(Key.key("minecraft", "diamond_ore"), Key.key("minecraft", "deepslate_diamond_ore")),
+                50,
+                "%player_name% %vein_count%",
+                Map.of(Key.key("minecraft", "diamond_ore"), "Diamond")
+            ),
+            KansokushaConfig.load(dir).oreVeinNotification()
+        );
+
+        for (var invalid : List.of(
+            "webhook-url: 'https://discord.com/ secret-token'",
+            "ores: [diamond_ore]",
+            "max-search-count: 0",
+            "display-names: {diamond_ore: Diamond}"
+        )) {
+            Files.writeString(dir.resolve("config.yml"), base + "ore-vein-notification:\n  " + invalid + "\n");
+            var error = Assertions.assertThrows(IOException.class, () -> KansokushaConfig.load(dir), invalid);
+            Assertions.assertFalse(error.getMessage().contains("secret-token"), invalid);
+        }
     }
 
     @Test

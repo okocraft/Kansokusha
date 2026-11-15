@@ -11,6 +11,8 @@ import net.okocraft.kansokusha.paper.command.KansokushaCommands;
 import net.okocraft.kansokusha.paper.inspection.InspectionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler;
 import net.okocraft.kansokusha.paper.inspection.InspectionSessionManager;
+import net.okocraft.kansokusha.paper.notification.DiscordWebhook;
+import net.okocraft.kansokusha.paper.notification.OreVeinNotificationListener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,6 +26,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     private final InspectionSessionManager inspectionSessions = new InspectionSessionManager();
     private @Nullable KansokushaRuntime runtime;
     private @Nullable Runnable flushBufferedEvents;
+    private @Nullable DiscordWebhook discordWebhook;
 
     @Override
     public void onEnable() {
@@ -59,6 +62,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             this.getServer().getPluginManager().registerEvents(
                 new net.okocraft.kansokusha.paper.command.CommandNavigation(), this);
             this.flushBufferedEvents = PaperBuiltInListeners.registerAll(this, runtime, serverKey);
+            this.registerNotifications(config);
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
             LanguageProvider.unload();
@@ -68,8 +72,20 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
         }
     }
 
+    private void registerNotifications(KansokushaConfig config) {
+        var oreVein = config.oreVeinNotification();
+        if (oreVein.enabled()) {
+            this.discordWebhook = new DiscordWebhook(oreVein.webhookUrl().orElseThrow(), this.getLogger());
+            this.getServer().getPluginManager().registerEvents(new OreVeinNotificationListener(oreVein, this.discordWebhook), this);
+        }
+    }
+
     @Override
     public void onDisable() {
+        if (this.discordWebhook != null) {
+            this.discordWebhook.close();
+            this.discordWebhook = null;
+        }
         this.inspectionSessions.clear();
         net.okocraft.kansokusha.common.command.SearchNavigation.clear();
         LanguageProvider.unload();
