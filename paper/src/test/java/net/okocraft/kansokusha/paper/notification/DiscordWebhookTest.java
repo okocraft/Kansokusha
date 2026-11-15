@@ -35,7 +35,9 @@ class DiscordWebhookTest {
             } else {
                 var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 this.requests.add(exchange.getRequestURI().getRawQuery() + " " + body);
-                exchange.sendResponseHeaders(204, -1);
+                var message = "{\"id\":\"1\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, message.length);
+                exchange.getResponseBody().write(message);
             }
             exchange.close();
         });
@@ -61,8 +63,8 @@ class DiscordWebhookTest {
         }
 
         Assertions.assertEquals(List.of(
-            "thread_id=123 {\"content\":\"first\",\"allowed_mentions\":{\"parse\":[]}}",
-            "thread_id=123 {\"content\":\"\\\"second\\\"\",\"allowed_mentions\":{\"parse\":[]}}"
+            "thread_id=123&wait=true {\"content\":\"first\",\"allowed_mentions\":{\"parse\":[]}}",
+            "thread_id=123&wait=true {\"content\":\"\\\"second\\\"\",\"allowed_mentions\":{\"parse\":[]}}"
         ), this.requests);
         Assertions.assertEquals(List.of(), this.warnings);
     }
@@ -75,7 +77,18 @@ class DiscordWebhookTest {
         }
 
         Assertions.assertEquals(1, this.requests.size());
+        Assertions.assertTrue(this.requests.getFirst().startsWith("wait=true "));
         Assertions.assertEquals(List.of(), this.warnings);
+    }
+
+    @Test
+    void testMessageAfterCloseIsDroppedWithWarning() {
+        var webhook = this.webhook("/webhook");
+        webhook.close();
+        webhook.send("late");
+
+        Assertions.assertEquals(List.of(), this.requests);
+        Assertions.assertEquals(List.of("Dropped a Discord webhook message because the queue is full or closed."), this.warnings);
     }
 
     @Test

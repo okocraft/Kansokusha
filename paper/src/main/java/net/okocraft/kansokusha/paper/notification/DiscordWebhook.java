@@ -11,15 +11,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Posts plain-text messages to a Discord webhook, one at a time and in order, on a background
- * thread so that the server thread never waits for the network.
+ * thread so that the server thread never waits for the network. At most 1000 messages wait to be
+ * sent; further messages are dropped with a warning.
  */
 @ApiStatus.Internal
 @NotNullByDefault
@@ -29,8 +32,8 @@ public final class DiscordWebhook implements AutoCloseable {
 
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
     // One thread keeps messages in order and makes a rate-limit wait delay the following messages.
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(
-        Thread.ofVirtual().name("Kansokusha Discord Webhook").factory());
+    private final ExecutorService executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(1000), Thread.ofVirtual().name("Kansokusha Discord Webhook").factory());
     private final URI url;
     private final Logger logger;
 
@@ -38,7 +41,8 @@ public final class DiscordWebhook implements AutoCloseable {
      * @param url the webhook URL; add {@code ?thread_id=...} to post into a thread
      */
     public DiscordWebhook(URI url, Logger logger) {
-        this.url = url;
+        // Without wait=true, Discord may answer 2xx for a message that it did not save.
+        this.url = URI.create(url + (url.getRawQuery() == null ? "?" : "&") + "wait=true");
         this.logger = logger;
     }
 
@@ -56,7 +60,11 @@ public final class DiscordWebhook implements AutoCloseable {
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
             .build();
-        this.executor.execute(() -> this.post(request));
+        try {
+            this.executor.execute(() -> this.post(request));
+        } catch (RejectedExecutionException e) {
+            this.logger.warning("Dropped a Discord webhook message because the queue is full or closed.");
+        }
     }
 
     private void post(HttpRequest request) {
@@ -65,7 +73,7 @@ public final class DiscordWebhook implements AutoCloseable {
             if (response.statusCode() == 429) {
                 // Discord gives the wait in seconds, possibly with a fraction such as "1.5".
                 var seconds = response.headers().firstValue("Retry-After").map(Double::parseDouble).orElse(1.0);
-                Thread.sleep((long) (Math.min(seconds, 60) * 1000));
+                Thread.sleep((long) (seconds * 1000));
                 response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
             }
             if (response.statusCode() / 100 != 2) {
@@ -79,7 +87,7 @@ public final class DiscordWebhook implements AutoCloseable {
     }
 
     /**
-     * Waits up to five seconds for queued messages, then stops the background thread.
+     * Waits up to five seconds for queued messages, then drops the rest and releases the HTTP client.
      */
     @Override
     public void close() {
@@ -91,6 +99,8 @@ public final class DiscordWebhook implements AutoCloseable {
         } catch (InterruptedException e) {
             this.executor.shutdownNow();
             Thread.currentThread().interrupt();
+        } finally {
+            this.client.shutdownNow();
         }
     }
 }
