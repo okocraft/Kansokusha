@@ -28,8 +28,9 @@ public final class DiscordWebhook implements AutoCloseable {
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
+    // One thread keeps messages in order and makes a rate-limit wait delay the following messages.
     private final ExecutorService executor = Executors.newSingleThreadExecutor(
-        Thread.ofPlatform().name("Kansokusha Discord Webhook").daemon().factory());
+        Thread.ofVirtual().name("Kansokusha Discord Webhook").factory());
     private final URI url;
     private final Logger logger;
 
