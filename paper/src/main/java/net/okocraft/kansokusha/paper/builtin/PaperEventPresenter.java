@@ -100,9 +100,9 @@ public final class PaperEventPresenter implements EventPresenter {
                 }
             }
             if (!view.quantity().isEmpty()) {
-                if (view.quantity().equals("amount_delta")) {
-                    var delta = payload.getIntOr("amount_delta", 0);
-                    target = target.append(Component.text(" x" + Math.abs((long) delta)));
+                if (view.quantity().equals("amount_delta") || view.quantity().equals("vein_count")) {
+                    var amount = payload.getIntOr(view.quantity(), 0);
+                    target = target.append(Component.text(" x" + Math.abs((long) amount)));
                 } else {
                     var item = PaperPayloadDisplay.at(payload, view.quantity());
                     if (item != null) {

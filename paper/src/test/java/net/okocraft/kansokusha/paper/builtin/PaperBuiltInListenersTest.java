@@ -35,13 +35,14 @@ class PaperBuiltInListenersTest {
     void testEveryListenerRegistersItsEventTypes() {
         var api = new RegistrationRecordingApi();
 
+        PaperOreVeinEvents.register(api);
         var listenerClasses = new HashSet<Class<?>>();
         for (var factory : PaperBuiltInListeners.FACTORIES) {
             listenerClasses.add(factory.apply(api, SERVER_KEY).getClass());
         }
 
         Assertions.assertEquals(PaperBuiltInListeners.FACTORIES.size(), listenerClasses.size());
-        Assertions.assertEquals(58, api.registered.size());
+        Assertions.assertEquals(59, api.registered.size());
         var displayed = java.util.stream.Stream.of(PaperBlockViews.VIEWS, PaperItemViews.VIEWS,
                 PaperPlayerViews.VIEWS, PaperEntityViews.VIEWS, PaperAdministrativeViews.VIEWS)
             .flatMap(java.util.Collection::stream).map(view -> Key.key("kansokusha", view.type()))

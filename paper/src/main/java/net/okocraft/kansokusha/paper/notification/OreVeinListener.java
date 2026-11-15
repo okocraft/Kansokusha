@@ -2,7 +2,10 @@ package net.okocraft.kansokusha.paper.notification;
 
 import io.papermc.paper.math.BlockPosition;
 import io.papermc.paper.math.Position;
+import net.kyori.adventure.key.Key;
+import net.okocraft.kansokusha.api.KansokushaApi;
 import net.okocraft.kansokusha.common.config.KansokushaConfig;
+import net.okocraft.kansokusha.paper.builtin.PaperOreVeinEvents;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -15,7 +18,9 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.List;
@@ -25,22 +30,27 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Sends a Discord message when a survival or adventure player breaks the first ore of a naturally
- * generated vein.
+ * Records {@code kansokusha:ore_vein_found}, and sends a Discord message when a webhook is set, when
+ * a survival or adventure player breaks the first ore of a naturally generated vein.
  */
 @ApiStatus.Internal
 @NotNullByDefault
-public final class OreVeinNotificationListener implements Listener {
+public final class OreVeinListener implements Listener {
 
     private static final Set<GameMode> IGNORED_GAME_MODES = Set.of(GameMode.CREATIVE, GameMode.SPECTATOR);
 
     private final KansokushaConfig.OreVein settings;
-    private final DiscordWebhook webhook;
+    private final KansokushaApi api;
+    private final Key serverKey;
+    private final @Nullable DiscordWebhook webhook;
     // Existing ores placed by players or belonging to a reported vein, per world. Kept in memory only.
     private final Map<UUID, Set<BlockPosition>> knownOres = new ConcurrentHashMap<>();
 
-    public OreVeinNotificationListener(KansokushaConfig.OreVein settings, DiscordWebhook webhook) {
+    public OreVeinListener(KansokushaConfig.OreVein settings, KansokushaApi api, Key serverKey,
+                           @Nullable DiscordWebhook webhook) {
         this.settings = settings;
+        this.api = api;
+        this.serverKey = serverKey;
         this.webhook = webhook;
     }
 
@@ -71,6 +81,10 @@ public final class OreVeinNotificationListener implements Listener {
                 return;
             }
             count = this.countVein(block, known);
+        }
+        this.api.submit(PaperOreVeinEvents.found(Instant.now(), this.serverKey, player, block, count));
+        if (this.webhook == null) {
+            return;
         }
         var key = block.getType().key();
         this.webhook.send(this.settings.format()
