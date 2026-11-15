@@ -65,7 +65,7 @@ public final class PaperPlayerJoinListener implements Listener {
             new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ()),
             new PlayerActor(player.getUniqueId()),
             null,
-            PaperPlayerSessionPayloadCodec.encodeJoin(username)
+            PaperPlayerSessionPayloadCodec.encodeJoin(username, player.getAddress())
         );
         this.backend.submitPlayerLogin(submission, username);
     }

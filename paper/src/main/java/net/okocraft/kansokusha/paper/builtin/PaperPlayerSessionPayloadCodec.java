@@ -7,7 +7,9 @@ import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
+import java.net.InetSocketAddress;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -18,9 +20,14 @@ public final class PaperPlayerSessionPayloadCodec {
     private PaperPlayerSessionPayloadCodec() {
     }
 
-    static EventPayload encodeJoin(String username) {
+    static EventPayload encodeJoin(String username, @Nullable InetSocketAddress remoteAddress) {
         var payload = new CompoundTag();
         payload.putString("username", Objects.requireNonNull(username, "username"));
+        // Payloads recorded before the address was captured have neither field.
+        if (remoteAddress != null) {
+            payload.putString("remote_address", remoteAddress.getHostString());
+            payload.putInt("remote_port", remoteAddress.getPort());
+        }
         return PaperPayloadNbtCodec.encode(payload);
     }
 

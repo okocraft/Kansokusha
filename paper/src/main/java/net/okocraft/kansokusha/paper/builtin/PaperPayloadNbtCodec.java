@@ -104,7 +104,8 @@ public final class PaperPayloadNbtCodec {
         "new_owner", "hanging", "username", "exchange_item", "hotbar_button",
         "transaction_id", "amount_delta", "recipe", "click", "rename_text",
         "repair_item_count", "repair_cost", "required_level", "consumed_levels",
-        "button", "enchantments", "level"
+        "button", "enchantments", "level",
+        "remote_address", "remote_port"
     };
 
     // Common schema constants. IDs are append-only for the same reason as FIELD_NAMES.

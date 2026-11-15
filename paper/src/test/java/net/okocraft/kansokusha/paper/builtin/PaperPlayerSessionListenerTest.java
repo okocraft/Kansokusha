@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -41,6 +43,7 @@ class PaperPlayerSessionListenerTest {
             fixedClock()
         );
         var player = player(PaperBlockEventTestSupport.world(), 12.75, 64.0, 8.25);
+        Mockito.when(player.getAddress()).thenReturn(new InetSocketAddress(InetAddress.getByName("192.0.2.10"), 51234));
         var event = Mockito.mock(PlayerJoinEvent.class);
         Mockito.when(event.getPlayer()).thenReturn(player);
 
@@ -54,8 +57,29 @@ class PaperPlayerSessionListenerTest {
         );
         var payload = new CompoundTag();
         payload.putString("username", "TestPlayer");
+        payload.putString("remote_address", "192.0.2.10");
+        payload.putInt("remote_port", 51234);
         Assertions.assertEquals(payload, PaperPayloadNbtCodec.decode(submission.payload()));
         Assertions.assertEquals(List.of("TestPlayer"), List.copyOf(api.playerLoginNames));
+    }
+
+    @Test
+    void testJoinOmitsRemoteAddressWhenUnavailable() throws Exception {
+        var api = new PaperBlockEventTestSupport.RecordingApi();
+        var listener = PaperPlayerJoinListener.register(
+            api,
+            PaperBlockEventTestSupport.SERVER_KEY,
+            fixedClock()
+        );
+        var player = player(PaperBlockEventTestSupport.world(), 0.5, 64.0, 0.5);
+        var event = Mockito.mock(PlayerJoinEvent.class);
+        Mockito.when(event.getPlayer()).thenReturn(player);
+
+        PaperListenerTestSupport.fire(listener, event);
+
+        var payload = new CompoundTag();
+        payload.putString("username", "TestPlayer");
+        Assertions.assertEquals(payload, PaperPayloadNbtCodec.decode(onlySubmission(api).payload()));
     }
 
     @Test

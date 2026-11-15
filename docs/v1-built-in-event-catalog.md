@@ -51,7 +51,7 @@ Kansokusha v1 の組み込み event catalog について、#101〜#106 の最終
 | `kansokusha:lectern_change` | `PlayerInsertLecternBookEvent` / `PlayerTakeLecternBookEvent` | `audit` | insert/take only; page navigation is excluded |
 | `kansokusha:player_trade` | `PlayerPurchaseEvent` (including `PlayerTradeEvent` subclass) | `audit` | non-cancelled purchase attempt; trade success is not confirmed |
 | `kansokusha:block_interaction` | selected `PlayerInteractEvent` right-clicks | `audit` | container/openable/powerable/sign/special-storage interaction and suspicious-block brushing; final state change is not asserted |
-| `kansokusha:paper_join` | `PlayerJoinEvent` | `session` | successful backend join |
+| `kansokusha:paper_join` | `PlayerJoinEvent` | `session` | successful backend join; username and remote address |
 | `kansokusha:paper_quit` | `PlayerQuitEvent` | `session` | completed backend session end |
 | `kansokusha:paper_kick` | `PlayerKickEvent` | `session` | accepted kick decision; a subsequent quit is intentionally separate |
 | `kansokusha:player_world_change` | `PlayerChangedWorldEvent` | `session` | completed world state transition |
@@ -473,6 +473,8 @@ merchant が Entity の場合は UUID/type を保存し、standalone merchant �
 ## Player login name observation
 
 Paper `kansokusha:paper_join` と Velocity `kansokusha:velocity_post_login` は、login 時点の player username を payload に保持する。名前の変化はこれらの login event から追跡でき、名前変更専用の event は記録しない。
+
+`paper_join` は join 時点の `Player#getAddress()` から `remote_address`（host string）と `remote_port` も保持する。Velocity の modern forwarding 等で backend に転送された client address はその値になる。address を取得できない場合と、この field を追加する前に記録された payload では両方とも存在しない。field の追加は既存 payload の解釈を変えないため、payload generation は 1 のままとする。address は詳細表示にだけ出し、検索結果の hover には出さない。
 
 accepted login は common の internal `EventSearchBackend.submitPlayerLogin` に username とともに渡される。public `KansokushaApi` には名前解決 API を追加しない。storage writer は login event と同一 transaction で `player_names` の `(player_uuid, name)` ごとの `last_seen` を更新する。`player_names` は検索と補完のための派生データであり、監査情報の source of truth ではない。同じ名前を複数 UUID が使った場合は `last_seen` が最も新しい UUID を選ぶ。
 
