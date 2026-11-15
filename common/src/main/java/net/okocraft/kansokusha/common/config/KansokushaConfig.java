@@ -8,6 +8,8 @@ import org.spongepowered.configurate.objectmapping.meta.Setting;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DateTimeException;
@@ -36,7 +38,8 @@ public record KansokushaConfig(
     Duration archiveInterval,
     ZoneId searchTimeZone,
     Retention retention,
-    DuckDb duckDb
+    DuckDb duckDb,
+    OreVein oreVein
 ) {
 
     public KansokushaConfig(
@@ -51,6 +54,21 @@ public record KansokushaConfig(
     ) {
         this(serverKey, queueCapacity, batchSize, flushInterval, cleanupInterval, archiveInterval,
             searchTimeZone, retention, DuckDb.DEFAULT);
+    }
+
+    public KansokushaConfig(
+        Optional<Key> serverKey,
+        int queueCapacity,
+        int batchSize,
+        Duration flushInterval,
+        Duration cleanupInterval,
+        Duration archiveInterval,
+        ZoneId searchTimeZone,
+        Retention retention,
+        DuckDb duckDb
+    ) {
+        this(serverKey, queueCapacity, batchSize, flushInterval, cleanupInterval, archiveInterval,
+            searchTimeZone, retention, duckDb, OreVein.DISABLED);
     }
 
     private static final String FILENAME = "config.yml";
@@ -93,6 +111,39 @@ public record KansokushaConfig(
     }
 
     /**
+     * Discord notification for ore veins found by players. Paper only.
+     *
+     * @param webhookUrl     the Discord webhook URL; empty disables the notification
+     * @param ores           block types that trigger the notification; empty disables it
+     * @param maxSearchCount the maximum number of blocks inspected around a broken ore
+     * @param format         the message, with {@code %player_name%}, {@code %block_type%},
+     *                       {@code %block_world%}, {@code %block_location%} and {@code %vein_count%}
+     * @param displayNames   names shown for {@code %block_type%}; other types use their key
+     */
+    public record OreVein(
+        Optional<URI> webhookUrl,
+        Set<Key> ores,
+        int maxSearchCount,
+        String format,
+        Map<Key, String> displayNames
+    ) {
+
+        public static final OreVein DISABLED =
+            new OreVein(Optional.empty(), Set.of(), 100, "", Map.of());
+
+        public OreVein {
+            Objects.requireNonNull(webhookUrl, "webhookUrl");
+            ores = Set.copyOf(ores);
+            Objects.requireNonNull(format, "format");
+            displayNames = Map.copyOf(displayNames);
+        }
+
+        public boolean enabled() {
+            return this.webhookUrl.isPresent() && !this.ores.isEmpty();
+        }
+    }
+
+    /**
      * Retention periods resolved per event type.
      *
      * @param archivedEventTypes event types whose expired events are archived instead of deleted
@@ -129,6 +180,9 @@ public record KansokushaConfig(
         RawRetention retention = new RawRetention();
         // Configurations written before these limits existed do not have this key.
         RawDuckDb duckdb = new RawDuckDb();
+        // Configurations written before this notification existed do not have this key.
+        @Setting("ore-vein")
+        RawOreVein oreVein = new RawOreVein();
 
         KansokushaConfig validate() throws IOException {
             if (this.queueCapacity <= 0) {
@@ -148,8 +202,52 @@ public record KansokushaConfig(
                 parseDuration(this.archiveInterval, "archive-interval"),
                 parseZoneId(this.searchTimeZone, "search-time-zone"),
                 Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate(),
-                Objects.requireNonNullElseGet(this.duckdb, RawDuckDb::new).validate()
+                Objects.requireNonNullElseGet(this.duckdb, RawDuckDb::new).validate(),
+                Objects.requireNonNullElseGet(this.oreVein, RawOreVein::new).validate()
             );
+        }
+    }
+
+    @ConfigSerializable
+    static final class RawOreVein {
+
+        @Setting("webhook-url")
+        String webhookUrl = "";
+        List<String> ores = List.of();
+        @Setting("max-search-count")
+        int maxSearchCount = 100;
+        String format = "%player_name% found a vein of **%block_type%** x%vein_count% at %block_location% in %block_world%";
+        @Setting("display-names")
+        Map<String, String> displayNames = Map.of();
+
+        OreVein validate() throws IOException {
+            var path = "ore-vein";
+            var url = Objects.requireNonNullElse(this.webhookUrl, "").strip();
+            URI uri = null;
+            if (!url.isEmpty()) {
+                // The URL contains the webhook token, so it is never included in the message.
+                try {
+                    uri = new URI(url);
+                } catch (URISyntaxException e) {
+                    throw invalid(path + ".webhook-url is not a valid URL");
+                }
+                if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+                    throw invalid(path + ".webhook-url must be an https:// URL");
+                }
+            }
+            if (this.maxSearchCount <= 0) {
+                throw invalid(path + ".max-search-count must be positive");
+            }
+            var ores = new HashSet<Key>();
+            for (var ore : Objects.requireNonNullElse(this.ores, List.<String>of())) {
+                ores.add(parseKey(ore, path + ".ores"));
+            }
+            var displayNames = new HashMap<Key, String>();
+            for (var entry : Objects.requireNonNullElse(this.displayNames, Map.<String, String>of()).entrySet()) {
+                displayNames.put(parseKey(entry.getKey(), path + ".display-names"), Objects.requireNonNullElse(entry.getValue(), ""));
+            }
+            return new OreVein(Optional.ofNullable(uri), ores, this.maxSearchCount,
+                Objects.requireNonNullElse(this.format, ""), displayNames);
         }
     }
 

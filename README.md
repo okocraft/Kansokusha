@@ -79,6 +79,14 @@ deletes or searches archive files. Read them with DuckDB, for example
 `SELECT * FROM read_parquet('archive/**/*.parquet')`, and deduplicate by `event_id`, because an
 interrupted run can write the same event again.
 
+### Ore vein notification
+
+On Paper and Folia, `ore-vein` sends a Discord message when a player in survival or
+adventure mode breaks the first ore of a naturally generated vein. Set `webhook-url` and list block
+types such as `minecraft:diamond_ore` in `ores`; both are empty by default, which disables it. The
+URL contains the webhook token, so keep `config.yml` private. Blocks placed by players and veins
+already reported are remembered in memory only until the server stops.
+
 ## Inspection mode
 
 Paper/Folia provides session-scoped inspection mode commands:

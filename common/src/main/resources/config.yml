@@ -33,6 +33,22 @@ duckdb:
   # Number of threads DuckDB may use. 0 uses the DuckDB default.
   threads: 0
 
+# Paper only. Sends a Discord message when a player in survival or adventure mode breaks the first
+# ore of a naturally generated vein. Blocks placed by players and veins already reported are
+# remembered in memory until the server stops.
+ore-vein:
+  # Discord webhook URL. Add ?thread_id=<id> to post into a thread. Empty disables this notification.
+  # The URL contains the webhook token; keep this file private.
+  webhook-url: ''
+  # Block types to report, such as minecraft:diamond_ore. Empty disables this notification.
+  ores: []
+  # Maximum number of blocks inspected when counting a vein. The rest of a larger vein may be reported again.
+  max-search-count: 100
+  # Placeholders: %player_name%, %block_type%, %block_world%, %block_location%, %vein_count%
+  format: '%player_name% found a vein of **%block_type%** x%vein_count% at %block_location% in %block_world%'
+  # Names used for %block_type%, such as "minecraft:diamond_ore": Diamond. Other types use their key.
+  display-names: {}
+
 retention:
   # Retention period for event types that are not listed in any policy below.
   default: P30D
