@@ -81,7 +81,7 @@ interrupted run can write the same event again.
 
 ### Ore vein notification
 
-On Paper and Folia, `ore-vein-notification` sends a Discord message when a player in survival or
+On Paper and Folia, `ore-vein` sends a Discord message when a player in survival or
 adventure mode breaks the first ore of a naturally generated vein. Set `webhook-url` and list block
 types such as `minecraft:diamond_ore` in `ores`; both are empty by default, which disables it. The
 URL contains the webhook token, so keep `config.yml` private. Blocks placed by players and veins

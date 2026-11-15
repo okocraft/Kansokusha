@@ -36,7 +36,7 @@ duckdb:
 # Paper only. Sends a Discord message when a player in survival or adventure mode breaks the first
 # ore of a naturally generated vein. Blocks placed by players and veins already reported are
 # remembered in memory until the server stops.
-ore-vein-notification:
+ore-vein:
   # Discord webhook URL. Add ?thread_id=<id> to post into a thread. Empty disables this notification.
   # The URL contains the webhook token; keep this file private.
   webhook-url: ''

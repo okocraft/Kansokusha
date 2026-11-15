@@ -141,7 +141,7 @@ class OreVeinNotificationListenerTest {
     private OreVeinNotificationListener listener(boolean ownsRegion, int maxSearchCount) {
         this.bukkit.when(() -> Bukkit.isOwnedByCurrentRegion(Mockito.any(World.class), Mockito.anyInt(), Mockito.anyInt()))
             .thenReturn(ownsRegion);
-        var settings = new KansokushaConfig.OreVeinNotification(
+        var settings = new KansokushaConfig.OreVein(
             Optional.of(URI.create("https://discord.com/api/webhooks/1/token")),
             Set.of(Key.key("minecraft", "diamond_ore")),
             maxSearchCount,

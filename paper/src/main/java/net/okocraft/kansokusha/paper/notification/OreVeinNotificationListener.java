@@ -34,12 +34,12 @@ public final class OreVeinNotificationListener implements Listener {
 
     private static final Set<GameMode> IGNORED_GAME_MODES = Set.of(GameMode.CREATIVE, GameMode.SPECTATOR);
 
-    private final KansokushaConfig.OreVeinNotification settings;
+    private final KansokushaConfig.OreVein settings;
     private final DiscordWebhook webhook;
     // Existing ores placed by players or belonging to a reported vein, per world. Kept in memory only.
     private final Map<UUID, Set<BlockPosition>> knownOres = new ConcurrentHashMap<>();
 
-    public OreVeinNotificationListener(KansokushaConfig.OreVeinNotification settings, DiscordWebhook webhook) {
+    public OreVeinNotificationListener(KansokushaConfig.OreVein settings, DiscordWebhook webhook) {
         this.settings = settings;
         this.webhook = webhook;
     }

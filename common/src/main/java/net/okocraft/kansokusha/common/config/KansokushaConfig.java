@@ -39,7 +39,7 @@ public record KansokushaConfig(
     ZoneId searchTimeZone,
     Retention retention,
     DuckDb duckDb,
-    OreVeinNotification oreVeinNotification
+    OreVein oreVein
 ) {
 
     public KansokushaConfig(
@@ -68,7 +68,7 @@ public record KansokushaConfig(
         DuckDb duckDb
     ) {
         this(serverKey, queueCapacity, batchSize, flushInterval, cleanupInterval, archiveInterval,
-            searchTimeZone, retention, duckDb, OreVeinNotification.DISABLED);
+            searchTimeZone, retention, duckDb, OreVein.DISABLED);
     }
 
     private static final String FILENAME = "config.yml";
@@ -120,7 +120,7 @@ public record KansokushaConfig(
      *                       {@code %block_world%}, {@code %block_location%} and {@code %vein_count%}
      * @param displayNames   names shown for {@code %block_type%}; other types use their key
      */
-    public record OreVeinNotification(
+    public record OreVein(
         Optional<URI> webhookUrl,
         Set<Key> ores,
         int maxSearchCount,
@@ -128,10 +128,10 @@ public record KansokushaConfig(
         Map<Key, String> displayNames
     ) {
 
-        public static final OreVeinNotification DISABLED =
-            new OreVeinNotification(Optional.empty(), Set.of(), 100, "", Map.of());
+        public static final OreVein DISABLED =
+            new OreVein(Optional.empty(), Set.of(), 100, "", Map.of());
 
-        public OreVeinNotification {
+        public OreVein {
             Objects.requireNonNull(webhookUrl, "webhookUrl");
             ores = Set.copyOf(ores);
             Objects.requireNonNull(format, "format");
@@ -181,8 +181,8 @@ public record KansokushaConfig(
         // Configurations written before these limits existed do not have this key.
         RawDuckDb duckdb = new RawDuckDb();
         // Configurations written before this notification existed do not have this key.
-        @Setting("ore-vein-notification")
-        RawOreVeinNotification oreVeinNotification = new RawOreVeinNotification();
+        @Setting("ore-vein")
+        RawOreVein oreVein = new RawOreVein();
 
         KansokushaConfig validate() throws IOException {
             if (this.queueCapacity <= 0) {
@@ -203,13 +203,13 @@ public record KansokushaConfig(
                 parseZoneId(this.searchTimeZone, "search-time-zone"),
                 Objects.requireNonNullElseGet(this.retention, RawRetention::new).validate(),
                 Objects.requireNonNullElseGet(this.duckdb, RawDuckDb::new).validate(),
-                Objects.requireNonNullElseGet(this.oreVeinNotification, RawOreVeinNotification::new).validate()
+                Objects.requireNonNullElseGet(this.oreVein, RawOreVein::new).validate()
             );
         }
     }
 
     @ConfigSerializable
-    static final class RawOreVeinNotification {
+    static final class RawOreVein {
 
         @Setting("webhook-url")
         String webhookUrl = "";
@@ -220,8 +220,8 @@ public record KansokushaConfig(
         @Setting("display-names")
         Map<String, String> displayNames = Map.of();
 
-        OreVeinNotification validate() throws IOException {
-            var path = "ore-vein-notification";
+        OreVein validate() throws IOException {
+            var path = "ore-vein";
             var url = Objects.requireNonNullElse(this.webhookUrl, "").strip();
             URI uri = null;
             if (!url.isEmpty()) {
@@ -246,7 +246,7 @@ public record KansokushaConfig(
             for (var entry : Objects.requireNonNullElse(this.displayNames, Map.<String, String>of()).entrySet()) {
                 displayNames.put(parseKey(entry.getKey(), path + ".display-names"), Objects.requireNonNullElse(entry.getValue(), ""));
             }
-            return new OreVeinNotification(Optional.ofNullable(uri), ores, this.maxSearchCount,
+            return new OreVein(Optional.ofNullable(uri), ores, this.maxSearchCount,
                 Objects.requireNonNullElse(this.format, ""), displayNames);
         }
     }

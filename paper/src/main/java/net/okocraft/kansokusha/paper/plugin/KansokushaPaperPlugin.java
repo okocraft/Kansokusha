@@ -73,7 +73,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     }
 
     private void registerNotifications(KansokushaConfig config) {
-        var oreVein = config.oreVeinNotification();
+        var oreVein = config.oreVein();
         if (oreVein.enabled()) {
             this.discordWebhook = new DiscordWebhook(oreVein.webhookUrl().orElseThrow(), this.getLogger());
             this.getServer().getPluginManager().registerEvents(new OreVeinNotificationListener(oreVein, this.discordWebhook), this);
