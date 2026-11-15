@@ -27,14 +27,6 @@ import java.util.UUID;
 
 class OreVeinNotificationListenerTest {
 
-    private static final KansokushaConfig.OreVeinNotification SETTINGS = new KansokushaConfig.OreVeinNotification(
-        Optional.of(URI.create("https://discord.com/api/webhooks/1/token")),
-        Set.of(Key.key("minecraft", "diamond_ore")),
-        100,
-        "%player_name% found a vein of **%block_type%** x%vein_count% at %block_location% in %block_world%",
-        Map.of(Key.key("minecraft", "diamond_ore"), "Diamond")
-    );
-
     private final DiscordWebhook webhook = Mockito.mock(DiscordWebhook.class);
     private final World world = world();
     private final MockedStatic<Bukkit> bukkit = Mockito.mockStatic(Bukkit.class);
@@ -97,6 +89,42 @@ class OreVeinNotificationListenerTest {
     }
 
     @Test
+    void testLongVeinIsReportedOnceWithItsFullSize() {
+        for (var x = 0; x < 8; x++) {
+            this.setType(x, 10, 0, Material.DIAMOND_ORE);
+        }
+        var listener = this.listener(true);
+
+        for (var x = 0; x < 8; x++) {
+            listener.onBreak(breakEvent(this.block(x, 10, 0), player(GameMode.SURVIVAL)));
+            this.setType(x, 10, 0, Material.AIR);
+        }
+
+        Mockito.verify(this.webhook).send("Steve found a vein of **Diamond** x8 at 0 10 0 in world");
+        Mockito.verifyNoMoreInteractions(this.webhook);
+    }
+
+    @Test
+    void testRestOfVeinBeyondSearchLimitIsReportedAgain() {
+        for (var x = 0; x < 8; x++) {
+            this.setType(x, 10, 0, Material.DIAMOND_ORE);
+        }
+        // 27 blocks cover the broken ore and its neighbours, so each report counts only two ores.
+        var listener = this.listener(true, 27);
+
+        for (var x = 0; x < 8; x++) {
+            listener.onBreak(breakEvent(this.block(x, 10, 0), player(GameMode.SURVIVAL)));
+            this.setType(x, 10, 0, Material.AIR);
+        }
+
+        Mockito.verify(this.webhook).send("Steve found a vein of **Diamond** x2 at 0 10 0 in world");
+        Mockito.verify(this.webhook).send("Steve found a vein of **Diamond** x2 at 2 10 0 in world");
+        Mockito.verify(this.webhook).send("Steve found a vein of **Diamond** x2 at 4 10 0 in world");
+        Mockito.verify(this.webhook).send("Steve found a vein of **Diamond** x2 at 6 10 0 in world");
+        Mockito.verifyNoMoreInteractions(this.webhook);
+    }
+
+    @Test
     void testHandlersRunAtMonitorAndIgnoreCancelledEvents() throws ReflectiveOperationException {
         for (var method : new String[]{"onPlace", "onBreak"}) {
             var parameter = method.equals("onPlace") ? BlockPlaceEvent.class : BlockBreakEvent.class;
@@ -107,9 +135,20 @@ class OreVeinNotificationListenerTest {
     }
 
     private OreVeinNotificationListener listener(boolean ownsRegion) {
+        return this.listener(ownsRegion, 100);
+    }
+
+    private OreVeinNotificationListener listener(boolean ownsRegion, int maxSearchCount) {
         this.bukkit.when(() -> Bukkit.isOwnedByCurrentRegion(Mockito.any(World.class), Mockito.anyInt(), Mockito.anyInt()))
             .thenReturn(ownsRegion);
-        return new OreVeinNotificationListener(SETTINGS, this.webhook);
+        var settings = new KansokushaConfig.OreVeinNotification(
+            Optional.of(URI.create("https://discord.com/api/webhooks/1/token")),
+            Set.of(Key.key("minecraft", "diamond_ore")),
+            maxSearchCount,
+            "%player_name% found a vein of **%block_type%** x%vein_count% at %block_location% in %block_world%",
+            Map.of(Key.key("minecraft", "diamond_ore"), "Diamond")
+        );
+        return new OreVeinNotificationListener(settings, this.webhook);
     }
 
     private void setType(int x, int y, int z, Material type) {

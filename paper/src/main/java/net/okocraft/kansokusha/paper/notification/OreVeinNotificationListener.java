@@ -18,6 +18,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,7 +36,7 @@ public final class OreVeinNotificationListener implements Listener {
 
     private final KansokushaConfig.OreVeinNotification settings;
     private final DiscordWebhook webhook;
-    // Ores placed by players or already reported, per world. Kept in memory only.
+    // Existing ores placed by players or belonging to a reported vein, per world. Kept in memory only.
     private final Map<UUID, Set<BlockPosition>> knownOres = new ConcurrentHashMap<>();
 
     public OreVeinNotificationListener(KansokushaConfig.OreVeinNotification settings, DiscordWebhook webhook) {
@@ -58,61 +59,63 @@ public final class OreVeinNotificationListener implements Listener {
     public void onBreak(BlockBreakEvent event) {
         var player = event.getPlayer();
         var block = event.getBlock();
-        if (IGNORED_GAME_MODES.contains(player.getGameMode()) || !this.isTarget(block.getType())) {
+        if (!this.isTarget(block.getType())) {
             return;
         }
-        var count = this.countNewVein(block);
-        if (count > 0) {
-            var key = block.getType().key();
-            this.webhook.send(this.settings.format()
-                .replace("%player_name%", player.getName())
-                .replace("%block_type%", this.settings.displayNames().getOrDefault(key, key.asMinimalString()))
-                .replace("%block_world%", block.getWorld().getName())
-                .replace("%block_location%", block.getX() + " " + block.getY() + " " + block.getZ())
-                .replace("%vein_count%", Integer.toString(count)));
+        var known = this.knownOres(block.getWorld());
+        int count;
+        // On Folia, regions of the same world break blocks concurrently.
+        synchronized (known) {
+            // The broken ore no longer exists, so forget it; the set holds only ores that still exist.
+            if (known.remove(Position.block(block.getLocation())) || IGNORED_GAME_MODES.contains(player.getGameMode())) {
+                return;
+            }
+            count = this.countVein(block, known);
         }
+        var key = block.getType().key();
+        this.webhook.send(this.settings.format()
+            .replace("%player_name%", player.getName())
+            .replace("%block_type%", this.settings.displayNames().getOrDefault(key, key.asMinimalString()))
+            .replace("%block_world%", block.getWorld().getName())
+            .replace("%block_location%", block.getX() + " " + block.getY() + " " + block.getZ())
+            .replace("%vein_count%", Integer.toString(count)));
     }
 
     /**
      * Counts the connected blocks of the broken block's type, which still has its type at MONITOR,
-     * and remembers them so that the vein is reported only once.
-     *
-     * @return the vein size, or 0 when the block was placed by a player or is already reported
+     * and adds them to {@code known} so that the vein is reported only once. The search stops
+     * after inspecting {@code max-search-count} distinct blocks, so the rest of a larger vein may
+     * be reported again later.
      */
-    private int countNewVein(Block origin) {
+    private int countVein(Block origin, Set<BlockPosition> known) {
         var world = origin.getWorld();
         var type = origin.getType();
-        var known = this.knownOres(world);
-        // On Folia, regions of the same world break blocks concurrently.
-        synchronized (known) {
-            var start = Position.block(origin.getLocation());
-            if (!known.add(start)) {
-                return 0;
-            }
-            var count = 1;
-            var inspected = 0;
-            var queue = new ArrayDeque<BlockPosition>();
-            queue.add(start);
-            while (!queue.isEmpty()) {
-                var current = queue.poll();
-                for (var dx = -1; dx <= 1; dx++) {
-                    for (var dy = -1; dy <= 1; dy++) {
-                        for (var dz = -1; dz <= 1; dz++) {
-                            if (inspected++ >= this.settings.maxSearchCount()) {
-                                return count;
-                            }
-                            var next = current.offset(dx, dy, dz);
-                            if (isReadable(world, next) && world.getType(next.blockX(), next.blockY(), next.blockZ()) == type
-                                && known.add(next)) {
-                                count++;
-                                queue.add(next);
-                            }
+        var start = Position.block(origin.getLocation());
+        var inspected = new HashSet<BlockPosition>(Set.of(start));
+        var queue = new ArrayDeque<BlockPosition>(List.of(start));
+        var count = 1;
+        while (!queue.isEmpty()) {
+            var current = queue.poll();
+            for (var dx = -1; dx <= 1; dx++) {
+                for (var dy = -1; dy <= 1; dy++) {
+                    for (var dz = -1; dz <= 1; dz++) {
+                        var next = current.offset(dx, dy, dz);
+                        if (!inspected.add(next) || known.contains(next)) {
+                            continue;
+                        }
+                        if (inspected.size() > this.settings.maxSearchCount()) {
+                            return count;
+                        }
+                        if (isReadable(world, next) && world.getType(next.blockX(), next.blockY(), next.blockZ()) == type) {
+                            known.add(next);
+                            count++;
+                            queue.add(next);
                         }
                     }
                 }
             }
-            return count;
         }
+        return count;
     }
 
     private boolean isTarget(Material type) {

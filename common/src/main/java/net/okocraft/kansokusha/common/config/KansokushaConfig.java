@@ -223,12 +223,17 @@ public record KansokushaConfig(
         OreVeinNotification validate() throws IOException {
             var path = "ore-vein-notification";
             var url = Objects.requireNonNullElse(this.webhookUrl, "").strip();
-            URI uri;
-            try {
-                uri = url.isEmpty() ? null : new URI(url);
-            } catch (URISyntaxException e) {
+            URI uri = null;
+            if (!url.isEmpty()) {
                 // The URL contains the webhook token, so it is never included in the message.
-                throw invalid(path + ".webhook-url is not a valid URL");
+                try {
+                    uri = new URI(url);
+                } catch (URISyntaxException e) {
+                    throw invalid(path + ".webhook-url is not a valid URL");
+                }
+                if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+                    throw invalid(path + ".webhook-url must be an https:// URL");
+                }
             }
             if (this.maxSearchCount <= 0) {
                 throw invalid(path + ".max-search-count must be positive");

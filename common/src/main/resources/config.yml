@@ -42,7 +42,7 @@ ore-vein-notification:
   webhook-url: ''
   # Block types to report, such as minecraft:diamond_ore. Empty disables this notification.
   ores: []
-  # Maximum number of blocks inspected around a broken ore when counting its vein.
+  # Maximum number of blocks inspected when counting a vein. The rest of a larger vein may be reported again.
   max-search-count: 100
   # Placeholders: %player_name%, %block_type%, %block_world%, %block_location%, %vein_count%
   format: '%player_name% found a vein of **%block_type%** x%vein_count% at %block_location% in %block_world%'

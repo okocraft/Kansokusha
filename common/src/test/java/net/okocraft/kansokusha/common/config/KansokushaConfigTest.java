@@ -103,6 +103,9 @@ class KansokushaConfigTest {
 
         for (var invalid : List.of(
             "webhook-url: 'https://discord.com/ secret-token'",
+            "webhook-url: 'secret-token'",
+            "webhook-url: 'http://discord.com/api/webhooks/1/secret-token'",
+            "webhook-url: 'https:///secret-token'",
             "ores: [diamond_ore]",
             "max-search-count: 0",
             "display-names: {diamond_ore: Diamond}"
