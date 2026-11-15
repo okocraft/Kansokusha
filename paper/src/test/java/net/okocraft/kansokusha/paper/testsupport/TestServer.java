@@ -1,6 +1,7 @@
 package net.okocraft.kansokusha.paper.testsupport;
 
 import io.papermc.paper.command.brigadier.PaperCommands;
+import io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.Commands;
@@ -72,7 +73,8 @@ public final class TestServer {
             resources,
             TagLoader.buildUpdatedLookups(RegistryLayer.STATIC_ACCESS, tags),
             RegistryDataLoader.WORLD_REGISTRIES,
-            Runnable::run
+            Runnable::run,
+            ReloadableRegistrarEvent.Cause.INITIAL
         ).join();
 
         LayeredRegistryAccess<RegistryLayer> layers = RegistryLayer.createRegistryAccess()
