@@ -21,8 +21,9 @@ import java.util.logging.Logger;
 
 /**
  * Posts plain-text messages to a Discord webhook, one at a time and in order, on a background
- * thread so that the server thread never waits for the network. At most 1000 messages wait to be
- * sent; further messages are dropped with a warning.
+ * thread so that the server thread never waits for the network. Delivery is best effort: at most
+ * 1000 messages wait to be sent, further messages are dropped with a warning, and messages are not
+ * confirmed with {@code wait=true}, so Discord may accept one that it does not save.
  */
 @ApiStatus.Internal
 @NotNullByDefault
@@ -41,8 +42,7 @@ public final class DiscordWebhook implements AutoCloseable {
      * @param url the webhook URL; add {@code ?thread_id=...} to post into a thread
      */
     public DiscordWebhook(URI url, Logger logger) {
-        // Without wait=true, Discord may answer 2xx for a message that it did not save.
-        this.url = URI.create(url + (url.getRawQuery() == null ? "?" : "&") + "wait=true");
+        this.url = url;
         this.logger = logger;
     }
 
