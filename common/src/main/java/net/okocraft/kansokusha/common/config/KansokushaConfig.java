@@ -163,6 +163,11 @@ public record KansokushaConfig(
         public Duration durationOf(Key eventType) {
             return this.durations.getOrDefault(eventType, this.defaultDuration);
         }
+
+        /** Whether a policy lists the event type. Others fall back to {@link #defaultDuration()}. */
+        public boolean isListed(Key eventType) {
+            return this.durations.containsKey(eventType);
+        }
     }
 
     @ConfigSerializable

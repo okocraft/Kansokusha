@@ -180,6 +180,7 @@ DB read は既存 backend の asynchronous storage path を使う。storage thre
 - submit 時に `expires_at = occurred_at + 保持期間` を計算して保存する。保持期間を変更しても既存イベントの `expires_at` は変わらない。
 - `cleanup-interval` ごと（および起動直後と停止時）に `expires_at <= 現在時刻` の event を削除する。ただしアーカイブ対象の event type は削除しない。
 - 設定の変更は再起動で反映する。
+- どの policy にも載っていない event type は `retention.default` で処理する（アーカイブ不可）。event type の登録時（起動時）に、event type ごとに 1 回、その旨と適用される保持期間を info ログに出す。一覧の入れ忘れに気づけるようにするためで、組み込みの event type は同梱の `config.yml` にすべて載せてある。
 - 保持期間の変更は起動時に既存 event にも反映する。DB の `metadata` テーブル（`name`, `value`）に、最後に適用した保持期間（event type ごとと default のミリ秒。`archive` は `expires_at` に影響しないので含めない）を記録しておき、起動時の設定と異なるか記録がなければ、全 event の `expires_at` を `occurred_at + 保持期間` で計算し直す（submit 時と同じミリ秒演算）。
   - cleanup / アーカイブは再計算が終わってから開始する。古い `expires_at` のまま先に削除・アーカイブすると、延長した保持期間で残るはずの event が失われるため。停止時の最終 cleanup も、開始前なら行わない。
   - 再計算の範囲は、別接続（書き込みを止めない）で `occurred_at` の分ごとの件数を 1 回数え、event のある分だけを連続して最大 10 万件ずつにまとめて決める。1 分に 10 万件を超える場合はその 1 分を 1 範囲とする。event のない期間には SQL を発行しない。
