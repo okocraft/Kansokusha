@@ -241,6 +241,39 @@ class KansokushaRuntimeTest {
     }
 
     @Test
+    void testEventTypeNotListedInAnyRetentionPolicyIsReportedOnce(@TempDir Path dir) throws Exception {
+        var listed = Key.key("example", "listed");
+        var unlisted = Key.key("example", "unlisted");
+        var base = config(10, BATCH_SIZE);
+        var config = new KansokushaConfig(
+            base.serverKey(), base.queueCapacity(), base.batchSize(), base.flushInterval(), base.cleanupInterval(),
+            base.archiveInterval(), base.searchTimeZone(),
+            new KansokushaConfig.Retention(Map.of(listed, Duration.ofDays(3)), Duration.ofDays(30))
+        );
+        var messages = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var runtime = KansokushaRuntime.start(
+            DuckDbStorageImpl.open(dir.resolve(KansokushaRuntime.DATABASE_FILENAME)),
+            Path.of("unused-archive"), config, SERVER_KEY, messages::add,
+            (message, failure) -> {
+                throw new AssertionError(message, failure);
+            }
+        );
+        try {
+            runtime.registerEventType(new EventTypeDefinition(listed, PayloadGeneration.FIRST));
+            runtime.registerEventType(new EventTypeDefinition(unlisted, PayloadGeneration.FIRST));
+            runtime.registerEventType(new EventTypeDefinition(unlisted, PayloadGeneration.FIRST));
+        } finally {
+            runtime.close();
+        }
+
+        Assertions.assertEquals(
+            List.of("Event type example:unlisted is not listed in any retention policy; using retention.default"
+                + " (P30D, deleted when expired)."),
+            messages.stream().filter(message -> message.startsWith("Event type ")).toList()
+        );
+    }
+
+    @Test
     void testRetentionFingerprintIgnoresArchivingAndOrder() {
         var a = Key.key("example", "a");
         var b = Key.key("example", "b");

@@ -326,6 +326,21 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                     + existing.payloadGeneration().value()
             );
         }
+        if (existing == null && !this.retention.isListed(definition.key())) {
+            // Registered once per event type, so this is logged once at startup for each fallback.
+            this.infoReporter.accept(
+                "Event type " + definition.key().asString() + " is not listed in any retention policy; using"
+                    + " retention.default (" + formatDuration(this.retention.defaultDuration())
+                    + ", deleted when expired)."
+            );
+        }
+    }
+
+    // ISO-8601 like the configuration, but in days when it is whole days (Duration prints P30D as PT720H).
+    private static String formatDuration(Duration duration) {
+        return duration.toSeconds() % Duration.ofDays(1).toSeconds() == 0 && duration.getNano() == 0
+            ? "P" + duration.toDays() + "D"
+            : duration.toString();
     }
 
     @Override
