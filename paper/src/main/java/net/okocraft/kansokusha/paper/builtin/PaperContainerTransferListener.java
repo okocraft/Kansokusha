@@ -44,7 +44,6 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
     static final Duration CHAIN_WINDOW = Duration.ofMinutes(5);
     static final Duration CONTAINER_WINDOW = Duration.ofSeconds(15);
 
-    // Bounds the memory used by the aggregation; transfers beyond it are submitted one by one.
     static final int MAX_PENDING = 100_000;
 
     private final KansokushaApi api;
@@ -95,7 +94,7 @@ public final class PaperContainerTransferListener implements Listener, PaperBuff
                 this.submit(created);
                 return;
             }
-            // The stored key must not reference the live item of the event.
+            // Use the copied item so mutations to the event item cannot change the stored key.
             var stored = new TransferKey(
                 key.source(), key.destination(), key.initiator(), key.initiatorRole(), new SimilarItem(created.item)
             );

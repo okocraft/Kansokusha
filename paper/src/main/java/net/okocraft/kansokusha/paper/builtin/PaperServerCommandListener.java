@@ -41,7 +41,6 @@ public final class PaperServerCommandListener implements Listener, PaperBuffered
     static final Key EVENT_TYPE = Key.key("kansokusha", "paper_server_command");
     static final Duration COMMAND_BLOCK_WINDOW = Duration.ofMinutes(1);
 
-    // Bounds the memory used by the aggregation; commands beyond it are submitted one by one.
     static final int MAX_PENDING = 100_000;
 
     private final EventSearchBackend searchBackend;

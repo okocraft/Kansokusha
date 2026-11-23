@@ -108,8 +108,7 @@ final class DuckDbEventSearch {
         var fetchAscending = fetchingPrevious ? !logicalAscending : logicalAscending;
         var direction = fetchAscending ? "ASC" : "DESC";
 
-        // Selects the page's event ids first and reads the other columns only for them. Sorting the wide rows
-        // (payload, search_text and the player name lookup) of every matching event is far slower.
+        // Select page IDs first so the sort carries only IDs and timestamps.
         var sql = SELECT_SEARCH_EVENTS + """
             JOIN (
                 SELECT e.event_id AS id

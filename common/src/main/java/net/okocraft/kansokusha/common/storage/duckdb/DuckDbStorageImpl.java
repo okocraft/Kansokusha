@@ -108,7 +108,6 @@ public final class DuckDbStorageImpl implements Storage {
         "last_seen"
     );
 
-    // Values Kansokusha keeps about the database itself, such as the retention settings applied to it.
     private static final String CREATE_METADATA_TABLE = """
         CREATE TABLE IF NOT EXISTS metadata (
             name VARCHAR NOT NULL PRIMARY KEY,
@@ -126,8 +125,7 @@ public final class DuckDbStorageImpl implements Storage {
     private static final byte[] ENTITY_ACTOR_KIND = "entity".getBytes(StandardCharsets.UTF_8);
     private static final byte[] BLOCK_ACTOR_KIND = "block".getBytes(StandardCharsets.UTF_8);
 
-    // Bounds the cache in case a platform creates worlds with unique keys indefinitely.
-    // Large enough to hold every block, item and entity type key used as actor or target types.
+    // Bound the cache so dynamically created world keys cannot make it grow indefinitely.
     private static final int MAX_CACHED_KEYS = 4096;
 
     private final Path filepath;
@@ -339,7 +337,7 @@ public final class DuckDbStorageImpl implements Storage {
         long events;
         Optional<Instant> oldest;
         Optional<Instant> newest;
-        // The row count and the time range come from the table statistics, not from a scan.
+        // DuckDB can answer these aggregates from exact partition statistics.
         try (var statement = this.connection.createStatement();
              var rows = statement.executeQuery(
                  "SELECT count(*), epoch_ms(min(occurred_at)), epoch_ms(max(occurred_at)) FROM events"
@@ -458,8 +456,7 @@ public final class DuckDbStorageImpl implements Storage {
             moveWithoutReplacing(temporary, target);
             temporary = null;
 
-            // The file is in place, so the events can no longer be lost. If this fails, the events stay
-            // in the database and the next archive run writes them again.
+            // Publish the archive before deleting rows. A failed delete can cause duplicate archives.
             var deleted = statement.executeUpdate("DELETE FROM events WHERE " + condition);
             this.connection.commit();
             return deleted;
@@ -577,7 +574,6 @@ public final class DuckDbStorageImpl implements Storage {
         return "expires_at <= epoch_ms(" + now.toEpochMilli() + "::BIGINT)";
     }
 
-    // Event types are namespaced keys, so they cannot break out of the literal, but quote them anyway.
     private static String inList(Set<Key> eventTypes) {
         var joiner = new StringJoiner(", ", "(", ")");
         for (var eventType : eventTypes) {
@@ -595,7 +591,7 @@ public final class DuckDbStorageImpl implements Storage {
             throw new FileAlreadyExistsException(target.toString());
         }
         try {
-            // Same directory, so readers never see a partially written file.
+            // Publish the completed file atomically when the filesystem supports it.
             Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
             Files.move(source, target);

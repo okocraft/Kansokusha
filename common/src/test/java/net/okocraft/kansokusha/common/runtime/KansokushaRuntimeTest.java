@@ -199,7 +199,7 @@ class KansokushaRuntimeTest {
         var file = dir.resolve(KansokushaRuntime.DATABASE_FILENAME);
         var occurredAt = Instant.now().minus(Duration.ofDays(2));
         try (var storage = DuckDbStorageImpl.open(file)) {
-            // Recorded under a 1-day retention: expired by the old expiry, alive under the 30 days below.
+            // Make the event expired under the old policy and live under the replacement policy.
             storage.append(List.of(new QueuedEvent(
                 event(occurredAt), occurredAt.toEpochMilli(), occurredAt.plus(Duration.ofDays(1)).toEpochMilli(), null, null
             )));
@@ -227,7 +227,6 @@ class KansokushaRuntimeTest {
         Assertions.assertEquals(1, countEvents(dir), "the lengthened retention keeps the event");
         Assertions.assertTrue(messages.getLast().contains("1 changed"), messages.toString());
 
-        // The same settings are not applied again.
         messages.clear();
         runtime = KansokushaRuntime.start(
             DuckDbStorageImpl.open(file), Path.of("unused-archive"), config, SERVER_KEY, messages::add,

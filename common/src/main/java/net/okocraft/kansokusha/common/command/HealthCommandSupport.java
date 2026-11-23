@@ -94,7 +94,6 @@ public final class HealthCommandSupport {
         return HealthCommandMessages.LINE.apply(label.asComponent(), value);
     }
 
-    // Losing or refusing events is the failure an administrator needs to notice.
     private static Component warning(long count) {
         return Component.text(count, count > 0 ? NamedTextColor.RED : NamedTextColor.AQUA);
     }

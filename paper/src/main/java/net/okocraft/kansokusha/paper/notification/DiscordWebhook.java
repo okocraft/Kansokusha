@@ -71,7 +71,7 @@ public final class DiscordWebhook implements AutoCloseable {
         try {
             var response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 429) {
-                // Discord gives the wait in seconds, possibly with a fraction such as "1.5".
+                // Read the retry delay in seconds and preserve fractional values.
                 var seconds = response.headers().firstValue("Retry-After").map(Double::parseDouble).orElse(1.0);
                 Thread.sleep((long) (seconds * 1000));
                 response = this.client.send(request, HttpResponse.BodyHandlers.ofString());

@@ -127,8 +127,7 @@ public final class PaperExplosionBlockChangeListener implements Listener {
 
         var occurredAt = this.clock.instant();
         var worldKey = PaperKansokusha.key(world.getKey());
-        // Exploded TNT is primed and recorded as tnt_prime. The Ender Dragon does not fire
-        // TNTPrimeEvent, so TNT destroyed by it is recorded here.
+        // Exclude TNT handled by TNTPrimeEvent. The Ender Dragon destroys TNT without firing that event.
         var skipTnt = !enderDragon && PaperBuiltInSupport.tntExplodes(world);
         var recordedPositions = new HashSet<BlockPosition>();
         for (var block : blocks) {

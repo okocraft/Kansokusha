@@ -23,7 +23,7 @@ public final class PaperPlayerSessionPayloadCodec {
     static EventPayload encodeJoin(String username, @Nullable InetSocketAddress remoteAddress) {
         var payload = new CompoundTag();
         payload.putString("username", Objects.requireNonNull(username, "username"));
-        // Payloads recorded before the address was captured have neither field.
+        // The address and port are optional in stored login payloads.
         if (remoteAddress != null) {
             payload.putString("remote_address", remoteAddress.getHostString());
             payload.putInt("remote_port", remoteAddress.getPort());

@@ -74,9 +74,8 @@ public final class OreVeinListener implements Listener {
         }
         var known = this.knownOres(block.getWorld());
         int count;
-        // On Folia, regions of the same world break blocks concurrently.
+        // Serialize each vein check and update against other Folia regions in the same world.
         synchronized (known) {
-            // The broken ore no longer exists, so forget it; the set holds only ores that still exist.
             if (known.remove(Position.block(block.getLocation())) || IGNORED_GAME_MODES.contains(player.getGameMode())) {
                 return;
             }

@@ -61,8 +61,7 @@ public final class TimeBasedUUID {
                 return;
             }
 
-            // Exhausting all 74 counter bits in one logical millisecond is not realistic, but
-            // advancing the logical timestamp is still safer than waiting for the wall clock.
+            // Advance the logical clock on counter overflow to keep UUIDs ordered without waiting.
             this.randA = 0;
             this.lastMillis++;
         }

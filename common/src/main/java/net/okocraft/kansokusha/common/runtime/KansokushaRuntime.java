@@ -65,17 +65,16 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     public static final String DATABASE_FILENAME = "kansokusha.duckdb";
     public static final String ARCHIVE_DIRECTORY = "archive";
-    // Small enough that one range is rewritten quickly, so the write queue does not fill up meanwhile.
+    // Limit each expiry rewrite so the storage thread can resume draining the write queue promptly.
     private static final long MAX_EVENTS_PER_RECALCULATION = 100_000;
     private static final DateTimeFormatter ARCHIVE_TIMESTAMP =
         DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssSSS'Z'", Locale.ROOT);
 
     private static final int CLOSED_MASK = 1 << 31;
-    // Bounds how long one flush task occupies the storage thread, so that queries queued behind it
-    // are not starved while events keep arriving. The remainder is flushed by a follow-up task.
     /** The window of the recent event count shown by the health command. */
     public static final Duration RECENT_WINDOW = Duration.ofHours(24);
 
+    // Bound each flush so queries can run while events keep arriving.
     static final int MAX_BATCHES_PER_FLUSH = 8;
 
     private final Optional<Key> localServerKey;
@@ -95,11 +94,10 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
     private final Duration cleanupInterval;
     private final Duration archiveInterval;
     private final CompletableFuture<Void> maintenance = new CompletableFuture<>();
-    // Only accessed on the storage thread. The final cleanup on close must not use expiry that is not updated yet.
+    // Only the storage thread accesses this flag. Final cleanup requires up-to-date expiry timestamps.
     private boolean maintenanceStarted;
     private final AtomicLong rejectedEvents = new AtomicLong();
     private final ScheduledExecutorService storageThread;
-    // Runs the callbacks of query results so that rendering never occupies the storage thread.
     private final ExecutorService callbackExecutor = Executors.newThreadPerTaskExecutor(
         Thread.ofVirtual().name("kansokusha-callback-", 0).factory()
     );
@@ -194,7 +192,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         return runtime;
     }
 
-    // Runs on the storage thread.
     private void applyRetentionThenStartMaintenance() {
         var retention = retentionFingerprint(this.retention);
         try {
@@ -223,18 +220,16 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                         () -> this.recalculateExpiry(ranges, 0, 0, retentionMillis, defaultMillis, retention)
                     );
                 } catch (RejectedExecutionException ignored) {
-                    // Stopping; the next start recalculates again.
+                    // Startup retries because the new retention fingerprint is still unwritten.
                 } catch (SQLException | RuntimeException e) {
                     this.reportRetentionFailure(e);
                 }
             });
         } catch (RejectedExecutionException ignored) {
-            // Stopping; the next start recalculates again.
         }
     }
 
-    // Runs on the storage thread. Each range is a separate task, so flushes that became due in the meantime
-    // run between ranges and the write queue keeps draining.
+    // Schedule each range separately so flushes can drain the queue between rewrites.
     private void recalculateExpiry(
         List<OccurredRange> ranges,
         int index,
@@ -256,7 +251,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
                 () -> this.recalculateExpiry(ranges, index + 1, total, retentionMillis, defaultMillis, retention)
             );
         } catch (RejectedExecutionException ignored) {
-            // Stopping; the next start recalculates again. Ranges already done are skipped as unchanged.
+            // Startup retries the recalculation and skips rows whose expiry already matches.
         } catch (SQLException | RuntimeException e) {
             this.reportRetentionFailure(e);
         }
@@ -273,7 +268,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         );
     }
 
-    // Runs on the storage thread.
     private void startMaintenance() {
         this.maintenanceStarted = true;
         this.storageThread.scheduleWithFixedDelay(
@@ -327,7 +321,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             );
         }
         if (existing == null && !this.retention.isListed(definition.key())) {
-            // Registered once per event type, so this is logged once at startup for each fallback.
             this.infoReporter.accept(
                 "Event type " + definition.key().asString() + " is not listed in any retention policy; using"
                     + " retention.default (" + formatDuration(this.retention.defaultDuration())
@@ -414,7 +407,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
 
     @Override
     public CompletableFuture<Map<Key, EventTypeStatistics>> storedEventStatistics() {
-        // The scan can take a long time, so it runs outside the storage thread.
         var result = new CompletableFuture<Map<Key, EventTypeStatistics>>();
         try {
             this.callbackExecutor.execute(() -> {
@@ -474,7 +466,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         @Nullable String searchText
     ) {
         try {
-            // toEpochMilli() rounds towards negative infinity, the same as truncating to milliseconds.
             var occurredAtMillis = submission.occurredAt().toEpochMilli();
             return new QueuedEvent(
                 submission,
@@ -504,8 +495,7 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         return result;
     }
 
-    // Dependent stages of the future run on the thread that completes it. Complete it on the callback
-    // executor so that callers' processing, such as decoding and rendering events, stays off the storage thread.
+    // Complete off the storage thread because non-async stages can run inline.
     private <T> void complete(CompletableFuture<T> result, @Nullable T value, @Nullable Throwable failure) {
         Runnable completion = failure != null
             ? () -> result.completeExceptionally(failure)
@@ -623,7 +613,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
         }
 
         if (batches == maxBatches && !this.queue.isEmpty()) {
-            // Goes behind the queries that arrived in the meantime.
             try {
                 this.storageThread.execute(this::flush);
             } catch (RejectedExecutionException ignored) {
@@ -662,7 +651,6 @@ public final class KansokushaRuntime implements KansokushaApi, EventSearchBacken
             .resolve("events-" + ARCHIVE_TIMESTAMP.format(utc) + ".parquet");
     }
 
-    // Resolves the retention period at registration instead of on every submission.
     private record RegisteredEventType(PayloadGeneration payloadGeneration, long retentionMillis) {
     }
 
