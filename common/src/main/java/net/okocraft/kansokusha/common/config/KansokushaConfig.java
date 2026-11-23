@@ -178,14 +178,12 @@ public record KansokushaConfig(
         int batchSize = 0;
         String flushInterval = "";
         String cleanupInterval = "";
-        // Configurations written before archiving existed do not have this key.
+        // Use a one-day interval when an existing configuration omits archive-interval.
         String archiveInterval = "P1D";
         @Setting("search-time-zone")
         String searchTimeZone = "";
         RawRetention retention = new RawRetention();
-        // Configurations written before these limits existed do not have this key.
         RawDuckDb duckdb = new RawDuckDb();
-        // Configurations written before this notification existed do not have this key.
         @Setting("ore-vein")
         RawOreVein oreVein = new RawOreVein();
 
@@ -230,7 +228,7 @@ public record KansokushaConfig(
             var url = Objects.requireNonNullElse(this.webhookUrl, "").strip();
             URI uri = null;
             if (!url.isEmpty()) {
-                // The URL contains the webhook token, so it is never included in the message.
+                // Omit the URL and parse error from diagnostics so the webhook token stays private.
                 try {
                     uri = new URI(url);
                 } catch (URISyntaxException e) {

@@ -19,7 +19,7 @@ public final class EventView {
     private final MessageKey.Arg3<Component, Component, Component> message;
 
     public EventView(String type, String english) {
-        // Keep legacy keys registered for existing custom files. The new layout has its own keys.
+        // Register legacy keys so existing custom language files can still load.
         this.definer.define("kansokusha.display.event." + type, english);
         this.message = this.definer.define("kansokusha.display.compact.event." + type, english)
             .with(actor -> Argument.component("actor", actor),

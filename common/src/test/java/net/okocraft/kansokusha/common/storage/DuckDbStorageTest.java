@@ -349,7 +349,6 @@ class DuckDbStorageTest {
             var retention = Map.of(LONG, Duration.ofDays(3).toMillis());
             var defaultMillis = Duration.ofDays(5).toMillis();
 
-            // SHORT (1 day -> 5 days) and LONG (10 days -> 3 days) change; the later event is outside the range.
             Assertions.assertEquals(2, storage.recalculateExpiry(NOW, NOW.plusSeconds(1), retention, defaultMillis));
             Assertions.assertEquals(0, storage.recalculateExpiry(NOW, NOW.plusSeconds(1), retention, defaultMillis),
                 "events that already have the expiry are not rewritten");
@@ -402,7 +401,6 @@ class DuckDbStorageTest {
 
             Assertions.assertEquals(List.of(
                 new OccurredRange(minute, minute.plusSeconds(120)),
-                // More than the limit in one minute stays one range.
                 new OccurredRange(minute.plusSeconds(120), minute.plusSeconds(180)),
                 new OccurredRange(minute.plus(Duration.ofDays(365)), minute.plus(Duration.ofDays(365)).plusSeconds(60))
             ), storage.expiryRecalculationRanges(2));

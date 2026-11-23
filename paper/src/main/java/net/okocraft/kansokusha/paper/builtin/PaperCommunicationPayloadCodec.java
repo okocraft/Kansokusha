@@ -54,7 +54,7 @@ public final class PaperCommunicationPayloadCodec {
         payload.putString("source_kind", Objects.requireNonNull(sourceKind, "sourceKind"));
         payload.putString("source_name", Objects.requireNonNull(sourceName, "sourceName"));
         payload.putString("command", Objects.requireNonNull(originalCommand, "originalCommand"));
-        // Added after the first events were recorded; events without it describe a single input.
+        // A missing attempt count represents a single command.
         if (attempts != null) {
             payload.putInt("attempt_count", attempts);
         }

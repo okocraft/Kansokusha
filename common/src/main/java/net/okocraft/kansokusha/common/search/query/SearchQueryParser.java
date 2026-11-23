@@ -518,7 +518,6 @@ public final class SearchQueryParser {
             var boundaryDate = upperBound ? date.plusDays(1) : date;
             return boundaryDate.atStartOfDay(timezone).toInstant();
         } catch (DateTimeParseException ignored) {
-            // Not a date-only value.
         } catch (DateTimeException e) {
             throw error(
                 "absolute date is out of range: " + value,
@@ -530,7 +529,6 @@ public final class SearchQueryParser {
         try {
             return OffsetDateTime.parse(value).toInstant();
         } catch (DateTimeParseException ignored) {
-            // Try local date-time below.
         }
 
         try {

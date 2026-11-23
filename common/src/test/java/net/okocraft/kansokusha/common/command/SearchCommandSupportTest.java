@@ -165,7 +165,6 @@ class SearchCommandSupportTest {
         Assertions.assertEquals(Optional.of(next), this.backend.lastRequest().cursor());
         Assertions.assertEquals(Set.of(BREAK), this.backend.lastRequest().query().conditions().actions());
 
-        // Quoted text that looks like a cursor stays part of the query.
         Assertions.assertTrue(this.execute(false, null, "filter \"foo __cursor=bar\"", BREAK));
         Assertions.assertEquals(Set.of("foo __cursor=bar"), this.backend.lastRequest().query().conditions().filters());
         Assertions.assertTrue(this.backend.lastRequest().cursor().isEmpty());

@@ -106,7 +106,6 @@ public final class PaperEventPresenter implements EventPresenter {
                 } else {
                     var item = PaperPayloadDisplay.at(payload, view.quantity());
                     if (item != null) {
-                        // The item view contains the type once, alongside its saved quantity.
                         target = PaperPayloadDisplay.preview(item, view.quantity(), renderer.debug());
                     }
                     // Aggregated transfers keep a single item and the summed amount separately.

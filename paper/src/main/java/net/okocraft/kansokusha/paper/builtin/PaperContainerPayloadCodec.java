@@ -151,7 +151,7 @@ final class PaperContainerPayloadCodec {
         }
         payload.putString("initiator_role", initiatorRole);
         payload.put("item", item);
-        // Added after the first events were recorded; events without them describe a single attempt.
+        // Stored payloads without aggregation fields represent a single transfer.
         payload.putInt("attempt_count", attempts);
         payload.putLong("item_amount", amount);
         return PaperPayloadNbtCodec.encode(payload);

@@ -135,7 +135,7 @@ public final class NativeContainerMoveRecorder {
         if (position == null) {
             if (container == context.hopper) position = context.hopperPos;
             else if (container instanceof CompoundContainer) position = context.remotePos;
-            else position = context.remotePos; // The vanilla caller resolved this container at this exact position.
+            else position = context.remotePos; // Use the position from the vanilla container lookup.
         }
         return new Location(context.level.dimension().identifier().toString(), position.immutable(), entityId);
     }

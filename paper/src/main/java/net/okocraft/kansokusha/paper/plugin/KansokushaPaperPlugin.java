@@ -67,7 +67,6 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             Kansokusha.setApi(runtime);
         } catch (IOException | SQLException | RuntimeException e) {
             LanguageProvider.unload();
-            // onDisable closes the runtime if it has already started.
             this.getLogger().log(Level.SEVERE, "Failed to start Kansokusha.", e);
             this.getServer().getPluginManager().disablePlugin(this);
         }

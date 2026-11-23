@@ -63,7 +63,7 @@ public final class PaperPayloadNbtCodec {
     private static final int TYPE_MINECRAFT_KEY_STRING = 16;
     private static final int TYPE_KNOWN_STRING = 17;
 
-    // IDs are part of payload generation 1. Append new names; do not reorder existing entries.
+    // Field IDs are persisted as array indexes. Append entries to preserve existing IDs.
     private static final String[] FIELD_NAMES = {
         "Name", "Properties",
         "x", "y", "z", "world", "position", "location",
@@ -108,7 +108,7 @@ public final class PaperPayloadNbtCodec {
         "remote_address", "remote_port", "vein_count"
     };
 
-    // Common schema constants. IDs are append-only for the same reason as FIELD_NAMES.
+    // Known strings also use persisted indexes. Append new entries.
     private static final String[] KNOWN_STRINGS = {
         "block", "entity", "player", "none", "other", "world", "standalone",
         "source", "destination", "push", "pull", "unknown", "world_item",

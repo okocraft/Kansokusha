@@ -42,7 +42,6 @@ public final class PaperPistonMoveListener implements Listener, PaperBufferedLis
     static final Key EVENT_TYPE = Key.key("kansokusha", "piston_move");
     static final Duration AGGREGATION_WINDOW = Duration.ofMinutes(1);
 
-    // Bounds the memory used by the aggregation; moves beyond it are submitted one by one.
     static final int MAX_PENDING = 100_000;
 
     private final KansokushaApi api;

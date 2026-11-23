@@ -90,7 +90,7 @@ final class PaperWorldMutationPayloadCodec {
         payload.put("piston_origin", PaperPayloadNbtCodec.position(pistonOrigin));
         payload.putString("direction", normalized(direction));
         payload.putString("action", normalized(action));
-        // Added after the first events were recorded; events without it describe a single move.
+        // A missing attempt count represents a single piston move.
         payload.putInt("attempt_count", moves);
         return PaperPayloadNbtCodec.encode(payload);
     }

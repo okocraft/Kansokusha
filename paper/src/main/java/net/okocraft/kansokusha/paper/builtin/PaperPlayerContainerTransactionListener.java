@@ -215,7 +215,7 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
     }
 
     private void resolve(PendingTransaction pending) {
-        // diffContents only reads the items, so the live contents do not need to be copied.
+        // The diff only reads live items, so only the before-state needs a detached copy.
         var after = pending.inventory().getContents();
         for (var delta : diffContents(pending.before(), after)) {
             var direction = delta.amountDelta() > 0
@@ -252,7 +252,6 @@ public final class PaperPlayerContainerTransactionListener implements Listener {
         Objects.requireNonNull(before, "before");
         Objects.requireNonNull(after, "after");
 
-        // Keeps the order in which the item types first appear.
         var deltas = new LinkedHashMap<SimilarItem, MutableDelta>();
         for (var item : before) {
             merge(deltas, item, -1);

@@ -51,8 +51,7 @@ public final class DuckDbStorage {
         "net.okocraft.kansokusha.common.storage.duckdb.DuckDbStorageImpl";
     private static final String IMPLEMENTATION_PACKAGE =
         "net.okocraft.kansokusha.common.storage.duckdb.";
-    // Use the same Google-hosted Maven Central mirror as Paper for runtime library downloads.
-    // Maven Central itself should not be used as a CDN.
+    // Use Google's mirror to keep runtime JDBC downloads off Maven Central's origin.
     private static final URI MAVEN_CENTRAL_MIRROR = URI.create(
         "https://maven-central.storage-download.googleapis.com/maven2/org/duckdb/duckdb_jdbc/"
             + DUCKDB_VERSION + "/"
@@ -151,7 +150,6 @@ public final class DuckDbStorage {
                     return jar;
                 }
             } catch (IllegalArgumentException ignored) {
-                // Refresh the checksum below.
             }
         }
 
@@ -343,7 +341,6 @@ public final class DuckDbStorage {
                     try {
                         loaded = findClass(name);
                     } catch (ClassNotFoundException ignored) {
-                        // Fall back to the parent below.
                     }
                 }
                 if (loaded == null) {

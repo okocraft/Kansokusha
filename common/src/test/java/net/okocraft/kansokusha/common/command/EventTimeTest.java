@@ -39,7 +39,6 @@ class EventTimeTest {
         Assertions.assertEquals("5 minutes ago", plain(GlobalTranslator.render(
             EventTime.relative(now.minusSeconds(300), now, timezone), Locale.ENGLISH)));
         Assertions.assertEquals("2026-10-25 09:00:00.000 +09:00 [Asia/Tokyo]", plain(EventTime.absolute(now, timezone)));
-        // The same occurrence changes its label as the render-time clock advances.
         Assertions.assertEquals(EventPresentationMessages.NOW.asComponent().hoverEvent(
             net.kyori.adventure.text.event.HoverEvent.showText(EventTime.absolute(now, timezone))),
             EventTime.relative(now, now.plusSeconds(59), timezone));

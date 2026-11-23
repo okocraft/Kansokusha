@@ -16,7 +16,7 @@ tasks.processResources {
     }
 }
 
-// Exercise the bundled Japanese defaults without changing the platform resource merge.
+// Provide Japanese translations to common-module tests independently of the platform resource merge.
 tasks.processTestResources {
     from("src/main/languages") {
         into("languages")
