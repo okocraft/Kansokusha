@@ -32,7 +32,29 @@ final class PaperAuditGapPayloadCodec {
         ItemStack item,
         int amountDelta
     ) {
+        return encodeContainerDelta(container, transactionId, operation, action, click, clickedScope, slot, rawSlot,
+            hotbarButton, direction, item, amountDelta, null);
+    }
+
+    static EventPayload encodeContainerDelta(
+        PaperContainerPayloadCodec.InventorySnapshot container,
+        UUID transactionId,
+        String operation,
+        String action,
+        @Nullable String click,
+        @Nullable String clickedScope,
+        int slot,
+        int rawSlot,
+        int hotbarButton,
+        String direction,
+        ItemStack item,
+        int amountDelta,
+        @Nullable String sourceEvent
+    ) {
         var payload = new CompoundTag();
+        if (sourceEvent != null) {
+            payload.putString("source_event", sourceEvent);
+        }
         payload.put("container", container.payload());
         payload.putString("transaction_id", transactionId.toString());
         payload.putString("operation", operation);

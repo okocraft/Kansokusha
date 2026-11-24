@@ -11,6 +11,7 @@ import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.inventory.meta.BookMeta;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNullByDefault;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -40,11 +41,27 @@ final class PaperPlayerItemAuditPayloadCodec {
         double z,
         Integer remaining
     ) {
-        Objects.requireNonNull(itemEntityId, "itemEntityId");
+        return encodeItemEntityChange(Objects.requireNonNull(itemEntityId, "itemEntityId"), stack, x, y, z, remaining, null);
+    }
+
+    static EventPayload encodeItemEntityChange(
+        @Nullable UUID itemEntityId,
+        CompoundTag stack,
+        double x,
+        double y,
+        double z,
+        @Nullable Integer remaining,
+        @Nullable String sourceEvent
+    ) {
         Objects.requireNonNull(stack, "stack");
 
         var payload = new CompoundTag();
-        payload.putString("item_entity_uuid", itemEntityId.toString());
+        if (itemEntityId != null) {
+            payload.putString("item_entity_uuid", itemEntityId.toString());
+        }
+        if (sourceEvent != null) {
+            payload.putString("source_event", sourceEvent);
+        }
         payload.put("stack", stack.copy());
 
         var position = new CompoundTag();

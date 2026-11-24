@@ -232,6 +232,78 @@ class PaperEventPresenterTest {
         }
     }
 
+    @Test
+    void testBoxStockSearchAndEventDetails(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var payload = new CompoundTag();
+        payload.putString("stock_name", "Shared storage");
+        payload.putInt("item_id", 42);
+        payload.putInt("before", 32);
+        payload.putInt("after", 0);
+        payload.putLong("amount_delta", -32);
+        payload.putString("cause", "admin_reset_all");
+        payload.putString("actor_kind", "console");
+
+        var row = this.renderer.row(boxStock(payload), true, false);
+        Assertions.assertTrue(plain(row, Locale.ENGLISH).contains("Console Box stock #42 −32"));
+        Assertions.assertTrue(plain(row, Locale.JAPANESE).contains("コンソール Box在庫 #42 −32"));
+
+        var presenter = new PaperEventPresenter();
+        var details = presenter.present(boxStock(payload), true, this.renderer).orElseThrow().details();
+        var english = details.stream().map(line -> plain(line, Locale.ENGLISH)).toList();
+        var japanese = details.stream().map(line -> plain(line, Locale.JAPANESE)).toList();
+        Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("Shared storage")));
+        Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("32 → 0")));
+        Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("Full reset")));
+        Assertions.assertTrue(japanese.contains("在庫数：32 → 0"), japanese.toString());
+        Assertions.assertTrue(japanese.contains("理由：プレイヤーデータのリセット"), japanese.toString());
+
+        for (var reason : java.util.Map.of("deposit", "預け入れ", "withdraw", "引き出し").entrySet()) {
+            payload.putString("cause", reason.getKey());
+            var localized = presenter.present(boxStock(payload), true, this.renderer).orElseThrow().details()
+                .stream().map(line -> plain(line, Locale.JAPANESE)).toList();
+            Assertions.assertTrue(localized.contains("理由：" + reason.getValue()), localized.toString());
+        }
+
+        payload.putString("cause", "custom_reset");
+        details = presenter.present(boxStock(payload), true, this.renderer).orElseThrow().details();
+        Assertions.assertTrue(details.stream().anyMatch(line -> plain(line, Locale.ENGLISH).contains("custom_reset")));
+    }
+
+    @Test
+    void testStickSummaryRequiresSubscriptionMarker(@TempDir Path dir) throws Exception {
+        LanguageProvider.load(dir, KansokushaCommands.getDefaultMessages());
+        var payload = new CompoundTag();
+        payload.putString("action", "box_stick");
+        payload.putInt("amount_delta", -16);
+        var container = new CompoundTag();
+        container.putString("holder_block_type", "test:chest");
+        payload.put("container", container);
+
+        var legacyRow = plain(this.renderer.row(stickTransaction(payload), true, false), Locale.ENGLISH);
+        Assertions.assertTrue(legacyRow.contains("- Alice"), legacyRow);
+        Assertions.assertFalse(legacyRow.contains("Box Stick"), legacyRow);
+
+        payload.putString("source_event", PaperBoxEventView.STICK);
+        var row = this.renderer.row(stickTransaction(payload), true, false);
+        var summary = plain(row, Locale.ENGLISH);
+        Assertions.assertTrue(summary.contains("Alice Box Stick"), summary);
+        Assertions.assertTrue(summary.contains("−16"), summary);
+    }
+
+    private static SearchPage.Event stickTransaction(CompoundTag payload) {
+        var event = event("container_transaction", payload);
+        return new SearchPage.Event(event.eventId(), event.eventType(), event.occurredAt(), event.server(), event.world(),
+            event.position(), event.actor(), event.actorName(), Optional.of(Key.key("test:dirt")),
+            event.searchText(), event.payload());
+    }
+
+    private static SearchPage.Event boxStock(CompoundTag payload) {
+        return new SearchPage.Event(UUID.randomUUID(), PaperBoxEventView.STOCK_CHANGE, NOW, Optional.empty(),
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.of(new StoredPayload(PayloadGeneration.FIRST, PaperPayloadNbtCodec.encode(payload))));
+    }
+
     static SearchPage.Event event(String type, CompoundTag payload) {
         return new SearchPage.Event(UUID.randomUUID(), Key.key("kansokusha", type), NOW, Optional.empty(),
             Optional.of(Key.key("minecraft:overworld")), Optional.of(new BlockPosition(1, 64, 2)),

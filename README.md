@@ -154,6 +154,11 @@ Startup adds missing keys while preserving existing translations. Updated defaul
 therefore applies to new files; to adopt it in an existing file, remove the individual
 keys you want to reset and restart the server or proxy. Back up customizations first.
 
+## Box integration on Paper
+
+See [Box integration and migration](docs/box-integration.md) for the paired upgrade,
+stock retention settings, and local verification.
+
 ## Search
 
 - `/kansokusha search ...` searches persisted events in the current instance's DuckDB database.

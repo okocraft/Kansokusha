@@ -78,6 +78,7 @@ public final class PaperBuiltInListeners {
     public static Runnable registerAll(Plugin plugin, KansokushaApi api, Key serverKey) {
         var buffered = new ArrayList<PaperBufferedListener>();
         PaperOreVeinEvents.register(api);
+        PaperBuiltInSupport.register(api, PaperBoxEventView.STOCK_CHANGE);
         for (var factory : FACTORIES) {
             var listener = factory.apply(api, serverKey);
             plugin.getServer().getPluginManager().registerEvents(listener, plugin);

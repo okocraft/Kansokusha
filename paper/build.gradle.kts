@@ -21,8 +21,35 @@ val externalApiFixtureJar = project(":kansokusha-paper-test-plugin")
     .tasks.named<Jar>("jar")
 val paperShadowJar = tasks.named<ShadowJar>("shadowJar")
 
+val boxCheckout = providers.gradleProperty("boxCheckout")
+
+repositories {
+    maven {
+        url = uri("https://okocraft.github.io/Box/maven/")
+        content { includeGroup("net.okocraft.box") }
+    }
+}
+
 dependencies {
     implementation(projects.kansokushaCommon)
+
+    // Compile against the published API. At runtime the integration also checks for the new Stick snapshot.
+    if (boxCheckout.isPresent) {
+        val box = rootProject.file(boxCheckout.get())
+        val version = box.resolve("gradle.properties").inputStream().use {
+            Properties().apply { load(it) }.getProperty("version")
+        }
+        compileOnly(files(
+            box.resolve("api/build/libs/box-api-${version}.jar"),
+            box.resolve("features/autostore/build/libs/box-autostore-feature-${version}.jar"),
+            box.resolve("features/stick/build/libs/box-stick-feature-${version}.jar")
+        ))
+    } else {
+        compileOnly(libs.box.api) { isTransitive = false }
+        compileOnly(libs.box.autostore) { isTransitive = false }
+        compileOnly(libs.box.stick) { isTransitive = false }
+    }
+    compileOnly(libs.event4j.api)
 
     compileOnlyApi(libs.paper)
     testImplementation(libs.paper)
@@ -94,6 +121,9 @@ tasks {
             ZipFile(packagedJar).use { jar ->
                 check(jar.getEntry("org/duckdb/DuckDBDriver.class") == null) {
                     "Packaged Kansokusha jar must not contain the DuckDB JDBC driver."
+                }
+                check(jar.entries().asSequence().none { it.name.startsWith("net/okocraft/box/") }) {
+                    "Packaged Kansokusha jar must not contain Box classes."
                 }
                 check(jar.getEntry("languages/ja.properties") != null) {
                     "Packaged Kansokusha jar must contain the bundled Japanese language file."

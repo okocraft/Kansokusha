@@ -54,6 +54,11 @@ retention:
   default: P30D
   # A policy with "archive: true" archives its expired events instead of deleting them.
   policies:
+    box-stock:
+      duration: P30D
+      archive: true
+      event-types:
+        - box:stock_change
     audit:
       duration: P180D
       archive: true

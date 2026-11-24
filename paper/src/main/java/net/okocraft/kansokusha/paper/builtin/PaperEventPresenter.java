@@ -40,7 +40,10 @@ public final class PaperEventPresenter implements EventPresenter {
     }
 
     public static List<Map<String, String>> defaultMessages() {
-        return VIEWS.values().stream().map(view -> view.sentence().defaultMessages()).toList();
+        var messages = new ArrayList<Map<String, String>>();
+        VIEWS.values().forEach(view -> messages.add(view.sentence().defaultMessages()));
+        messages.add(PaperBoxEventView.defaultMessages());
+        return List.copyOf(messages);
     }
 
     static boolean supports(SearchPage.Event event) {
@@ -53,6 +56,17 @@ public final class PaperEventPresenter implements EventPresenter {
 
     @Override
     public Optional<Content> present(SearchPage.Event event, boolean detailed, EventRenderer renderer) {
+        if (event.eventType().equals(PaperBoxEventView.STOCK_CHANGE)) {
+            if (event.payload().isEmpty() || event.payload().get().generation().value() != 1) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(PaperBoxEventView.stock(event,
+                    PaperPayloadNbtCodec.decode(event.payload().get().bytes()), detailed, renderer));
+            } catch (IOException | IllegalArgumentException e) {
+                return Optional.empty();
+            }
+        }
         if (!event.eventType().namespace().equals("kansokusha")) {
             return Optional.empty();
         }
@@ -69,6 +83,7 @@ public final class PaperEventPresenter implements EventPresenter {
         try {
             var payload = PaperPayloadNbtCodec.decode(event.payload().get().bytes());
             var target = event.targetType().map(key -> renderer.name(key, view.targetKind())).orElse(Component.empty());
+            var migratedSummary = PaperBoxEventView.migratedSummary(event, payload, renderer, target);
             var hover = new ArrayList<Component>();
             hover.add(PaperViewMessages.OPERATION_SCOPE.asComponent());
             for (var spec : view.fields()) {
@@ -156,8 +171,10 @@ public final class PaperEventPresenter implements EventPresenter {
             if (detailed && PaperRecordedItems.hasItems(payload)) {
                 sections.put("items", new Section(PaperViewMessages.ITEMS.asComponent(), () -> PaperRecordedItems.items(payload, event.eventId())));
             }
-            return Optional.of(new Content(view.sentence().summary(actor, EventPresentationMessages.TARGET.apply(target), context),
-                details, EventRenderer.join(hover), sections));
+            var summary = migratedSummary.equals(Component.empty())
+                ? view.sentence().summary(actor, EventPresentationMessages.TARGET.apply(target), context)
+                : migratedSummary;
+            return Optional.of(new Content(summary, details, EventRenderer.join(hover), sections));
         } catch (IOException | IllegalArgumentException e) {
             return Optional.empty();
         }
