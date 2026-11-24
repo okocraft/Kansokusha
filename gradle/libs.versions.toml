@@ -1,4 +1,5 @@
 [versions]
+box = "6.0.0-rc.8"
 annotations = "26.1.0"
 adventure = "5.2.0"
 configurate = "4.2.0"
@@ -18,6 +19,10 @@ run-server = "3.1.0"
 gradle-plugins = "1.9.0"
 
 [libraries]
+box-api = { module = "net.okocraft.box:box-api", version.ref = "box" }
+box-autostore = { module = "net.okocraft.box:box-autostore-feature", version.ref = "box" }
+box-stick = { module = "net.okocraft.box:box-stick-feature", version.ref = "box" }
+event4j-api = { module = "dev.siroshun.event4j:event4j-api", version = "4.1.0" }
 
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
 adventure-api = { module = "net.kyori:adventure-api", version.ref = "adventure" }

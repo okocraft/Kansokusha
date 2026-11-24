@@ -8,6 +8,7 @@ import net.okocraft.kansokusha.common.config.KansokushaConfig;
 import net.okocraft.kansokusha.common.language.LanguageProvider;
 import net.okocraft.kansokusha.common.runtime.KansokushaRuntime;
 import net.okocraft.kansokusha.paper.builtin.PaperBuiltInListeners;
+import net.okocraft.kansokusha.paper.builtin.PaperBoxAudit;
 import net.okocraft.kansokusha.paper.command.KansokushaCommands;
 import net.okocraft.kansokusha.paper.inspection.InspectionListener;
 import net.okocraft.kansokusha.paper.inspection.InspectionSearchHandler;
@@ -27,6 +28,7 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
     private final InspectionSessionManager inspectionSessions = new InspectionSessionManager();
     private @Nullable KansokushaRuntime runtime;
     private @Nullable Runnable flushBufferedEvents;
+    private @Nullable Runnable unsubscribeBox;
     private @Nullable DiscordWebhook discordWebhook;
 
     @Override
@@ -65,6 +67,13 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
             this.flushBufferedEvents = PaperBuiltInListeners.registerAll(this, runtime, serverKey);
             this.registerOreVeinListener(config, runtime, serverKey);
             Kansokusha.setApi(runtime);
+            if (this.getServer().getPluginManager().isPluginEnabled("Box")) {
+                try {
+                    this.unsubscribeBox = PaperBoxAudit.subscribe(this, runtime, serverKey);
+                } catch (LinkageError e) {
+                    this.getLogger().log(Level.WARNING, "Could not start the Box audit subscriptions.", e);
+                }
+            }
         } catch (IOException | SQLException | RuntimeException e) {
             LanguageProvider.unload();
             this.getLogger().log(Level.SEVERE, "Failed to start Kansokusha.", e);
@@ -83,6 +92,10 @@ public final class KansokushaPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (this.unsubscribeBox != null) {
+            this.unsubscribeBox.run();
+            this.unsubscribeBox = null;
+        }
         if (this.discordWebhook != null) {
             this.discordWebhook.close();
             this.discordWebhook = null;
