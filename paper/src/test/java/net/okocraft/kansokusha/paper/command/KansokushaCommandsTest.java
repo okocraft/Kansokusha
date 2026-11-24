@@ -56,7 +56,7 @@ class KansokushaCommandsTest {
 
         Assertions.assertTrue(labels.contains("kansokusha"));
         Assertions.assertTrue(labels.contains("kansokusha:kansokusha"));
-        Assertions.assertTrue(labels.contains("ks"));
+        Assertions.assertTrue(labels.contains("ka"));
     }
 
     @Test

@@ -47,7 +47,7 @@ public final class KansokushaCommands {
         return List.copyOf(defaults);
     }
 
-    static final List<String> ALIASES = List.of("ks");
+    static final List<String> ALIASES = List.of("ka");
 
     /**
      * Registers {@code /kansokusha} and its aliases. The caller owns the inspection session lifecycle.
