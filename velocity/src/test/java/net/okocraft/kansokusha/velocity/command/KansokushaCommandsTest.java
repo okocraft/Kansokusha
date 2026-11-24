@@ -60,8 +60,8 @@ class KansokushaCommandsTest {
 
     @Test
     void testAliasesSkipLabelsAlreadyRegistered() {
-        Assertions.assertArrayEquals(new String[]{"ka"}, KansokushaCommands.availableAliases(label -> false));
-        Assertions.assertArrayEquals(new String[0], KansokushaCommands.availableAliases("ka"::equals));
+        Assertions.assertArrayEquals(new String[]{"vka"}, KansokushaCommands.availableAliases(label -> false));
+        Assertions.assertArrayEquals(new String[0], KansokushaCommands.availableAliases("vka"::equals));
     }
 
     @Test

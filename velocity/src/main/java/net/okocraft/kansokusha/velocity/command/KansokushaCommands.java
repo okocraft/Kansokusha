@@ -25,7 +25,7 @@ import java.util.function.Predicate;
 @NotNullByDefault
 public final class KansokushaCommands {
 
-    static final List<String> ALIASES = List.of("ka");
+    static final List<String> ALIASES = List.of("vka");
 
     public static List<Map<String, String>> getDefaultMessages() {
         var defaults = new ArrayList<>(List.of(

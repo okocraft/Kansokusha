@@ -89,8 +89,8 @@ already reported are remembered in memory only until the server stops.
 
 ## Command alias
 
-`/ka` is an alias for `/kansokusha`. On Velocity, an alias that is already registered by the
-proxy or another plugin is skipped instead of overriding it.
+`/ka` is an alias for `/kansokusha` on Paper and Folia, and `/vka` on Velocity. On Velocity, an alias
+that is already registered by the proxy or another plugin is skipped instead of overriding it.
 
 ## Inspection mode
 
