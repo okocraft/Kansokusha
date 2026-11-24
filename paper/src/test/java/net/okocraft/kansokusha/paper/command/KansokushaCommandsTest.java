@@ -51,11 +51,12 @@ class KansokushaCommandsTest {
         );
 
         var labels = Assertions.assertDoesNotThrow(
-            () -> PaperCommands.INSTANCE.register(pluginMeta, command, null, List.of())
+            () -> PaperCommands.INSTANCE.register(pluginMeta, command, null, KansokushaCommands.ALIASES)
         );
 
         Assertions.assertTrue(labels.contains("kansokusha"));
         Assertions.assertTrue(labels.contains("kansokusha:kansokusha"));
+        Assertions.assertTrue(labels.contains("ka"));
     }
 
     @Test

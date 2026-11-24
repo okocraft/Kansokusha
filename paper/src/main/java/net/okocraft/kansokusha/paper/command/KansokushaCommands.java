@@ -47,8 +47,10 @@ public final class KansokushaCommands {
         return List.copyOf(defaults);
     }
 
+    static final List<String> ALIASES = List.of("ka");
+
     /**
-     * Registers {@code /kansokusha}. The caller owns the inspection session lifecycle.
+     * Registers {@code /kansokusha} and its aliases. The caller owns the inspection session lifecycle.
      */
     public static void register(
         Commands commands,
@@ -57,7 +59,11 @@ public final class KansokushaCommands {
         InspectionSessionManager inspectionSessions,
         Plugin plugin
     ) {
-        commands.register(createCommand(backend, Clock.systemUTC(), searchTimeZone, inspectionSessions, plugin));
+        commands.register(
+            createCommand(backend, Clock.systemUTC(), searchTimeZone, inspectionSessions, plugin),
+            null,
+            ALIASES
+        );
     }
 
     static LiteralCommandNode<CommandSourceStack> createCommand(
