@@ -87,6 +87,11 @@ such as `minecraft:diamond_ore` in `ores` to enable it; it is empty by default. 
 also send a Discord message. The URL contains the webhook token, so keep `config.yml` private. Blocks placed by players and veins
 already reported are remembered in memory only until the server stops.
 
+## Command alias
+
+`/ks` is an alias for `/kansokusha`. On Velocity, an alias that is already registered by the
+proxy or another plugin is skipped instead of overriding it.
+
 ## Inspection mode
 
 Paper/Folia provides session-scoped inspection mode commands:

@@ -20,9 +20,12 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 @NotNullByDefault
 public final class KansokushaCommands {
+
+    static final List<String> ALIASES = List.of("ks");
 
     public static List<Map<String, String>> getDefaultMessages() {
         var defaults = new ArrayList<>(List.of(
@@ -46,7 +49,17 @@ public final class KansokushaCommands {
         ZoneId searchTimeZone
     ) {
         BrigadierCommand command = createCommand(backend, Clock.systemUTC(), searchTimeZone);
-        manager.register(manager.metaBuilder(command).plugin(plugin).build(), command);
+        var meta = manager.metaBuilder(command).plugin(plugin);
+        meta.aliases(availableAliases(manager::hasCommand));
+        manager.register(meta.build(), command);
+    }
+
+    /**
+     * Returns the aliases that are not already registered by another plugin or the proxy,
+     * so that registering them never overrides an existing command label.
+     */
+    static String[] availableAliases(Predicate<String> isRegistered) {
+        return ALIASES.stream().filter(alias -> !isRegistered.test(alias)).toArray(String[]::new);
     }
 
     static BrigadierCommand createCommand(EventSearchBackend backend, Clock clock, ZoneId searchTimeZone) {

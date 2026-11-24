@@ -59,6 +59,12 @@ class KansokushaCommandsTest {
     }
 
     @Test
+    void testAliasesSkipLabelsAlreadyRegistered() {
+        Assertions.assertArrayEquals(new String[]{"ks"}, KansokushaCommands.availableAliases(label -> false));
+        Assertions.assertArrayEquals(new String[0], KansokushaCommands.availableAliases("ks"::equals));
+    }
+
+    @Test
     void testEventCommandIsWiredUnderKansokushaRoot() {
         Assertions.assertNotNull(
             KansokushaCommands.createCommand(this.backend, Clock.systemUTC(), ZoneOffset.UTC)
