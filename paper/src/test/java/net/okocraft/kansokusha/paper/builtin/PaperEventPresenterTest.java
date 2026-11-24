@@ -255,7 +255,15 @@ class PaperEventPresenterTest {
         Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("Shared storage")));
         Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("32 → 0")));
         Assertions.assertTrue(english.stream().anyMatch(line -> line.contains("Full reset")));
-        Assertions.assertTrue(japanese.stream().anyMatch(line -> line.contains("一括リセット")));
+        Assertions.assertTrue(japanese.contains("在庫数：32 → 0"), japanese.toString());
+        Assertions.assertTrue(japanese.contains("理由：プレイヤーデータのリセット"), japanese.toString());
+
+        for (var reason : java.util.Map.of("deposit", "預け入れ", "withdraw", "引き出し").entrySet()) {
+            payload.putString("cause", reason.getKey());
+            var localized = presenter.present(boxStock(payload), true, this.renderer).orElseThrow().details()
+                .stream().map(line -> plain(line, Locale.JAPANESE)).toList();
+            Assertions.assertTrue(localized.contains("理由：" + reason.getValue()), localized.toString());
+        }
 
         payload.putString("cause", "custom_reset");
         details = presenter.present(boxStock(payload), true, this.renderer).orElseThrow().details();
